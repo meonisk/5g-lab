@@ -1,0 +1,21 @@
+flowchart LR
+  UE[IMS UE / untrusted media] --> CSCF[P/I/S-CSCF]
+  CSCF --> AS[SIP AS]
+  CSCF --> RTP[RTPengine]
+  AS --> VA[Voice Agent HTTP + RTP]
+  AS --> MA[Media Adapter]
+  RTP --> VA
+  RTP --> MA
+  MA --> AI[AI Worker]
+  ENV[Shared env secrets] --> UE
+  ENV --> DB[Mongo / provisioning]
+  ENV --> SIPUE[PJSUA]
+  subgraph Flat_network[Flat lab5g trust boundary]
+    CSCF
+    AS
+    RTP
+    VA
+    MA
+    AI
+    DB
+  end

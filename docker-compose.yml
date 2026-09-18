@@ -5,22 +5,43 @@
 #   IMSI 001010000000001/002, shared K/OPc.
 # Transport addresses are supplied only by lab.env.
 
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${CUSTOM_SERVICE_LOG_MAX_SIZE}
+    max-file: ${CUSTOM_SERVICE_LOG_MAX_FILES}
+
 x-open5gs: &open5gs
   image: gradiant/open5gs:2.7.7
   restart: unless-stopped
   networks: [lab5g]
+  logging: *bounded-logging
+
+x-custom-service: &custom-service
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  init: true
+  pids_limit: ${CUSTOM_SERVICE_PIDS_LIMIT}
+  cpus: ${CUSTOM_SERVICE_CPU_LIMIT}
+  mem_limit: ${CUSTOM_SERVICE_MEMORY_LIMIT}
+  logging: *bounded-logging
 
 services:
   mongo:
     image: mongo:8.0
     container_name: lab-mongo
     restart: unless-stopped
-    env_file:
-      - lab.env
-      - secrets/ims.env
+    env_file: [lab.env]
+    environment:
+      SUBSCRIBER_K: ${SUBSCRIBER_K}
+      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
+      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
     networks: [lab5g]
     volumes:
       - mongo-data:/data/db
+    logging: *bounded-logging
 
   nrf:
     <<: *open5gs
@@ -156,6 +177,7 @@ services:
       RADIO_IFACE: eth0
     volumes:
       - ./configs/ueransim/gnb.yaml:/etc/ueransim/gnb.yaml:ro
+    logging: *bounded-logging
 
   ue1:
     image: gradiant/ueransim:3.2.6
@@ -165,16 +187,18 @@ services:
     depends_on: [gnb]
     command: ue
     cap_add: [NET_ADMIN]
-    env_file:
-      - lab.env
-      - secrets/ims.env
+    env_file: [lab.env]
     devices:
       - /dev/net/tun
     environment:
       GNB_HOSTNAME: gnb
       IMSI: ${UE1_IMSI}
+      SUBSCRIBER_K: ${SUBSCRIBER_K}
+      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
+      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
     volumes:
       - ./configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
+    logging: *bounded-logging
 
   ue2:
     image: gradiant/ueransim:3.2.6
@@ -184,16 +208,18 @@ services:
     depends_on: [gnb]
     command: ue
     cap_add: [NET_ADMIN]
-    env_file:
-      - lab.env
-      - secrets/ims.env
+    env_file: [lab.env]
     devices:
       - /dev/net/tun
     environment:
       GNB_HOSTNAME: gnb
       IMSI: ${UE2_IMSI}
+      SUBSCRIBER_K: ${SUBSCRIBER_K}
+      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
+      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
     volumes:
       - ./configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
+    logging: *bounded-logging
 
   # --- IMS layer (Phase 4A: DNS + HSS) -------------------------------------
 
@@ -211,6 +237,7 @@ services:
     networks:
       lab5g:
         ipv4_address: ${DNS_IP}
+    logging: *bounded-logging
 
   mysql:
     image: ghcr.io/herlesupreeth/docker_mysql@sha256:a03ac89dbc7de0b0d75e5600ae6542ad9abb620a3c71848ba715a0a5926f81fc
@@ -219,6 +246,7 @@ services:
     networks:
       lab5g:
         ipv4_address: ${MYSQL_IP}
+    logging: *bounded-logging
 
   pyhss:
     image: ghcr.io/herlesupreeth/docker_pyhss@sha256:67876ced93002181933d706cb047ffee9f855f3f61a43b184a01981987853a82
@@ -228,7 +256,8 @@ services:
       - lab.env
     volumes:
       - ./vendor/docker_open5gs/pyhss:/mnt/pyhss:ro
-      - pyhss-logs:/pyhss/log/
+    tmpfs:
+      - /pyhss/log:rw,noexec,nosuid,nodev,size=64m
     ports:
       - "${PYHSS_API_BIND}:${PYHSS_API_PORT}:${PYHSS_API_CONTAINER_PORT}/tcp"
     expose:
@@ -237,6 +266,7 @@ services:
     networks:
       lab5g:
         ipv4_address: ${PYHSS_IP}
+    logging: *bounded-logging
 
   # --- IMS layer (Phase 4B: CSCF signalling core) ---------------------------
   # Kamailio P/I/S-CSCF from the vendored docker_open5gs configs; the image
@@ -265,6 +295,7 @@ services:
     networks:
       lab5g:
         ipv4_address: ${ICSCF_IP}
+    logging: *bounded-logging
 
   scscf:
     image: ghcr.io/herlesupreeth/docker_kamailio@sha256:efc9df818c239d28cd61a822d62ce0201b6ca3047f6fa653233bfa84498510de
@@ -287,6 +318,7 @@ services:
     networks:
       lab5g:
         ipv4_address: ${SCSCF_IP}
+    logging: *bounded-logging
 
   pcscf:
     image: ghcr.io/herlesupreeth/docker_kamailio@sha256:efc9df818c239d28cd61a822d62ce0201b6ca3047f6fa653233bfa84498510de
@@ -310,6 +342,7 @@ services:
     networks:
       lab5g:
         ipv4_address: ${PCSCF_IP}
+    logging: *bounded-logging
 
   # Userspace RTP relay. Media is routed back to both UE pools through the UPF;
   # no host/kernel xt_RTPENGINE module is required.
@@ -333,53 +366,96 @@ services:
     networks:
       lab5g:
         ipv4_address: ${RTPENGINE_IP}
+    logging: *bounded-logging
 
   # --- Phase 4D: service enablement (OBSERVE mode) -------------------------
   # The SIP AS is triggered by PyHSS iFC/ISC. The Media Adapter shares only
   # RTPengine's network namespace so it can observe a copy of relayed RTP;
   # AI failure is deliberately outside the SIP/RTP critical path.
+  control-secret-init:
+    image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    environment:
+      TOKEN_BYTES: ${SERVICE_CONTROL_TOKEN_BYTES}
+    command: >-
+      sh -eu -c 'umask 077; mkdir -p /run/lab-control;
+      if [ ! -s /run/lab-control/token ]; then
+      head -c "$${TOKEN_BYTES}" /dev/urandom | base64 > /run/lab-control/token;
+      fi; chmod 0555 /run/lab-control; chmod 0444 /run/lab-control/token'
+    volumes:
+      - service-control-secret:/run/lab-control
+
   sip-as:
+    <<: *custom-service
     build: services/sip-as
     image: lab-sip-as
     container_name: lab-sip-as
-    restart: unless-stopped
+    user: "65532:65532"
     env_file: [lab.env]
     environment:
       MEDIA_ADAPTER_URL: http://${RTPENGINE_IP}:${MEDIA_ADAPTER_PORT}
       VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
-    depends_on: [scscf, media-adapter, voice-agent]
+    depends_on:
+      scscf: {condition: service_started}
+      media-adapter: {condition: service_started}
+      voice-agent: {condition: service_started}
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
     networks:
       lab5g:
         ipv4_address: ${SIP_AS_IP}
 
   media-adapter:
+    <<: *custom-service
     build: services/media-adapter
     image: lab-media-adapter
     container_name: lab-media-adapter
-    restart: unless-stopped
     env_file: [lab.env]
     environment:
       AI_WORKER_URL: http://${AI_WORKER_IP}:${AI_WORKER_PORT}
     network_mode: service:rtpengine
     cap_add: [NET_RAW]
-    depends_on: [rtpengine, ai-worker]
+    depends_on:
+      rtpengine: {condition: service_started}
+      ai-worker: {condition: service_started}
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
 
   ai-worker:
+    <<: *custom-service
     build: services/ai-worker
     image: lab-ai-worker
     container_name: lab-ai-worker
-    restart: unless-stopped
+    user: "65532:65532"
     env_file: [lab.env]
+    depends_on:
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
     networks:
       lab5g:
         ipv4_address: ${AI_WORKER_IP}
 
   voice-agent:
+    <<: *custom-service
     build: services/voice-agent
     image: lab-voice-agent
     container_name: lab-voice-agent
-    restart: unless-stopped
+    user: "65532:65532"
+    mem_limit: ${VOICE_AGENT_MEMORY_LIMIT}
     env_file: [lab.env]
+    depends_on:
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
     networks:
       lab5g:
         ipv4_address: ${VOICE_AGENT_IP}
@@ -396,14 +472,14 @@ services:
     depends_on: [ue1]
     network_mode: service:ue1
     cap_add: [NET_ADMIN]
-    env_file:
-      - lab.env
-      - secrets/ims.env
+    env_file: [lab.env]
     environment:
       IMSI: ${UE1_IMSI}
+      IMS_DIGEST_PASSWORD: ${IMS_DIGEST_PASSWORD}
     volumes:
       - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
     entrypoint: ["/lab/sip-ue-run.sh"]
+    logging: *bounded-logging
 
   sipue2:
     build: images/pjsua
@@ -412,14 +488,14 @@ services:
     depends_on: [ue2]
     network_mode: service:ue2
     cap_add: [NET_ADMIN]
-    env_file:
-      - lab.env
-      - secrets/ims.env
+    env_file: [lab.env]
     environment:
       IMSI: ${UE2_IMSI}
+      IMS_DIGEST_PASSWORD: ${IMS_DIGEST_PASSWORD}
     volumes:
       - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
     entrypoint: ["/lab/sip-ue-run.sh"]
+    logging: *bounded-logging
 
 networks:
   lab5g:
@@ -430,4 +506,4 @@ networks:
 
 volumes:
   mongo-data:
-  pyhss-logs:
+  service-control-secret:

@@ -8,6 +8,10 @@ import tempfile
 import threading
 import time
 import math
+import hmac
+import ipaddress
+import re
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 agent_ip = os.environ["VOICE_AGENT_IP"]
@@ -18,6 +22,14 @@ reply_text = os.environ["VOICE_AGENT_REPLY"]
 vad_rms = int(os.environ["VOICE_AGENT_VAD_RMS"])
 silence_seconds = int(os.environ["VOICE_AGENT_SILENCE_MS"]) / 1000
 call_timeout = int(os.environ["VOICE_AGENT_CALL_TIMEOUT"])
+max_calls = int(os.environ["VOICE_AGENT_MAX_CALLS"])
+event_retention = int(os.environ["VOICE_AGENT_EVENT_RETENTION"])
+rtpengine_ip = str(ipaddress.ip_address(os.environ["RTPENGINE_IP"]))
+rtp_port_min = int(os.environ["RTPENGINE_PORT_MIN"])
+rtp_port_max = int(os.environ["RTPENGINE_PORT_MAX"])
+with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
+    control_token = token_source.read().strip()
+call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
 
 rtp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 rtp.bind((agent_ip, rtp_port))
@@ -75,8 +87,9 @@ def send_audio(call_id, text, reason):
         call["seq"] = seq
         call["timestamp"] = timestamp
         event = {"call_id": call_id, "event": "tts_sent", "reason": reason,
-                 "text": text, "packets": sent, "at": time.time()}
+                 "packets": sent, "at": time.time()}
         events.append(event)
+        del events[:-event_retention]
     print(f"VOICE tts call_id={call_id} reason={reason} packets={sent}", flush=True)
 
 def receive_audio():
@@ -90,7 +103,7 @@ def receive_audio():
         responses = []
         with lock:
             for call_id, call in calls.items():
-                if peer[0] != call["remote_ip"]:
+                if peer != (call["remote_ip"], call["remote_port"]):
                     continue
                 call["received_packets"] += 1
                 if rms >= vad_rms:
@@ -115,16 +128,43 @@ def expire_calls():
             print(f"VOICE call_expired call_id={call_id} received={received}", flush=True)
 
 class Api(BaseHTTPRequestHandler):
+    def authorized(self):
+        supplied = self.headers.get("Authorization", "")
+        return hmac.compare_digest(supplied, f"Bearer {control_token}")
+    def reject_unauthorized(self):
+        self.send_response(401); self.send_header("WWW-Authenticate", "Bearer"); self.end_headers()
     def do_GET(self):
+        if self.path == "/healthz":
+            self.send_response(204); self.end_headers(); return
+        if self.path != "/status":
+            self.send_response(404); self.end_headers(); return
+        if not self.authorized():
+            self.reject_unauthorized(); return
         with lock:
-            body = json.dumps({"status": "ok", "mode": "TERMINATE", "calls": calls, "events": events[-100:]}).encode()
+            body = json.dumps({"status": "ok", "mode": "TERMINATE", "calls": calls, "events": events}).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
     def do_POST(self):
+        if self.path != "/calls":
+            self.send_response(404); self.end_headers(); return
+        if not self.authorized():
+            self.reject_unauthorized(); return
         length = int(self.headers.get("Content-Length", "0"))
-        data = json.loads(self.rfile.read(length) or b"{}")
-        call_id = data["call_id"]
+        if length < 2 or length > 4096:
+            self.send_response(413); self.end_headers(); return
+        try:
+            data = json.loads(self.rfile.read(length))
+            call_id = data["call_id"]
+            remote_ip = str(ipaddress.ip_address(data["remote_ip"]))
+            remote_port = int(data["remote_port"])
+        except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+            self.send_response(400); self.end_headers(); return
+        if (not call_id_pattern.fullmatch(call_id) or remote_ip != rtpengine_ip or
+                not rtp_port_min <= remote_port <= rtp_port_max):
+            self.send_response(400); self.end_headers(); return
         with lock:
-            calls[call_id] = {"remote_ip": data["remote_ip"], "remote_port": int(data["remote_port"]),
+            if call_id not in calls and len(calls) >= max_calls:
+                self.send_response(429); self.end_headers(); return
+            calls[call_id] = {"remote_ip": remote_ip, "remote_port": remote_port,
                               "ssrc": int.from_bytes(hashlib.sha256(call_id.encode()).digest()[:4], "big"),
                               "seq": 1, "timestamp": 0, "received_packets": 0,
                               "speech_seen": False, "last_voice": 0, "replied": False,
@@ -133,7 +173,13 @@ class Api(BaseHTTPRequestHandler):
         threading.Thread(target=send_audio, args=(call_id, greeting, "greeting"), daemon=True).start()
         self.send_response(202); self.end_headers()
     def do_DELETE(self):
-        call_id = self.path.rsplit("/", 1)[-1]
+        if not self.authorized():
+            self.reject_unauthorized(); return
+        if not self.path.startswith("/calls/"):
+            self.send_response(404); self.end_headers(); return
+        call_id = urllib.parse.unquote(self.path.removeprefix("/calls/"))
+        if not call_id_pattern.fullmatch(call_id):
+            self.send_response(400); self.end_headers(); return
         with lock: call = calls.pop(call_id, None)
         print(f"VOICE call_ended call_id={call_id} received={call.get('received_packets', 0) if call else 0}", flush=True)
         self.send_response(204); self.end_headers()

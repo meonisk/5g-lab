@@ -1,0 +1,14 @@
+flowchart LR
+  UE[IMS UE] --> EDGE[Regional P-CSCF]
+  EDGE --> SIPLB[Dialog-affine SIP ingress]
+  SIPLB --> AS[SIP AS replicas]
+  EDGE --> RTP[RTPengine shard pool]
+  AS --> STATE[Durable call-state/control service]
+  STATE --> VA[Voice Agent workers]
+  RTP --> VA
+  STATE --> BUS[Metadata queue with TTL]
+  BUS --> AI[Autoscaled AI workers]
+  KMS[KMS / workload identity] --> AS
+  KMS --> STATE
+  KMS --> VA
+  AUDIT[Redacted audit pipeline] --> SIEM[Restricted security store]

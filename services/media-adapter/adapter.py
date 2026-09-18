@@ -5,6 +5,8 @@ import struct
 import threading
 import time
 import urllib.request
+import hmac
+import re
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -14,21 +16,47 @@ http_port = int(os.environ["MEDIA_ADAPTER_PORT"])
 interval = float(os.environ["MEDIA_OBSERVE_INTERVAL_SECONDS"])
 session_ttl = float(os.environ["MEDIA_SESSION_TTL_SECONDS"])
 worker_url = os.environ["AI_WORKER_URL"].rstrip("/") + "/observe"
+with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
+    control_token = token_source.read().strip()
+call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
 sessions = {}
 counters = defaultdict(lambda: [0, 0])
 lock = threading.Lock()
 
 class Api(BaseHTTPRequestHandler):
+    def authorized(self):
+        return hmac.compare_digest(self.headers.get("Authorization", ""), f"Bearer {control_token}")
     def do_GET(self):
+        if self.path == "/healthz":
+            self.send_response(204); self.end_headers(); return
+        if self.path != "/sessions":
+            self.send_response(404); self.end_headers(); return
+        if not self.authorized():
+            self.send_response(401); self.end_headers(); return
         body = json.dumps({"status": "ok", "mode": "OBSERVE", "sessions": list(sessions)}).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
     def do_POST(self):
+        if self.path != "/sessions":
+            self.send_response(404); self.end_headers(); return
+        if not self.authorized():
+            self.send_response(401); self.end_headers(); return
         length = int(self.headers.get("Content-Length", "0"))
-        data = json.loads(self.rfile.read(length) or b"{}")
+        if length < 2 or length > 4096:
+            self.send_response(413); self.end_headers(); return
+        try:
+            incoming = json.loads(self.rfile.read(length))
+        except json.JSONDecodeError:
+            self.send_response(400); self.end_headers(); return
+        # Data minimization boundary: subscriber SIP identities never enter the
+        # analytics path. Only an opaque call correlation id and timing remain.
+        data = {"call_id": incoming.get("call_id", ""),
+                "observed_at": incoming.get("observed_at", 0), "mode": "OBSERVE"}
         call_id = data.get("call_id", "")
-        if call_id:
+        if call_id_pattern.fullmatch(call_id):
             with lock: sessions[call_id] = data
             print(f"MEDIA session call_id={call_id} mode=OBSERVE", flush=True)
+        else:
+            self.send_response(400); self.end_headers(); return
         self.send_response(202); self.end_headers()
     def log_message(self, *_): pass
 
@@ -67,7 +95,10 @@ def publish():
                      "ssrc": ssrc, "payload_type": payload_type, "packets": packets,
                      "payload_bytes": payload_bytes, "window_seconds": interval, "observed_at": time.time()}
             try:
-                req = urllib.request.Request(worker_url, json.dumps(event).encode(), {"Content-Type": "application/json"})
+                req = urllib.request.Request(worker_url, json.dumps(event).encode(), {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {control_token}",
+                })
                 urllib.request.urlopen(req, timeout=1).read()
                 print(f"MEDIA delivered ssrc={ssrc} packets={packets} calls={len(active)}", flush=True)
             except Exception as exc:

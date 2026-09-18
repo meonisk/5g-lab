@@ -58,8 +58,10 @@ check 'RTPengine has Voice Agent endpoint' grep -q "$VOICE_AGENT_IP" <<<"$call_i
 
 deadline=$((SECONDS + 12))
 received=0
+control_token=$(docker exec lab-voice-agent sh -c 'cat "$SERVICE_CONTROL_TOKEN_FILE"')
 while ((SECONDS < deadline)); do
-    status=$(docker exec lab-voice-agent wget -qO- "http://127.0.0.1:${VOICE_AGENT_HTTP_PORT}/status")
+    status=$(docker exec lab-voice-agent wget -qO- --header="Authorization: Bearer $control_token" \
+        "http://127.0.0.1:${VOICE_AGENT_HTTP_PORT}/status")
     received=$(python -c 'import json,sys; d=json.load(sys.stdin); print(d["calls"].get(sys.argv[1],{}).get("received_packets",0))' "$call_id" <<<"$status")
     ((received > 0)) && break
     sleep 1

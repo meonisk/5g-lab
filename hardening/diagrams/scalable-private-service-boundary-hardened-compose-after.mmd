@@ -1,0 +1,14 @@
+flowchart LR
+  UE[IMS UE / untrusted media] --> CSCF[P/I/S-CSCF]
+  CSCF --> AS[SIP AS: validate anchored SDP]
+  CSCF --> RTP[RTPengine only media authority]
+  RTP --> VA[Voice Agent: bounded transient state]
+  AS -->|authenticated control| VA
+  AS -->|minimal authenticated event| MA[Media Adapter: NET_RAW only]
+  MA -->|authenticated aggregate| AI[AI Worker]
+  TOKEN[Generated control-token volume] --> AS
+  TOKEN --> VA
+  TOKEN --> MA
+  TOKEN --> AI
+  SECRETS[Subscriber secrets by least exposure] --> UE
+  SECRETS --> DB[Provisioning]

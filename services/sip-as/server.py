@@ -6,6 +6,8 @@ import threading
 import time
 import urllib.request
 import hashlib
+import ipaddress
+import urllib.parse
 
 bind_ip = os.environ["SIP_AS_IP"]
 bind_port = int(os.environ["SIP_AS_PORT"])
@@ -16,6 +18,11 @@ voice_number = os.environ["VOICE_AGENT_MSISDN"]
 voice_user = os.environ["VOICE_AGENT_SIP_USER"]
 voice_ip = os.environ["VOICE_AGENT_IP"]
 voice_rtp_port = int(os.environ["VOICE_AGENT_RTP_PORT"])
+rtpengine_ip = str(ipaddress.ip_address(os.environ["RTPENGINE_IP"]))
+rtp_port_min = int(os.environ["RTPENGINE_PORT_MIN"])
+rtp_port_max = int(os.environ["RTPENGINE_PORT_MAX"])
+with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
+    control_token = token_source.read().strip()
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((bind_ip, bind_port))
 transactions = {}
@@ -38,25 +45,32 @@ def all_headers(message, long_name, compact_name=None):
 def notify_adapter(message):
     payload = json.dumps({
         "call_id": header(message, "Call-ID") or header(message, "i"),
-        "from": header(message, "From") or header(message, "f"),
-        "to": header(message, "To") or header(message, "t"),
         "observed_at": time.time(),
         "mode": "OBSERVE",
     }).encode()
     try:
-        req = urllib.request.Request(adapter_url, payload, {"Content-Type": "application/json"})
+        req = urllib.request.Request(adapter_url, payload, {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {control_token}",
+        })
         urllib.request.urlopen(req, timeout=1).read()
     except Exception as exc:
         print(f"AS adapter unavailable (call continues): {exc}", flush=True)
 
 def notify_voice(call_id, remote_ip, remote_port):
     payload = json.dumps({"call_id": call_id, "remote_ip": remote_ip, "remote_port": remote_port}).encode()
-    req = urllib.request.Request(voice_url, payload, {"Content-Type": "application/json"})
+    req = urllib.request.Request(voice_url, payload, {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {control_token}",
+    })
     urllib.request.urlopen(req, timeout=2).read()
 
 def stop_voice(call_id):
     try:
-        urllib.request.urlopen(urllib.request.Request(f"{voice_url}/{call_id}", method="DELETE"), timeout=1).read()
+        safe_call_id = urllib.parse.quote(call_id, safe="")
+        request = urllib.request.Request(f"{voice_url}/{safe_call_id}", method="DELETE",
+                                         headers={"Authorization": f"Bearer {control_token}"})
+        urllib.request.urlopen(request, timeout=1).read()
     except Exception as exc:
         print(f"AS voice cleanup failed call_id={call_id}: {exc}", flush=True)
 
@@ -89,9 +103,22 @@ def terminate_for_agent(message, peer):
         if not connection or not media:
             sock.sendto(local_response(message, 488, "Not Acceptable Here", to_tag=tag).encode(), peer)
             return
+        try:
+            offered_ip = str(ipaddress.ip_address(connection.group(1)))
+            offered_port = int(media.group(1))
+        except ValueError:
+            sock.sendto(local_response(message, 488, "Invalid Media Endpoint", to_tag=tag).encode(), peer)
+            return
+        # P-CSCF must anchor the offer before iFC sends it to this AS.  Without
+        # this check an authenticated SIP caller could make the agent emit RTP
+        # toward an arbitrary address (media SSRF/amplification).
+        if offered_ip != rtpengine_ip or not rtp_port_min <= offered_port <= rtp_port_max:
+            print(f"AS rejected unanchored media call_id={call_id}", flush=True)
+            sock.sendto(local_response(message, 488, "Media Must Be Anchored", to_tag=tag).encode(), peer)
+            return
         if call_id not in agent_calls:
             try:
-                notify_voice(call_id, connection.group(1), int(media.group(1)))
+                notify_voice(call_id, offered_ip, offered_port)
                 agent_calls[call_id] = tag
                 threading.Thread(target=notify_adapter, args=(message,), daemon=True).start()
             except Exception as exc:

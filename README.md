@@ -61,6 +61,7 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-registration.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-call.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-voice-agent.sh
+& 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
 ```
 
@@ -99,6 +100,33 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
   subscriber-to-subscriber calls remain proxied through P/I/S-CSCF.
 - Voice prompts, VAD threshold, silence interval, RTP/HTTP ports, service
   identity, address, and stale-call timeout are all configured in `lab.env`.
+- Custom service control uses a randomly generated token stored in a private
+  Docker volume. It is not placed in Git, `lab.env`, container command lines,
+  or ordinary service logs.
+- Voice Agent accepts media only from the env-defined RTPengine address and
+  port allocation. Audio is processed in memory and is not recorded; the
+  analytics path receives no SIP `From`/`To` subscriber identities.
+- Custom services use read-only root filesystems, no-new-privileges, bounded
+  resources/logs/state, and minimal Linux capabilities. The Media Adapter is
+  the only custom service retaining `NET_RAW` for RTP observation.
+- IMS/UE service stdout logs are size/rotation bounded, while PyHSS file logs
+  use a non-persistent tmpfs. Mongo subscriber data remains persistent; for a
+  production deployment its storage must be encrypted with managed keys and a
+  tested deletion/backup policy.
+
+## Scaling and data protection
+
+The implemented profile is the secure single-host development baseline. It is
+not presented as a production multi-tenant deployment. The compared production
+options, trust boundaries, data-retention rules, migration order, and remaining
+decisions are in [the security hardening review](hardening/hardening.md) and
+[the full proposal](hardening/proposals/scalable-private-service-boundary.md).
+
+The recommended production direction is dialog-affine SIP AS replicas, a
+durable call-state owner, an RTPengine shard pool, workload identity with mTLS,
+KMS/HSM-backed secrets, bounded metadata queues, and independently autoscaled
+AI workers. Dedicated per-tenant cells are reserved for tenants whose legal or
+contractual isolation requirements justify separate compute, keys, and data.
 - `../ims` remains the architecture/deployment repository; this directory is
   the runnable Docker implementation.
 

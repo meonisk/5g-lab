@@ -1,0 +1,157 @@
+{
+  "documentType": "codex-security.hardening-analysis",
+  "schemaVersion": "1.0",
+  "analysisId": "hardening_20260918_ims_voice_agent",
+  "sourceEvidence": {
+    "kind": "source_collection",
+    "label": "IMS Voice Agent deployment and service source",
+    "collectionSha256": "0564e6afa5c7d1e93ccfb3bd87242fedfcfa330238d67181004b95f12d8c3ff5",
+    "artifactCount": 6,
+    "targetRevision": "3f9853e052befc8200815ab1074ce9a472d03433",
+    "sourceDrift": "present"
+  },
+  "assessment": {
+    "outcome": "opportunities_identified",
+    "summary": "The lab needs one owned boundary for media authority, personal-data minimization, service identity, bounded retention, and horizontally consistent call state."
+  },
+  "constraints": {
+    "profile": "balanced",
+    "changeHorizons": ["incremental", "medium_term", "foundational"],
+    "nonNegotiables": [
+      "Preserve verified IMS subscriber calls and fail-open RTP behavior.",
+      "Keep mutable local topology in lab.env and credentials outside Git."
+    ],
+    "assumptions": [
+      "No measured production load, latency, availability, tenancy, jurisdiction, or retention requirement was supplied.",
+      "Docker Compose remains the local development environment."
+    ]
+  },
+  "opportunities": [
+    {
+      "opportunityId": "scalable-private-service-boundary",
+      "title": "Separate scalable media authority and personal-data boundaries",
+      "summary": "Remove ambient internal authority now, then move production replicas to workload identity and a durable call-state owner.",
+      "diagnosis": "The source showed a broad service network, unauthenticated control APIs, SDP-derived media authority, excessive secret exposure, unbounded process-local state, and analytics fields that were not required.",
+      "evidence": [
+        {"claimType": "observed", "sourceKind": "source", "evidenceId": "E1", "path": "docker-compose.yml", "claim": "Custom services shared a broad network and lacked consistent least-privilege, resource, and secret-distribution controls."},
+        {"claimType": "observed", "sourceKind": "source", "evidenceId": "E2", "path": "services/sip-as/server.py", "claim": "SIP AS passed an SDP-derived endpoint to an unauthenticated agent control API."},
+        {"claimType": "observed", "sourceKind": "source", "evidenceId": "E3", "path": "services/voice-agent/agent.py", "claim": "Voice Agent call state and event retention were process-local and its API accepted control without authentication."},
+        {"claimType": "observed", "sourceKind": "source", "evidenceId": "E4", "path": "services/media-adapter/adapter.py", "claim": "Media Adapter needs raw packet observation and accepted unused SIP identity fields."},
+        {"claimType": "observed", "sourceKind": "source", "evidenceId": "E5", "path": "services/ai-worker/worker.py", "claim": "AI ingestion and event retrieval were unauthenticated and retained in process memory."},
+        {"claimType": "inferred", "sourceKind": "source", "evidenceId": "E6", "path": "lab.env", "claim": "No production concurrency, regional, tenancy, retention, or availability contract exists yet, so cluster sizing and technology selection remain unknown."}
+      ],
+      "desiredInvariants": [
+        "Only authenticated service workloads can mutate agent call state.",
+        "Agent RTP destinations are restricted to the configured RTPengine and allocated port range.",
+        "Subscriber credentials and identifiers are visible only to components with a declared need.",
+        "Audio is transient by default and metadata retention is bounded by purpose and TTL.",
+        "Every horizontal replica observes a consistent call-state owner or deterministic dialog affinity."
+      ],
+      "proposalPath": "proposals/scalable-private-service-boundary.md",
+      "options": [
+        {
+          "optionId": "hardened-compose",
+          "title": "Hardened Compose boundary",
+          "kind": "incremental",
+          "summary": "Authenticate local control, validate RTP authority, minimize data, bound resources, and reduce container privileges without changing the verified call flow.",
+          "diagramPaths": {"before": "diagrams/scalable-private-service-boundary-before.mmd", "after": "diagrams/scalable-private-service-boundary-hardened-compose-after.mmd"},
+          "evidenceCoverage": [
+            {"evidenceId": "E1", "effect": "mitigates", "tacticalFixRequired": true, "rationale": "Least privilege and runtime limits reduce the shared-host blast radius."},
+            {"evidenceId": "E2", "effect": "addresses", "tacticalFixRequired": true, "rationale": "Authenticated control and exact RTPengine validation remove the observed ambient authority."},
+            {"evidenceId": "E3", "effect": "mitigates", "tacticalFixRequired": true, "rationale": "Authentication and bounds are added, but state remains local."},
+            {"evidenceId": "E4", "effect": "mitigates", "tacticalFixRequired": true, "rationale": "NET_RAW is retained only where required and identity fields are removed."},
+            {"evidenceId": "E5", "effect": "addresses", "tacticalFixRequired": true, "rationale": "AI API authentication and bounded retention are implemented."},
+            {"evidenceId": "E6", "effect": "unaffected", "tacticalFixRequired": false, "rationale": "Production requirements still need owner decisions."}
+          ],
+          "tradeoffs": [
+            {"dimension": "security", "direction": "improves", "confidence": "high", "basis": "source-derived", "assessment": "Removes unauthenticated call control, arbitrary media destinations, and excessive custom-service privilege; shared host and token remain.", "validationPlan": "Run verify-security.sh and targeted unauthorized/unanchored-media cases."},
+            {"dimension": "performance", "direction": "neutral", "confidence": "medium", "basis": "source-derived", "assessment": "Constant-time token checks and bounds add no external hop.", "validationPlan": "Compare call setup p95 and RTP packet counters before and after under the same call workload."},
+            {"dimension": "memory", "direction": "improves", "confidence": "high", "basis": "source-derived", "assessment": "Events, calls, logs, PIDs and container memory are bounded.", "validationPlan": "Drive maximum configured calls/events and inspect RSS plus rejection behavior."},
+            {"dimension": "reliability", "direction": "improves", "confidence": "medium", "basis": "source-derived", "assessment": "Bounded overload and stale-call expiry improve recovery, while single-host failure remains.", "validationPlan": "Kill custom services independently and rerun fail-open and cleanup gates."},
+            {"dimension": "operability", "direction": "regresses", "confidence": "medium", "basis": "source-derived", "assessment": "Token volume lifecycle and read-only debugging require explicit procedures.", "validationPlan": "Exercise clean start, token regeneration, log collection and rollback."},
+            {"dimension": "migration", "direction": "improves", "confidence": "high", "basis": "measured", "assessment": "The implementation preserved all live Phase 4B-4E gates.", "validationPlan": "Keep all gates in start-lab.ps1 and CI."}
+          ],
+          "residualRisks": ["Single Docker host", "Shared bearer among authorized custom services", "Process-local dialog and call state"],
+          "implementationReadiness": {
+            "affectedComponents": ["docker-compose.yml", "lab.env", "services/sip-as", "services/voice-agent", "services/media-adapter", "services/ai-worker", "scripts"],
+            "workPackages": ["Control token", "Media validation", "Data minimization", "Runtime confinement", "Security gate"],
+            "acceptanceCriteria": ["Phase 4A-4E pass", "Security/privacy gate passes", "Unauthorized APIs reject", "Unanchored media rejects"],
+            "migrationNotes": ["Control APIs intentionally require authentication after deployment."],
+            "rollback": "Revert the hardening commit; preserve database volumes; optionally remove the generated control-token volume."
+          }
+        },
+        {
+          "optionId": "orchestrated-shards",
+          "title": "Orchestrated shared service with durable call state",
+          "kind": "structural",
+          "summary": "Use workload identity, dialog-affine AS replicas, a durable state owner, RTPengine shards, bounded metadata queues, and independently autoscaled AI workers.",
+          "diagramPaths": {"before": "diagrams/scalable-private-service-boundary-before.mmd", "after": "diagrams/scalable-private-service-boundary-orchestrated-shards-after.mmd"},
+          "evidenceCoverage": [
+            {"evidenceId": "E1", "effect": "addresses", "tacticalFixRequired": true, "rationale": "Workload policy and isolated roles replace broad local authority; Compose controls remain developer baseline."},
+            {"evidenceId": "E2", "effect": "addresses", "tacticalFixRequired": true, "rationale": "mTLS policy and durable call control own media authorization."},
+            {"evidenceId": "E3", "effect": "addresses", "tacticalFixRequired": true, "rationale": "Call state becomes consistent and recoverable across replicas."},
+            {"evidenceId": "E4", "effect": "mitigates", "tacticalFixRequired": true, "rationale": "Capture workers remain privileged but can be isolated per RTP shard."},
+            {"evidenceId": "E5", "effect": "addresses", "tacticalFixRequired": true, "rationale": "A bounded TTL queue and workload identity control AI ingestion."},
+            {"evidenceId": "E6", "effect": "unknown", "tacticalFixRequired": false, "rationale": "Technology and capacity depend on unsupplied production requirements."}
+          ],
+          "tradeoffs": [
+            {"dimension": "security", "direction": "improves", "confidence": "high", "basis": "source-derived", "assessment": "Per-workload identity and central call policy narrow authority and enable revocation.", "validationPlan": "Test workload impersonation, policy denial, key rotation and cross-namespace access."},
+            {"dimension": "performance", "direction": "regresses", "confidence": "low", "basis": "hypothetical", "assessment": "Durable state and queue operations add hops but permit independent scaling.", "validationPlan": "Benchmark p95/p99 setup and AI latency at target calls/s and RTP PPS."},
+            {"dimension": "memory", "direction": "regresses", "confidence": "medium", "basis": "analogous", "assessment": "State replicas, queues and caches consume additional bounded memory.", "validationPlan": "Measure per-call state and queue depth during burst and recovery workloads."},
+            {"dimension": "reliability", "direction": "improves", "confidence": "medium", "basis": "source-derived", "assessment": "Node failures are containable, but state/queue availability becomes a new dependency for new calls.", "validationPlan": "Run node, state, queue and region fault injection with drain/replay checks."},
+            {"dimension": "operability", "direction": "regresses", "confidence": "high", "basis": "analogous", "assessment": "PKI, state, queue, autoscaling and regional routing add operational burden.", "validationPlan": "Complete rotation, backup/restore, incident and regional failover rehearsals."},
+            {"dimension": "migration", "direction": "regresses", "confidence": "high", "basis": "source-derived", "assessment": "Requires explicit state-machine, affinity and dual-run migration.", "validationPlan": "Mirror state, replay histories, canary new calls and drain old dialogs before cutover."}
+          ],
+          "residualRisks": ["State-store compromise", "Misconfigured workload policy", "Metadata inference", "Regional media latency"],
+          "implementationReadiness": {
+            "affectedComponents": ["SIP ingress", "SIP AS", "call-control service", "RTPengine pool", "AI queue/workers", "KMS/PKI", "observability"],
+            "workPackages": ["Requirements/SLO freeze", "Call-state machine", "Workload identity", "Dialog affinity", "RTP sharding", "Queue/backpressure", "DR validation"],
+            "acceptanceCriteria": ["Horizontal failover preserves state", "No cross-workload control", "RTP remains fail-open", "Load SLOs pass"],
+            "migrationNotes": ["Introduce state ownership before adding replicas."],
+            "rollback": "Route new calls to the prior single owner and drain candidate dialogs; retain mirrored state for audit."
+          }
+        },
+        {
+          "optionId": "tenant-cells",
+          "title": "Tenant-isolated service cells",
+          "kind": "isolation",
+          "summary": "Deploy separate AS, media, agent, data, and key domains per tenant behind a tenant-aware IMS edge.",
+          "diagramPaths": {"before": "diagrams/scalable-private-service-boundary-before.mmd", "after": "diagrams/scalable-private-service-boundary-tenant-cells-after.mmd"},
+          "evidenceCoverage": [
+            {"evidenceId": "E1", "effect": "addresses", "tacticalFixRequired": true, "rationale": "Dedicated cells contain tenant blast radius."},
+            {"evidenceId": "E2", "effect": "addresses", "tacticalFixRequired": true, "rationale": "Media authority is scoped inside a tenant cell."},
+            {"evidenceId": "E3", "effect": "addresses", "tacticalFixRequired": true, "rationale": "Call state and keys are tenant-local."},
+            {"evidenceId": "E4", "effect": "mitigates", "tacticalFixRequired": true, "rationale": "Raw capture remains privileged but tenant-scoped."},
+            {"evidenceId": "E5", "effect": "addresses", "tacticalFixRequired": true, "rationale": "AI data and retention are tenant-specific."},
+            {"evidenceId": "E6", "effect": "unknown", "tacticalFixRequired": false, "rationale": "Tenant obligations have not been supplied."}
+          ],
+          "tradeoffs": [
+            {"dimension": "security", "direction": "improves", "confidence": "high", "basis": "analogous", "assessment": "Dedicated compute, key and data domains strongly reduce cross-tenant blast radius.", "validationPlan": "Attempt cross-cell network, identity, storage, backup and key access."},
+            {"dimension": "performance", "direction": "unknown", "confidence": "low", "basis": "hypothetical", "assessment": "Dedicated capacity reduces noisy neighbors but may strand resources.", "validationPlan": "Benchmark small and large tenant cells under burst and steady workloads."},
+            {"dimension": "memory", "direction": "regresses", "confidence": "high", "basis": "analogous", "assessment": "Service and cache overhead repeats per tenant.", "validationPlan": "Measure minimum viable cell footprint and idle-to-peak utilization."},
+            {"dimension": "reliability", "direction": "improves", "confidence": "medium", "basis": "analogous", "assessment": "Tenant failures are isolated, while shared ingress and fleet orchestration remain common risks.", "validationPlan": "Fail individual cells and shared routing separately."},
+            {"dimension": "operability", "direction": "regresses", "confidence": "high", "basis": "analogous", "assessment": "Fleet count, upgrades, backups and policy variants multiply.", "validationPlan": "Run fleet-wide patch, rotation, backup and incident exercises."},
+            {"dimension": "migration", "direction": "regresses", "confidence": "high", "basis": "source-derived", "assessment": "Requires tenant partition, identity routing, data move and key lifecycle tooling.", "validationPlan": "Canary one tenant with reversible export/import and dialog drain."
+            }
+          ],
+          "residualRisks": ["Shared ingress policy", "Fleet configuration drift", "Higher cost and lower utilization"],
+          "implementationReadiness": {
+            "affectedComponents": ["Tenant-aware IMS edge", "Per-tenant service cell", "Per-tenant keys/data", "Fleet management"],
+            "workPackages": ["Tenant contract", "Cell template", "Tenant routing", "Data/key lifecycle", "Fleet automation"],
+            "acceptanceCriteria": ["Cross-cell isolation passes", "Per-tenant deletion and restore pass", "Shared edge policy is audited"],
+            "migrationNotes": ["Migrate one tenant at a time after active dialogs drain."],
+            "rollback": "Route the tenant back to the shared service and restore the prior data/key binding."
+          }
+        }
+      ],
+      "recommendedOptionId": "orchestrated-shards",
+      "recommendation": "Keep hardened Compose as the implemented local baseline and adopt orchestrated shards before multi-user production; use tenant cells only when isolation obligations justify their cost."
+    }
+  ],
+  "openQuestions": [
+    "Peak calls per second, concurrent calls, codec mix, and regions?",
+    "Availability, recovery, retention, consent, deletion, and legal-hold requirements?",
+    "Are tenants mutually untrusted and do any require dedicated compute or keys?",
+    "Which external AI providers, if any, may receive audio or text?"
+  ]
+}

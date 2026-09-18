@@ -33,13 +33,20 @@ try {
     & $Bash scripts/provision-ims-subscribers.sh --apply
     if ($LASTEXITCODE -ne 0) { throw 'IMS subscriber provisioning failed' }
 
+    # A recreated Mongo container can leave long-lived Open5GS clients and the
+    # gNB SCTP association pointing at stale state. Restart the dependency
+    # chain before the UEs so a config-only/secret-scope update is reproducible.
+    docker restart lab-udr lab-udm lab-ausf lab-pcf lab-amf | Out-Null
+    Start-Sleep -Seconds 5
+    docker restart lab-gnb | Out-Null
+    Start-Sleep -Seconds 5
     docker restart lab-ue1 lab-ue2 | Out-Null
     Start-Sleep -Seconds 15
     docker restart lab-sipue1 lab-sipue2 | Out-Null
     Start-Sleep -Seconds 12
 
     if (-not $SkipVerify) {
-        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh')) {
+        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-security.sh')) {
             & $Bash "scripts/$gate"
             if ($LASTEXITCODE -ne 0) { throw "$gate failed" }
         }
