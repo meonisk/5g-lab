@@ -1,4 +1,4 @@
-# Local 5G SA + IMS + OBSERVE agent lab
+# Local 5G SA + IMS + voice-agent lab
 
 This directory starts the complete local stand on Docker Desktop/WSL2:
 
@@ -7,11 +7,16 @@ This directory starts the complete local stand on Docker Desktop/WSL2:
 - IMS DNS, PyHSS, Kamailio P/I/S-CSCF, and two PJSUA subscribers;
 - RTPengine media anchoring;
 - an iFC/ISC-triggered SIP Application Server, RTP Media Adapter, and minimal
-  OBSERVE-mode AI Worker.
+  OBSERVE-mode AI Worker;
+- a native IMS TERMINATE Voice Agent reachable at the service number defined
+  by `VOICE_AGENT_MSISDN` in `lab.env`.
 
-The first AI MVP classifies normalized RTP windows as audio activity. It is
-outside the critical call path: stopping it does not stop SIP or RTP. This is
-the Phase 4D OBSERVE stage, not yet a TRANSFORM or conversational TERMINATE bot.
+The OBSERVE worker classifies normalized RTP windows as audio activity and is
+outside the critical call path: stopping it does not stop SIP or RTP. The
+separate TERMINATE agent answers a real IMS call, negotiates PCMU through
+RTPengine, plays a locally synthesized greeting, detects a completed speech
+segment, and can synthesize a deterministic reply. It deliberately does not
+yet claim semantic STT/LLM conversation.
 
 ## Configuration rule
 
@@ -23,7 +28,7 @@ Do not call bare `docker compose`: interpolation requires both env files. Use:
 
 ```powershell
 .\scripts\compose.ps1 ps
-.\scripts\compose.ps1 logs -f sip-as media-adapter ai-worker
+.\scripts\compose.ps1 logs -f sip-as voice-agent media-adapter ai-worker
 ```
 
 or from Git Bash:
@@ -55,10 +60,11 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-registration.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-call.sh
+& 'C:\Program Files\Git\bin\bash.exe' scripts/verify-voice-agent.sh
 python scripts/check-no-hardcoded-topology.py
 ```
 
-The final gate proves all of the following from live evidence:
+The Phase 4C/4D gate proves all of the following from live evidence:
 
 1. UE1 receives `200 OK` and UE2 receives the INVITE through IMS.
 2. S-CSCF triggers the SIP AS through PyHSS iFC/ISC.
@@ -66,6 +72,19 @@ The final gate proves all of the following from live evidence:
 4. Media Adapter observes RTP packets and AI Worker emits an inference tied to
    the SIP Call-ID.
 5. RTP counters continue increasing while AI Worker is stopped.
+
+The Phase 4E gate calls the configured service number from UE1 and proves that
+the caller receives `200 OK`, PCMU is negotiated, the ACK reaches SIP AS, both
+IMS-PDU and Voice Agent endpoints exist in RTPengine, RTP reaches the agent,
+and BYE releases the SIP and media session.
+
+To place the same call manually after registration:
+
+```powershell
+$number = (Select-String '^VOICE_AGENT_MSISDN=' lab.env).Line.Split('=', 2)[1]
+$domain = (Select-String '^IMS_DOMAIN=' lab.env).Line.Split('=', 2)[1]
+docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsua-control"
+```
 
 ## Implementation notes
 
@@ -76,6 +95,10 @@ The final gate proves all of the following from live evidence:
   Python service images use a versioned base image pinned by digest.
 - Media Adapter shares RTPengine's network namespace only to observe a copy of
   relayed RTP. The original relay remains independent of AS/AI availability.
+- The Voice Agent terminates only its env-defined service number; ordinary
+  subscriber-to-subscriber calls remain proxied through P/I/S-CSCF.
+- Voice prompts, VAD threshold, silence interval, RTP/HTTP ports, service
+  identity, address, and stale-call timeout are all configured in `lab.env`.
 - `../ims` remains the architecture/deployment repository; this directory is
   the runnable Docker implementation.
 

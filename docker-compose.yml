@@ -346,7 +346,8 @@ services:
     env_file: [lab.env]
     environment:
       MEDIA_ADAPTER_URL: http://${RTPENGINE_IP}:${MEDIA_ADAPTER_PORT}
-    depends_on: [scscf, media-adapter]
+      VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
+    depends_on: [scscf, media-adapter, voice-agent]
     networks:
       lab5g:
         ipv4_address: ${SIP_AS_IP}
@@ -372,6 +373,16 @@ services:
     networks:
       lab5g:
         ipv4_address: ${AI_WORKER_IP}
+
+  voice-agent:
+    build: services/voice-agent
+    image: lab-voice-agent
+    container_name: lab-voice-agent
+    restart: unless-stopped
+    env_file: [lab.env]
+    networks:
+      lab5g:
+        ipv4_address: ${VOICE_AGENT_IP}
 
   # --- UE-side IMS SIP clients (Phase 4B) -----------------------------------
   # pjsua in the UE network namespace: SIP signalling and media are sourced
