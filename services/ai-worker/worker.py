@@ -36,8 +36,16 @@ class Api(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self.send_response(400); self.end_headers(); return
         # Deterministic first MVP inference: classify an RTP window as audio activity.
+        received_at = time.time()
+        processing_started = time.perf_counter_ns()
         event["inference"] = "speech_activity" if event.get("packets", 0) > 0 else "silence"
+        event["backend_id"] = "deterministic-activity-control-v1"
+        event["received_at"] = received_at
         event["processed_at"] = time.time()
+        event["processing_ms"] = (time.perf_counter_ns() - processing_started) / 1_000_000
+        observed_at = event.get("observed_at")
+        event["adapter_to_worker_ms"] = ((received_at - observed_at) * 1000
+                                          if isinstance(observed_at, (int, float)) else None)
         with lock:
             events.append(event)
             del events[:-event_retention]

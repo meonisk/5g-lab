@@ -63,7 +63,13 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-voice-agent.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
+python research/tools/research_run.py verify --root .
 ```
+
+Research designs, the local/physical-stand validity boundary, metrics, privacy
+rules, and the evidence-capture workflow are documented in
+[`research/README.md`](research/README.md). A passing research-tooling check is
+an instrumentation admission result, not an AI-performance result.
 
 The Phase 4C/4D gate proves all of the following from live evidence:
 

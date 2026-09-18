@@ -1,3 +1,4 @@
 secrets/ims.env
 evidence/runs/
+evidence/private/
 hardening/context.local.md
