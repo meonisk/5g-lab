@@ -33,6 +33,7 @@ RAW_CORRELATION_RE = re.compile(
     r"(?i)(?:[\"']?(?:calls|call_ids)[\"']?\s*[:=]\s*\[\s*[\"']?[A-Za-z0-9]|"
     r"[\"']?call_id[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9])"
 )
+TRANSCRIPT_CONTENT_RE = re.compile(r"(?i)(?:\btranscript\s*=|[\"']transcript[\"']\s*:)")
 SECRET_KEY_RE = re.compile(r"(?i)(?:^|_)(?:K|KI|OP|OPC|AMF|PASSWORD|PASS|SECRET|TOKEN|KEY)$")
 IDENTITY_KEY_RE = re.compile(r"(?i)(?:IMSI|MSISDN|SUPI|SIP_USER)$")
 
@@ -372,6 +373,8 @@ def validate(root: Path, design_path: Path, run_id: str) -> None:
             errors.append(f"direct subscriber identifier in {path.relative_to(run_dir)}")
         if RAW_CORRELATION_RE.search(text):
             errors.append(f"unprotected call correlation id in {path.relative_to(run_dir)}")
+        if TRANSCRIPT_CONTENT_RE.search(text):
+            errors.append(f"transcript content in shareable evidence: {path.relative_to(run_dir)}")
         if any(secret in text for secret in secret_values):
             errors.append(f"secret value in {path.relative_to(run_dir)}")
     if manifest.get("stage") in {"ADMISSION", "PILOT"} and manifest.get("scientific_claim_allowed"):

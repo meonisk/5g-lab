@@ -92,13 +92,12 @@ audio_seconds=$(python -c 'import json,sys; print(json.load(sys.stdin).get("audi
 chars=$(python -c 'import json,sys; print(json.load(sys.stdin).get("transcript_chars") or 0)' <<<"$summary")
 backend_id=$(python -c 'import json,sys; print(json.load(sys.stdin).get("backend_id") or "")' <<<"$summary")
 processing_ms=$(python -c 'import json,sys; print(json.load(sys.stdin).get("processing_ms") or 0)' <<<"$summary")
-transcript=$(python -c 'import json,sys; print(json.load(sys.stdin).get("transcript") or "")' <<<"$summary")
 
 check 'real PCMU audio was decoded and processed' python -c 'import sys; raise SystemExit(0 if float(sys.argv[1]) >= 3 else 1)' "$audio_seconds"
 check 'local semantic STT produced text' test "$chars" -gt 0
 check 'result identifies the replaceable backend' grep -q '^faster-whisper:' <<<"$backend_id"
-printf 'INFO: backend=%s audio_seconds=%s processing_ms=%s transcript=%q\n' \
-    "$backend_id" "$audio_seconds" "$processing_ms" "$transcript"
+printf 'INFO: backend=%s audio_seconds=%s processing_ms=%s transcript_chars=%s\n' \
+    "$backend_id" "$audio_seconds" "$processing_ms" "$chars"
 
 printf 'REAL IMS AUDIO -> LOCAL STT: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
 exit "$fail"
