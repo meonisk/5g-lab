@@ -1,0 +1,13 @@
+logger:
+  level: info
+global:
+  max:
+    ue: 1024
+ausf:
+  sbi:
+    server:
+      - dev: eth0
+        port: 7777
+    client:
+      scp:
+        - uri: http://scp:7777

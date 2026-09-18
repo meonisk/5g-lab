@@ -1,0 +1,422 @@
+# 5G SA laboratory reproducing the asterisk_legacy VM baseline in containers.
+# Identity parameters are identical to the legacy stand:
+#   PLMN 001/01, TAC 1, SST 1 (no SD), DNN internet,
+#   UE pools and gateways are defined only in lab.env,
+#   IMSI 001010000000001/002, shared K/OPc.
+# Transport addresses are supplied only by lab.env.
+
+x-open5gs: &open5gs
+  image: gradiant/open5gs:2.7.7
+  restart: unless-stopped
+  networks: [lab5g]
+
+services:
+  mongo:
+    image: mongo:8.0
+    container_name: lab-mongo
+    restart: unless-stopped
+    env_file:
+      - lab.env
+      - secrets/ims.env
+    networks: [lab5g]
+    volumes:
+      - mongo-data:/data/db
+
+  nrf:
+    <<: *open5gs
+    container_name: lab-nrf
+    command: open5gs-nrfd
+    volumes:
+      - ./configs/open5gs/nrf.yaml:/opt/open5gs/etc/open5gs/nrf.yaml:ro
+
+  scp:
+    <<: *open5gs
+    container_name: lab-scp
+    command: open5gs-scpd
+    depends_on: [nrf]
+    networks:
+      lab5g:
+        ipv4_address: ${SCP_IP}
+    volumes:
+      - ./configs/open5gs/scp.yaml:/opt/open5gs/etc/open5gs/scp.yaml:ro
+
+  udr:
+    <<: *open5gs
+    container_name: lab-udr
+    command: open5gs-udrd
+    depends_on: [scp, mongo]
+    volumes:
+      - ./configs/open5gs/udr.yaml:/opt/open5gs/etc/open5gs/udr.yaml:ro
+
+  udm:
+    <<: *open5gs
+    container_name: lab-udm
+    command: open5gs-udmd
+    depends_on: [udr]
+    volumes:
+      - ./configs/open5gs/udm.yaml:/opt/open5gs/etc/open5gs/udm.yaml:ro
+
+  ausf:
+    <<: *open5gs
+    container_name: lab-ausf
+    command: open5gs-ausfd
+    depends_on: [udm]
+    volumes:
+      - ./configs/open5gs/ausf.yaml:/opt/open5gs/etc/open5gs/ausf.yaml:ro
+
+  pcf:
+    <<: *open5gs
+    container_name: lab-pcf
+    command: open5gs-pcfd
+    depends_on: [scp, mongo]
+    volumes:
+      - ./configs/open5gs/pcf.yaml:/opt/open5gs/etc/open5gs/pcf.yaml:ro
+
+  bsf:
+    <<: *open5gs
+    container_name: lab-bsf
+    command: open5gs-bsfd
+    depends_on: [scp]
+    volumes:
+      - ./configs/open5gs/bsf.yaml:/opt/open5gs/etc/open5gs/bsf.yaml:ro
+
+  nssf:
+    <<: *open5gs
+    container_name: lab-nssf
+    command: open5gs-nssfd
+    depends_on: [scp]
+    volumes:
+      - ./configs/open5gs/nssf.yaml:/opt/open5gs/etc/open5gs/nssf.yaml:ro
+
+  upf:
+    <<: *open5gs
+    container_name: lab-upf
+    command: open5gs-upfd
+    # gradiant/open5gs runs as uid 999 with no capabilities; ogstun creation,
+    # the NAT rule and the entrypoint's sysctl writes all need root. privileged
+    # is what makes /proc/sys writable for that sysctl.
+    user: root
+    env_file:
+      - lab.env
+    privileged: true
+    cap_add: [NET_ADMIN]
+    devices:
+      - /dev/net/tun
+    sysctls:
+      net.ipv4.ip_forward: 1
+    environment:
+      IPV4_TUN_ADDR: ${INTERNET_UE_GATEWAY_CIDR}
+      IPV6_TUN_ADDR: 2001:db8:cafe::1/48
+      IPV4_TUN_SUBNET: ${INTERNET_UE_CIDR}
+      ENABLE_NAT: "true"
+      IMS_UE_GATEWAY_CIDR: ${IMS_UE_GATEWAY_CIDR}
+    volumes:
+      - ./configs/open5gs/upf.yaml:/opt/open5gs/etc/open5gs/upf.yaml:ro
+      - ./scripts/upf-ims-setup.sh:/lab/upf-ims-setup.sh:ro
+      - ./scripts/render-open5gs-config.sh:/lab/render-open5gs-config.sh:ro
+    # Wrapper creates ogstun2 (env-defined ims DNN pool, no NAT) and then chains
+    # into the stock entrypoint which handles ogstun/NAT for the internet DNN.
+    entrypoint: ["/lab/upf-ims-setup.sh"]
+    networks:
+      lab5g:
+        ipv4_address: ${UPF_IP}
+
+  smf:
+    <<: *open5gs
+    container_name: lab-smf
+    command: open5gs-smfd -c /tmp/smf.yaml
+    env_file:
+      - lab.env
+    depends_on: [scp, upf]
+    volumes:
+      - ./configs/open5gs/smf.yaml:/opt/open5gs/etc/open5gs/smf.yaml:ro
+      - ./scripts/open5gs-config-run.sh:/lab/open5gs-config-run.sh:ro
+      - ./scripts/render-open5gs-config.sh:/lab/render-open5gs-config.sh:ro
+    entrypoint: ["/lab/open5gs-config-run.sh", "/opt/open5gs/etc/open5gs/smf.yaml", "/tmp/smf.yaml"]
+
+  amf:
+    <<: *open5gs
+    container_name: lab-amf
+    command: open5gs-amfd
+    depends_on: [scp, ausf, smf]
+    volumes:
+      - ./configs/open5gs/amf.yaml:/opt/open5gs/etc/open5gs/amf.yaml:ro
+
+  gnb:
+    image: gradiant/ueransim:3.2.6
+    container_name: lab-gnb
+    restart: unless-stopped
+    networks: [lab5g]
+    depends_on: [amf]
+    command: gnb
+    environment:
+      AMF_HOSTNAME: amf
+      N2_IFACE: eth0
+      N3_IFACE: eth0
+      RADIO_IFACE: eth0
+    volumes:
+      - ./configs/ueransim/gnb.yaml:/etc/ueransim/gnb.yaml:ro
+
+  ue1:
+    image: gradiant/ueransim:3.2.6
+    container_name: lab-ue1
+    restart: unless-stopped
+    networks: [lab5g]
+    depends_on: [gnb]
+    command: ue
+    cap_add: [NET_ADMIN]
+    env_file:
+      - lab.env
+      - secrets/ims.env
+    devices:
+      - /dev/net/tun
+    environment:
+      GNB_HOSTNAME: gnb
+      IMSI: ${UE1_IMSI}
+    volumes:
+      - ./configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
+
+  ue2:
+    image: gradiant/ueransim:3.2.6
+    container_name: lab-ue2
+    restart: unless-stopped
+    networks: [lab5g]
+    depends_on: [gnb]
+    command: ue
+    cap_add: [NET_ADMIN]
+    env_file:
+      - lab.env
+      - secrets/ims.env
+    devices:
+      - /dev/net/tun
+    environment:
+      GNB_HOSTNAME: gnb
+      IMSI: ${UE2_IMSI}
+    volumes:
+      - ./configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
+
+  # --- IMS layer (Phase 4A: DNS + HSS) -------------------------------------
+
+  dns:
+    build: images/dnsmasq
+    container_name: lab-dns
+    cap_add: [NET_ADMIN]
+    # Route back to the UE ims pool through the UPF (ims DNN has no NAT).
+    entrypoint: ["/lab/dns-ims-run.sh"]
+    env_file:
+      - lab.env
+    volumes:
+      - ./configs/dns/ims-dnsmasq.conf:/etc/dnsmasq.d/ims.conf:ro
+      - ./scripts/dns-ims-run.sh:/lab/dns-ims-run.sh:ro
+    networks:
+      lab5g:
+        ipv4_address: ${DNS_IP}
+
+  mysql:
+    image: ghcr.io/herlesupreeth/docker_mysql@sha256:a03ac89dbc7de0b0d75e5600ae6542ad9abb620a3c71848ba715a0a5926f81fc
+    container_name: lab-mysql
+    restart: unless-stopped
+    networks:
+      lab5g:
+        ipv4_address: ${MYSQL_IP}
+
+  pyhss:
+    image: ghcr.io/herlesupreeth/docker_pyhss@sha256:67876ced93002181933d706cb047ffee9f855f3f61a43b184a01981987853a82
+    container_name: lab-pyhss
+    restart: unless-stopped
+    env_file:
+      - lab.env
+    volumes:
+      - ./vendor/docker_open5gs/pyhss:/mnt/pyhss:ro
+      - pyhss-logs:/pyhss/log/
+    ports:
+      - "${PYHSS_API_BIND}:${PYHSS_API_PORT}:${PYHSS_API_CONTAINER_PORT}/tcp"
+    expose:
+      - "${PYHSS_BIND_PORT}/tcp"
+    depends_on: [dns, mysql]
+    networks:
+      lab5g:
+        ipv4_address: ${PYHSS_IP}
+
+  # --- IMS layer (Phase 4B: CSCF signalling core) ---------------------------
+  # Kamailio P/I/S-CSCF from the vendored docker_open5gs configs; the image
+  # entrypoint dispatches on COMPONENT_NAME and the init scripts template the
+  # configs from the lab.env variables. CSCFs resolve IMS FQDNs through the
+  # lab dnsmasq (dns: override) and route back to UE pools via the UPF.
+
+  icscf:
+    image: ghcr.io/herlesupreeth/docker_kamailio@sha256:efc9df818c239d28cd61a822d62ce0201b6ca3047f6fa653233bfa84498510de
+    container_name: lab-icscf
+    restart: unless-stopped
+    env_file:
+      - lab.env
+    environment:
+      - COMPONENT_NAME=icscf
+    cap_add: [NET_ADMIN]
+    dns:
+      - ${DNS_IP}
+    volumes:
+      - ./vendor/docker_open5gs/icscf:/mnt/icscf:ro
+    expose:
+      - "${ICSCF_SIP_PORT}/udp"
+      - "${ICSCF_SIP_PORT}/tcp"
+      - "${ICSCF_BIND_PORT}/tcp"
+    depends_on: [dns, mysql, pyhss]
+    networks:
+      lab5g:
+        ipv4_address: ${ICSCF_IP}
+
+  scscf:
+    image: ghcr.io/herlesupreeth/docker_kamailio@sha256:efc9df818c239d28cd61a822d62ce0201b6ca3047f6fa653233bfa84498510de
+    container_name: lab-scscf
+    restart: unless-stopped
+    env_file:
+      - lab.env
+    environment:
+      - COMPONENT_NAME=scscf
+    cap_add: [NET_ADMIN]
+    dns:
+      - ${DNS_IP}
+    volumes:
+      - ./vendor/docker_open5gs/scscf:/mnt/scscf:ro
+    expose:
+      - "${SCSCF_SIP_PORT}/udp"
+      - "${SCSCF_SIP_PORT}/tcp"
+      - "${SCSCF_BIND_PORT}/tcp"
+    depends_on: [dns, mysql, pyhss]
+    networks:
+      lab5g:
+        ipv4_address: ${SCSCF_IP}
+
+  pcscf:
+    image: ghcr.io/herlesupreeth/docker_kamailio@sha256:efc9df818c239d28cd61a822d62ce0201b6ca3047f6fa653233bfa84498510de
+    container_name: lab-pcscf
+    restart: unless-stopped
+    env_file:
+      - lab.env
+    environment:
+      - COMPONENT_NAME=pcscf
+      - PCSCF_PUB_IP=${PCSCF_IP}
+    cap_add: [NET_ADMIN]
+    dns:
+      - ${DNS_IP}
+    volumes:
+      - ./vendor/docker_open5gs/pcscf:/mnt/pcscf:ro
+    expose:
+      - "${PCSCF_SIP_PORT}/udp"
+      - "${PCSCF_SIP_PORT}/tcp"
+      - "${PCSCF_BIND_PORT}/tcp"
+    depends_on: [dns, mysql, icscf, scscf, rtpengine]
+    networks:
+      lab5g:
+        ipv4_address: ${PCSCF_IP}
+
+  # Userspace RTP relay. Media is routed back to both UE pools through the UPF;
+  # no host/kernel xt_RTPENGINE module is required.
+  rtpengine:
+    build: vendor/docker_open5gs/rtpengine
+    image: lab-rtpengine
+    container_name: lab-rtpengine
+    restart: unless-stopped
+    env_file:
+      - lab.env
+    cap_add: [NET_ADMIN]
+    environment:
+      INTERFACE: ${RTPENGINE_IP}
+      LISTEN_NG: ${RTPENGINE_IP}:${RTPENGINE_NG_PORT}
+      LISTEN_CLI: ${RTPENGINE_IP}:${RTPENGINE_CLI_PORT}
+      PORT_MIN: ${RTPENGINE_PORT_MIN}
+      PORT_MAX: ${RTPENGINE_PORT_MAX}
+      TABLE: "-1"
+    volumes:
+      - ./vendor/docker_open5gs/rtpengine:/mnt/rtpengine:ro
+    networks:
+      lab5g:
+        ipv4_address: ${RTPENGINE_IP}
+
+  # --- Phase 4D: service enablement (OBSERVE mode) -------------------------
+  # The SIP AS is triggered by PyHSS iFC/ISC. The Media Adapter shares only
+  # RTPengine's network namespace so it can observe a copy of relayed RTP;
+  # AI failure is deliberately outside the SIP/RTP critical path.
+  sip-as:
+    build: services/sip-as
+    image: lab-sip-as
+    container_name: lab-sip-as
+    restart: unless-stopped
+    env_file: [lab.env]
+    environment:
+      MEDIA_ADAPTER_URL: http://${RTPENGINE_IP}:${MEDIA_ADAPTER_PORT}
+    depends_on: [scscf, media-adapter]
+    networks:
+      lab5g:
+        ipv4_address: ${SIP_AS_IP}
+
+  media-adapter:
+    build: services/media-adapter
+    image: lab-media-adapter
+    container_name: lab-media-adapter
+    restart: unless-stopped
+    env_file: [lab.env]
+    environment:
+      AI_WORKER_URL: http://${AI_WORKER_IP}:${AI_WORKER_PORT}
+    network_mode: service:rtpengine
+    cap_add: [NET_RAW]
+    depends_on: [rtpengine, ai-worker]
+
+  ai-worker:
+    build: services/ai-worker
+    image: lab-ai-worker
+    container_name: lab-ai-worker
+    restart: unless-stopped
+    env_file: [lab.env]
+    networks:
+      lab5g:
+        ipv4_address: ${AI_WORKER_IP}
+
+  # --- UE-side IMS SIP clients (Phase 4B) -----------------------------------
+  # pjsua in the UE network namespace: SIP signalling and media are sourced
+  # from the ims PDU session (uesimtun1). Kept alive with sleep; drive the
+  # client with: docker exec lab-sipueN pjsua ... (see scripts/sip-register.sh)
+
+  sipue1:
+    build: images/pjsua
+    image: lab-pjsua
+    container_name: lab-sipue1
+    depends_on: [ue1]
+    network_mode: service:ue1
+    cap_add: [NET_ADMIN]
+    env_file:
+      - lab.env
+      - secrets/ims.env
+    environment:
+      IMSI: ${UE1_IMSI}
+    volumes:
+      - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
+    entrypoint: ["/lab/sip-ue-run.sh"]
+
+  sipue2:
+    build: images/pjsua
+    image: lab-pjsua
+    container_name: lab-sipue2
+    depends_on: [ue2]
+    network_mode: service:ue2
+    cap_add: [NET_ADMIN]
+    env_file:
+      - lab.env
+      - secrets/ims.env
+    environment:
+      IMSI: ${UE2_IMSI}
+    volumes:
+      - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
+    entrypoint: ["/lab/sip-ue-run.sh"]
+
+networks:
+  lab5g:
+    name: lab5g
+    ipam:
+      config:
+        - subnet: ${LAB_NETWORK_CIDR}
+
+volumes:
+  mongo-data:
+  pyhss-logs:
