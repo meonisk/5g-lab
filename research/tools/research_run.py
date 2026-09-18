@@ -27,8 +27,12 @@ SCHEMA_VERSION = "1.0"
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]+$")
 IMSI_RE = re.compile(r"(?i)\b(?:imsi[-_: ]*)?\d{14,16}\b")
 SIP_RE = re.compile(r"(?i)(sips?:)([^@;>\s]+)(@)")
-CALL_ID_RE = re.compile(r"(?i)(call[_ -]?id[=: ]+)([A-Za-z0-9_.+~@-]{4,})")
-CALL_LIST_RE = re.compile(r"(?i)((?:calls|call_ids)[=:]\s*\[)([^\]]*)(\])")
+CALL_ID_RE = re.compile(r"(?i)([\"']?call[_ -]?id[\"']?\s*[=:]\s*[\"']?)([A-Za-z0-9_.+~@-]{4,})")
+CALL_LIST_RE = re.compile(r"(?i)([\"']?(?:calls|call_ids)[\"']?\s*[=:]\s*\[)([^\]]*)(\])")
+RAW_CORRELATION_RE = re.compile(
+    r"(?i)(?:[\"']?(?:calls|call_ids)[\"']?\s*[:=]\s*\[\s*[\"']?[A-Za-z0-9]|"
+    r"[\"']?call_id[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9])"
+)
 SECRET_KEY_RE = re.compile(r"(?i)(?:^|_)(?:K|KI|OP|OPC|AMF|PASSWORD|PASS|SECRET|TOKEN|KEY)$")
 IDENTITY_KEY_RE = re.compile(r"(?i)(?:IMSI|MSISDN|SUPI|SIP_USER)$")
 
@@ -361,6 +365,8 @@ def validate(root: Path, design_path: Path, run_id: str) -> None:
         text = path.read_text(encoding="utf-8", errors="replace")
         if IMSI_RE.search(text):
             errors.append(f"direct subscriber identifier in {path.relative_to(run_dir)}")
+        if RAW_CORRELATION_RE.search(text):
+            errors.append(f"unprotected call correlation id in {path.relative_to(run_dir)}")
         if any(secret in text for secret in secret_values):
             errors.append(f"secret value in {path.relative_to(run_dir)}")
     if manifest.get("stage") in {"ADMISSION", "PILOT"} and manifest.get("scientific_claim_allowed"):
