@@ -24,7 +24,16 @@
       "lab-pcscf", "lab-icscf", "lab-scscf", "lab-rtpengine",
       "lab-sip-as", "lab-media-adapter", "lab-ai-worker", "lab-voice-agent"
     ],
-    "log_tail_lines": 1000
+    "log_tail_lines": 1000,
+    "gates": [
+      {"id": "5gs-connectivity", "command": ["bash", "scripts/verify.sh"]},
+      {"id": "ims-connectivity", "command": ["bash", "scripts/verify-ims.sh"]},
+      {"id": "ims-registration", "command": ["bash", "scripts/verify-ims-registration.sh"]},
+      {"id": "ims-call-and-observe", "command": ["bash", "scripts/verify-ims-call.sh"]},
+      {"id": "voice-agent", "command": ["bash", "scripts/verify-voice-agent.sh"]},
+      {"id": "security-privacy", "command": ["bash", "scripts/verify-security.sh"]},
+      {"id": "topology-literals", "command": ["python", "scripts/check-no-hardcoded-topology.py"]}
+    ]
   },
   "privacy": {
     "raw_audio": "FORBIDDEN",

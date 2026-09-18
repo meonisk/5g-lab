@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -123,6 +124,17 @@ def host_snapshot(root: Path) -> dict[str, Any]:
         hw = json.loads(raw)
     except json.JSONDecodeError:
         hw = {"cpu": {"Name": platform.processor()}, "memory_bytes": 0, "gpus": []}
+    nvidia = command(["nvidia-smi", "--query-gpu=name,memory.total,driver_version",
+                      "--format=csv,noheader,nounits"], root, required=False)
+    if nvidia:
+        parsed_gpus = []
+        for line in nvidia.splitlines():
+            fields = [part.strip() for part in line.split(",")]
+            if len(fields) == 3:
+                parsed_gpus.append({"name": fields[0], "memory_mib": int(fields[1]),
+                                    "driver_version": fields[2], "source": "nvidia-smi"})
+        if parsed_gpus:
+            hw["gpus"] = parsed_gpus
     return {
         "os": platform.platform(),
         "python": platform.python_version(),
@@ -274,6 +286,21 @@ def collect(root: Path, design_path: Path, run_id: str) -> None:
     key = private_key_path(root, run_id).read_bytes()
     exact, _ = sensitive_values(root)
     redactor = Pseudonymizer(key, exact)
+    gate_results = []
+    gate_dir = run_dir / "shareable" / "gates"
+    gate_dir.mkdir(parents=True, exist_ok=True)
+    for gate in design["capture"].get("gates", []):
+        gate_command = list(gate["command"])
+        if gate_command[0] == "bash":
+            windows_bash = Path("C:/Program Files/Git/bin/bash.exe")
+            bash = str(windows_bash) if windows_bash.exists() else shutil.which("bash")
+            gate_command[0] = bash or "bash"
+        result = subprocess.run(gate_command, cwd=root, text=True, encoding="utf-8", errors="replace",
+                                capture_output=True, timeout=300)
+        output = result.stdout + (("\n" + result.stderr) if result.stderr else "")
+        (gate_dir / f"{gate['id']}.log").write_text(redactor.text(output), encoding="utf-8")
+        gate_results.append({"id": gate["id"], "returncode": result.returncode})
+    write_json(run_dir / "shareable" / "gates.json", gate_results)
     containers, stats = docker_records(root, design["capture"]["compose_project"])
     write_json(run_dir / "shareable" / "containers.json", containers)
     write_json(run_dir / "shareable" / "resource-snapshot.json",
@@ -290,7 +317,8 @@ def collect(root: Path, design_path: Path, run_id: str) -> None:
     manifest["collection_status"] = "COLLECTED"
     manifest["collected_at_utc"] = utc_now()
     manifest["capture"] = {"running_container_count": len(containers), "logs": captured,
-                           "raw_audio_collected": False, "raw_payloads_collected": False}
+                           "gates": gate_results, "raw_audio_collected": False,
+                           "raw_payloads_collected": False}
     write_json(manifest_path, manifest)
     checksum_tree(run_dir)
     print(f"COLLECTED {run_id}: {len(containers)} containers, {len(captured)} sanitized logs")
@@ -308,6 +336,13 @@ def validate(root: Path, design_path: Path, run_id: str) -> None:
             errors.append(f"manifest missing {field}")
     if manifest.get("collection_status") != "COLLECTED":
         errors.append("run has not been collected")
+    gates = manifest.get("capture", {}).get("gates", [])
+    expected_gates = design.get("capture", {}).get("gates", [])
+    if len(gates) != len(expected_gates):
+        errors.append("required admission gates were not all captured")
+    for gate in gates:
+        if gate.get("returncode") != 0:
+            errors.append(f"admission gate failed: {gate.get('id')}")
     if manifest.get("design", {}).get("sha256") != sha256_file(design_path):
         errors.append("design hash mismatch")
     checksum_path = run_dir / "checksums.sha256"

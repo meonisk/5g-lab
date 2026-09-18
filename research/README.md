@@ -5,10 +5,11 @@ evidence-capture environment. It does **not** turn a successful lab check into
 a scientific result.
 
 The first executable design, `local-instrumentation-smoke-v1.json`, is an
-instrumentation admission test. It records revisions, immutable input hashes,
-hardware, container images, bounded resource snapshots, and pseudonymized
-logs. Its result can prove that the measurement path works; it cannot support
-a conclusion about AI quality or scalability.
+instrumentation admission test. It executes and records the 5GS, IMS call,
+voice-agent, security/privacy, and topology gates; it also records revisions,
+immutable input hashes, hardware, container images, bounded resource snapshots,
+and pseudonymized logs. Its result can prove that the measurement path works;
+it cannot support a conclusion about AI quality or scalability.
 
 ## Stages
 
