@@ -154,7 +154,9 @@ def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
     paths = [design_path, root / "lab.env", root / "docker-compose.yml"]
     paths.extend(root / p for p in (
         "services/ai-worker/worker.py", "services/media-adapter/adapter.py",
-        "services/sip-as/server.py", "services/voice-agent/agent.py"))
+        "services/sip-as/server.py", "services/voice-agent/agent.py",
+        "research/tools/research_run.py", "research/schemas/run-manifest.schema.json",
+        "research/schemas/metric-record.schema.json"))
     return [{"path": str(p.relative_to(root)).replace("\\", "/"), "sha256": sha256_file(p)}
             for p in paths if p.is_file()]
 
