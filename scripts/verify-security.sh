@@ -40,6 +40,17 @@ check 'Media Adapter retains only NET_RAW capability' sh -c \
 unauthorized=$(docker exec lab-voice-agent wget -S -O- "http://127.0.0.1:${VOICE_AGENT_HTTP_PORT}/status" 2>&1 || true)
 check 'Voice Agent status rejects missing bearer token' grep -q '401 Unauthorized' <<<"$unauthorized"
 
+ai_unauthorized=$(docker exec lab-ai-worker python -c '
+import os,urllib.error,urllib.request
+try:
+    urllib.request.urlopen("http://127.0.0.1:"+os.environ["AI_WORKER_PORT"]+"/events",timeout=2)
+    print("unexpected-success")
+except urllib.error.HTTPError as exc:
+    print(exc.code)')
+check 'AI transcript endpoint rejects missing bearer token' test "$ai_unauthorized" = 401
+check 'AI model state is isolated in its dedicated volume' sh -c \
+    "docker inspect --format '{{json .Mounts}}' lab-ai-worker | grep -q '\"Destination\":\"$AI_MODEL_CACHE\".*\"RW\":true'"
+
 token=$(docker exec lab-sip-as sh -c 'cat "$SERVICE_CONTROL_TOKEN_FILE"')
 authorized=$(docker exec lab-sip-as wget -qO- --header="Authorization: Bearer $token" \
     "http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}/status")
@@ -71,6 +82,8 @@ custom_logs=$(docker logs lab-sip-as 2>&1; docker logs lab-media-adapter 2>&1; \
     docker logs lab-ai-worker 2>&1; docker logs lab-voice-agent 2>&1)
 check 'custom service logs contain no subscriber IMSI' sh -c \
     "! grep -qE '$UE1_IMSI|$UE2_IMSI'" <<<"$custom_logs"
+check 'AI operational logs contain no transcript text' sh -c \
+    "! grep -q 'transcript='" <<<"$(docker logs lab-ai-worker 2>&1)"
 
 printf 'SECURITY/PRIVACY GATE: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
 exit "$fail"

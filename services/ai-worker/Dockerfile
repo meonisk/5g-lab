@@ -1,5 +1,11 @@
-FROM python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+FROM python:3.11.13-slim-bookworm@sha256:86adf8dbadc3d6e82ee5dd2c74bec2e1c2467cdad47886280501df722372d2e1
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --requirement /app/requirements.txt
 COPY worker.py /app/worker.py
+RUN mkdir -p /models && chown 65532:65532 /models
 USER 65532:65532
 ENTRYPOINT ["python", "/app/worker.py"]

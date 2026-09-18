@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import os
 import socket
@@ -5,6 +7,7 @@ import struct
 import threading
 import time
 import urllib.request
+import urllib.parse
 import hmac
 import re
 from collections import defaultdict
@@ -15,12 +18,13 @@ port_max = int(os.environ["RTPENGINE_PORT_MAX"])
 http_port = int(os.environ["MEDIA_ADAPTER_PORT"])
 interval = float(os.environ["MEDIA_OBSERVE_INTERVAL_SECONDS"])
 session_ttl = float(os.environ["MEDIA_SESSION_TTL_SECONDS"])
+audio_max_bytes = int(os.environ["MEDIA_AUDIO_MAX_BYTES"])
 worker_url = os.environ["AI_WORKER_URL"].rstrip("/") + "/observe"
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
 sessions = {}
-counters = defaultdict(lambda: [0, 0])
+counters = defaultdict(lambda: {"packets": 0, "payload_bytes": 0, "audio": bytearray()})
 lock = threading.Lock()
 
 class Api(BaseHTTPRequestHandler):
@@ -58,7 +62,34 @@ class Api(BaseHTTPRequestHandler):
         else:
             self.send_response(400); self.end_headers(); return
         self.send_response(202); self.end_headers()
+    def do_DELETE(self):
+        if not self.authorized():
+            self.send_response(401); self.end_headers(); return
+        if not self.path.startswith("/sessions/"):
+            self.send_response(404); self.end_headers(); return
+        call_id = urllib.parse.unquote(self.path.removeprefix("/sessions/"))
+        if not call_id_pattern.fullmatch(call_id):
+            self.send_response(400); self.end_headers(); return
+        with lock:
+            removed = sessions.pop(call_id, None)
+        print(f"MEDIA session_ended call_id={call_id} existed={removed is not None}", flush=True)
+        self.send_response(204); self.end_headers()
     def log_message(self, *_): pass
+
+def rtp_payload(packet):
+    if len(packet) < 12 or packet[0] >> 6 != 2:
+        return b""
+    offset = 12 + (packet[0] & 0x0f) * 4
+    if len(packet) < offset:
+        return b""
+    if packet[0] & 0x10:
+        if len(packet) < offset + 4:
+            return b""
+        extension_words = struct.unpack("!H", packet[offset + 2:offset + 4])[0]
+        offset += 4 + extension_words * 4
+    padding = packet[-1] if packet[0] & 0x20 else 0
+    end = len(packet) - padding
+    return packet[offset:end] if offset <= end else b""
 
 def capture():
     raw = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
@@ -72,14 +103,22 @@ def capture():
         relay_port = src_port if port_min <= src_port <= port_max else dst_port
         if not (port_min <= relay_port <= port_max) or relay_port % 2:
             continue
-        payload = packet[udp+8:udp+length]
-        if len(payload) < 12 or payload[0] >> 6 != 2:
+        rtp_packet = packet[udp+8:udp+length]
+        if len(rtp_packet) < 12 or rtp_packet[0] >> 6 != 2:
             continue
-        ssrc = struct.unpack("!I", payload[8:12])[0]
-        key = (ssrc, src_port, dst_port, payload[1] & 0x7f)
+        payload_type = rtp_packet[1] & 0x7f
+        payload = rtp_payload(rtp_packet)
+        if not payload:
+            continue
+        ssrc = struct.unpack("!I", rtp_packet[8:12])[0]
+        key = (ssrc, src_port, dst_port, payload_type)
         with lock:
-            counters[key][0] += 1
-            counters[key][1] += len(payload) - 12
+            value = counters[key]
+            value["packets"] += 1
+            value["payload_bytes"] += len(payload)
+            if payload_type == 0 and len(value["audio"]) < audio_max_bytes:
+                remaining = audio_max_bytes - len(value["audio"])
+                value["audio"].extend(payload[:remaining])
 
 def publish():
     while True:
@@ -90,17 +129,23 @@ def publish():
             expired = [call_id for call_id, value in sessions.items() if value.get("observed_at", 0) < cutoff]
             for call_id in expired: sessions.pop(call_id, None)
             active = list(sessions)
-        for (ssrc, src, dst, payload_type), (packets, payload_bytes) in batch.items():
+        for (ssrc, src, dst, payload_type), value in batch.items():
+            audio = bytes(value["audio"])
             event = {"event": "normalized_audio_activity", "mode": "OBSERVE", "call_ids": active,
-                     "ssrc": ssrc, "payload_type": payload_type, "packets": packets,
-                     "payload_bytes": payload_bytes, "window_seconds": interval, "observed_at": time.time()}
+                     "ssrc": ssrc, "payload_type": payload_type, "packets": value["packets"],
+                     "payload_bytes": value["payload_bytes"], "window_seconds": interval,
+                     "observed_at": time.time()}
+            if audio:
+                event.update({"codec": "PCMU", "sample_rate_hz": 8000,
+                              "audio_bytes": len(audio), "audio_sha256": hashlib.sha256(audio).hexdigest(),
+                              "audio_ulaw_b64": base64.b64encode(audio).decode("ascii")})
             try:
                 req = urllib.request.Request(worker_url, json.dumps(event).encode(), {
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {control_token}",
                 })
                 urllib.request.urlopen(req, timeout=1).read()
-                print(f"MEDIA delivered ssrc={ssrc} packets={packets} calls={len(active)}", flush=True)
+                print(f"MEDIA delivered ssrc={ssrc} packets={value['packets']} audio={len(audio)} calls={len(active)}", flush=True)
             except Exception as exc:
                 print(f"MEDIA AI unavailable (media relay unaffected): {exc}", flush=True)
 

@@ -51,7 +51,8 @@ check 'RTPengine has callee IMS-PDU stream' grep -q "$ue2_ip" <<<"$call_info"
 before=$(awk '/Port / {for(i=1;i<=NF;i++) if($i=="p,") sum+=$(i-1)} END {print sum+0}' <<<"$call_info")
 
 ai_logs=$(docker logs lab-ai-worker --since "$since" 2>&1)
-check 'AI Worker inferred activity for this IMS call' grep -q "calls=.*$call_id" <<<"$ai_logs"
+check 'AI Worker accepted an RTP observation window for this IMS call' \
+    grep -q "AI stream_received .*calls=.*$call_id" <<<"$ai_logs"
 
 docker stop -t 1 lab-ai-worker >/dev/null
 worker_stopped=1

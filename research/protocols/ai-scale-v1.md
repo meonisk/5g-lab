@@ -17,9 +17,10 @@ Do not change all four in the first campaign. First screen each axis while the
 others are fixed; use the pilot to choose a small factorial design only where
 interactions matter.
 
-The current `ai-worker` is a deterministic activity classifier and the current
-`voice-agent` is deterministic VAD plus synthesized prompts. They are useful
-controls and integration probes, **not** small semantic AI models.
+The current `ai-worker` processes live PCMU with a revision-pinned local
+faster-whisper `tiny.en` model on CPU. It is now a small semantic STT backend.
+The `voice-agent` reply remains deterministic VAD plus synthesized prompts; the
+transcript does not yet control an LLM or response.
 
 ## 2. Questions that the platform can support
 
@@ -109,7 +110,7 @@ use the same normalized event model from
 
 ### B. Pilot (next implementation milestone)
 
-- integrate at least two materially different replaceable inference backends;
+- add at least one more materially different replaceable inference backend;
 - bind immutable model IDs and a fixed audio corpus;
 - add a traffic/media replayer independent of live microphone input;
 - add measured network impairment and stage timestamps;

@@ -57,6 +57,15 @@ def notify_adapter(message):
     except Exception as exc:
         print(f"AS adapter unavailable (call continues): {exc}", flush=True)
 
+def stop_adapter(call_id):
+    try:
+        safe_call_id = urllib.parse.quote(call_id, safe="")
+        request = urllib.request.Request(f"{adapter_url}/{safe_call_id}", method="DELETE",
+                                         headers={"Authorization": f"Bearer {control_token}"})
+        urllib.request.urlopen(request, timeout=1).read()
+    except Exception as exc:
+        print(f"AS adapter cleanup failed call_id={call_id}: {exc}", flush=True)
+
 def notify_voice(call_id, remote_ip, remote_port):
     payload = json.dumps({"call_id": call_id, "remote_ip": remote_ip, "remote_port": remote_port}).encode()
     req = urllib.request.Request(voice_url, payload, {
@@ -142,6 +151,7 @@ def terminate_for_agent(message, peer):
         sock.sendto(local_response(message, 200, "OK", to_tag=agent_calls.get(call_id, tag)).encode(), peer)
         agent_calls.pop(call_id, None)
         threading.Thread(target=stop_voice, args=(call_id,), daemon=True).start()
+        threading.Thread(target=stop_adapter, args=(call_id,), daemon=True).start()
         print(f"AS ended voice agent call_id={call_id} method={method}", flush=True)
 
 def route_request(message, peer):
@@ -164,6 +174,8 @@ def route_request(message, peer):
     if first.startswith("INVITE "):
         print(f"AS observed INVITE call_id={header(message, 'Call-ID') or header(message, 'i')}", flush=True)
         threading.Thread(target=notify_adapter, args=(message,), daemon=True).start()
+    elif first.startswith(("BYE ", "CANCEL ")):
+        threading.Thread(target=stop_adapter, args=(call_id,), daemon=True).start()
     sock.sendto(forwarded.encode(), scscf)
 
 def route_response(message):

@@ -6,17 +6,18 @@ This directory starts the complete local stand on Docker Desktop/WSL2:
 - `internet` and `ims` PDU sessions for each UE;
 - IMS DNS, PyHSS, Kamailio P/I/S-CSCF, and two PJSUA subscribers;
 - RTPengine media anchoring;
-- an iFC/ISC-triggered SIP Application Server, RTP Media Adapter, and minimal
-  OBSERVE-mode AI Worker;
+- an iFC/ISC-triggered SIP Application Server, RTP Media Adapter, and local
+  OBSERVE-mode faster-whisper STT worker;
 - a native IMS TERMINATE Voice Agent reachable at the service number defined
   by `VOICE_AGENT_MSISDN` in `lab.env`.
 
-The OBSERVE worker classifies normalized RTP windows as audio activity and is
-outside the critical call path: stopping it does not stop SIP or RTP. The
-separate TERMINATE agent answers a real IMS call, negotiates PCMU through
-RTPengine, plays a locally synthesized greeting, detects a completed speech
-segment, and can synthesize a deterministic reply. It deliberately does not
-yet claim semantic STT/LLM conversation.
+The OBSERVE path copies real PCMU payloads from RTPengine, keeps bounded audio
+windows in memory, and transcribes them with a revision-pinned local
+faster-whisper model. It is outside the critical call path: stopping it does
+not stop SIP or RTP. The separate TERMINATE agent answers a real IMS call,
+plays a locally synthesized greeting, detects a completed speech segment, and
+synthesizes a deterministic reply. The transcript does not yet drive an LLM or
+the reply path.
 
 ## Configuration rule
 
@@ -61,6 +62,7 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-registration.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-call.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-voice-agent.sh
+& 'C:\Program Files\Git\bin\bash.exe' scripts/verify-real-ai-stream.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
 python research/tools/research_run.py verify --root .
@@ -79,6 +81,10 @@ The Phase 4C/4D gate proves all of the following from live evidence:
 4. Media Adapter observes RTP packets and AI Worker emits an inference tied to
    the SIP Call-ID.
 5. RTP counters continue increasing while AI Worker is stopped.
+
+The real-stream gate additionally proves that live PCMU from an IMS call is
+decoded, resampled, processed by the local STT model, and produces an
+authenticated in-memory transcript tied to the SIP Call-ID.
 
 The Phase 4E gate calls the configured service number from UE1 and proves that
 the caller receives `200 OK`, PCMU is negotiated, the ACK reaches SIP AS, both
@@ -112,6 +118,10 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
 - Voice Agent accepts media only from the env-defined RTPengine address and
   port allocation. Audio is processed in memory and is not recorded; the
   analytics path receives no SIP `From`/`To` subscriber identities.
+- STT audio windows and transcripts are bounded and memory-only. Model files
+  use a separate persistent cache volume; the model revision and Python
+  dependencies are pinned. Operational logs record sizes and timings, not
+  transcript text.
 - Custom services use read-only root filesystems, no-new-privileges, bounded
   resources/logs/state, and minimal Linux capabilities. The Media Adapter is
   the only custom service retaining `NET_RAW` for RTP observation.

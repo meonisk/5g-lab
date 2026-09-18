@@ -433,11 +433,22 @@ services:
     image: lab-ai-worker
     container_name: lab-ai-worker
     user: "65532:65532"
+    cpus: ${AI_WORKER_CPU_LIMIT}
+    mem_limit: ${AI_WORKER_MEMORY_LIMIT}
     env_file: [lab.env]
+    environment:
+      HOME: /tmp
+      HF_HOME: ${AI_MODEL_CACHE}
+      HUGGINGFACE_HUB_CACHE: ${AI_MODEL_CACHE}
+      XDG_CACHE_HOME: ${AI_MODEL_CACHE}
+      HF_HUB_DISABLE_XET: ${AI_HF_DISABLE_XET}
     depends_on:
       control-secret-init: {condition: service_completed_successfully}
     volumes:
       - service-control-secret:/run/lab-control:ro
+      - ai-model-cache:${AI_MODEL_CACHE}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
     networks:
       lab5g:
         ipv4_address: ${AI_WORKER_IP}
@@ -507,3 +518,4 @@ networks:
 volumes:
   mongo-data:
   service-control-secret:
+  ai-model-cache:

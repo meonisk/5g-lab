@@ -1,58 +1,189 @@
+import audioop
+import base64
+import hashlib
+import hmac
 import json
 import os
+import queue
 import threading
 import time
-import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import numpy as np
+from faster_whisper import WhisperModel
+
 events = []
+buffers = {}
 lock = threading.Lock()
+work = queue.Queue(maxsize=int(os.environ["AI_QUEUE_MAX"]))
 event_retention = int(os.environ["AI_EVENT_RETENTION"])
+retention_seconds = int(os.environ["AI_TRANSCRIPT_RETENTION_SECONDS"])
+buffer_max = int(os.environ["AI_STREAM_BUFFER_MAX"])
+buffer_ttl = int(os.environ["AI_STREAM_BUFFER_TTL_SECONDS"])
+request_max_bytes = int(os.environ["AI_REQUEST_MAX_BYTES"])
+window_bytes = int(float(os.environ["AI_AUDIO_WINDOW_SECONDS"]) * 8000)
+backend = os.environ["AI_BACKEND"]
+model_size = os.environ["AI_MODEL_SIZE"]
+model_revision = os.environ["AI_MODEL_REVISION"]
+device = os.environ["AI_DEVICE"]
+compute_type = os.environ["AI_COMPUTE_TYPE"]
+language = os.environ["AI_LANGUAGE"]
+model = None
+model_error = None
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
+
+
+def expire_events(now):
+    events[:] = [item for item in events if now - item.get("processed_at", now) <= retention_seconds]
+    del events[:-event_retention]
+
+
+def load_model():
+    global model, model_error
+    try:
+        started = time.perf_counter()
+        model = WhisperModel(model_size, device=device, compute_type=compute_type,
+                             download_root=os.environ["AI_MODEL_CACHE"], revision=model_revision)
+        print(f"AI model_ready backend={backend} model={model_size} device={device} "
+              f"load_seconds={time.perf_counter() - started:.3f}", flush=True)
+    except Exception as exc:
+        model_error = f"{type(exc).__name__}: {exc}"
+        print(f"AI model_failed backend={backend} model={model_size} error={model_error}", flush=True)
+
+
+def decode_audio(ulaw):
+    pcm8 = audioop.ulaw2lin(ulaw, 2)
+    pcm16, _ = audioop.ratecv(pcm8, 2, 1, 8000, 16000, None)
+    return np.frombuffer(pcm16, dtype=np.int16).astype(np.float32) / 32768.0
+
+
+def process_events():
+    while True:
+        event = work.get()
+        try:
+            process_event(event)
+        except Exception as exc:
+            print(f"AI processing_failed type={type(exc).__name__} error={exc}", flush=True)
+        finally:
+            work.task_done()
+
+
+def process_event(event):
+    received_at = event.pop("received_at")
+    encoded = event.pop("audio_ulaw_b64", "")
+    try:
+        chunk = base64.b64decode(encoded, validate=True)
+    except ValueError:
+        return
+    if event.get("codec") != "PCMU" or event.get("sample_rate_hz") != 8000 or not chunk:
+        return
+    if hashlib.sha256(chunk).hexdigest() != event.get("audio_sha256"):
+        print("AI rejected audio hash mismatch", flush=True)
+        return
+    stream_key = str(event.get("ssrc", "unknown"))
+    now = time.time()
+    for stale_key in [key for key, value in buffers.items() if now - value["last_seen"] > buffer_ttl]:
+        buffers.pop(stale_key, None)
+    if stream_key not in buffers and len(buffers) >= buffer_max:
+        oldest = min(buffers, key=lambda key: buffers[key]["last_seen"])
+        buffers.pop(oldest, None)
+    state = buffers.setdefault(stream_key, {"data": bytearray(), "last_seen": now})
+    state["last_seen"] = now
+    buffered = state["data"]
+    buffered.extend(chunk)
+    if len(buffered) < window_bytes:
+        return
+    ulaw = bytes(buffered[:window_bytes])
+    del buffered[:window_bytes]
+    if not buffered:
+        buffers.pop(stream_key, None)
+    audio = decode_audio(ulaw)
+    rms = float(np.sqrt(np.mean(np.square(audio)))) if len(audio) else 0.0
+    started = time.perf_counter_ns()
+    transcript = ""
+    detected_language = None
+    language_probability = None
+    if model is not None and rms > 0.005:
+        segments, info = model.transcribe(audio, language=language or None, task="transcribe",
+                                          beam_size=1, vad_filter=True,
+                                          condition_on_previous_text=False)
+        transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+        detected_language = info.language
+        language_probability = info.language_probability
+    processed_at = time.time()
+    result = {key: value for key, value in event.items() if key != "audio_sha256"}
+    result.update({
+        "backend_id": f"{backend}:{model_size}:{device}:{compute_type}",
+        "model_revision": model_revision,
+        "audio_sha256": hashlib.sha256(ulaw).hexdigest(),
+        "audio_duration_seconds": len(ulaw) / 8000,
+        "audio_rms": rms,
+        "transcript": transcript,
+        "transcript_chars": len(transcript),
+        "detected_language": detected_language,
+        "language_probability": language_probability,
+        "received_at": received_at,
+        "processed_at": processed_at,
+        "processing_ms": (time.perf_counter_ns() - started) / 1_000_000,
+        "adapter_to_worker_ms": ((received_at - event["observed_at"]) * 1000
+                                  if isinstance(event.get("observed_at"), (int, float)) else None),
+    })
+    with lock:
+        events.append(result)
+        expire_events(processed_at)
+    print(f"AI stream_processed backend={result['backend_id']} audio_seconds={result['audio_duration_seconds']:.3f} "
+          f"rms={rms:.5f} transcript_chars={len(transcript)} calls={event.get('call_ids')}", flush=True)
+
 
 class Api(BaseHTTPRequestHandler):
     def authorized(self):
         return hmac.compare_digest(self.headers.get("Authorization", ""), f"Bearer {control_token}")
+
     def do_GET(self):
         if self.path == "/healthz":
-            self.send_response(204); self.end_headers(); return
+            self.send_response(204 if model is not None else 503); self.end_headers(); return
         if self.path != "/events":
             self.send_response(404); self.end_headers(); return
         if not self.authorized():
             self.send_response(401); self.end_headers(); return
-        with lock: body = json.dumps({"status": "ok", "mode": "OBSERVE", "events": events}).encode()
-        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
+        with lock:
+            expire_events(time.time())
+            body = json.dumps({"status": "ok" if model is not None else "loading",
+                               "mode": "OBSERVE", "backend": backend, "model": model_size,
+                               "model_revision": model_revision,
+                               "device": device, "model_error": model_error,
+                               "queue_depth": work.qsize(), "buffered_streams": len(buffers),
+                               "events": events}).encode()
+        self.send_response(200); self.send_header("Content-Type", "application/json")
+        self.end_headers(); self.wfile.write(body)
+
     def do_POST(self):
         if self.path != "/observe":
             self.send_response(404); self.end_headers(); return
         if not self.authorized():
             self.send_response(401); self.end_headers(); return
         length = int(self.headers.get("Content-Length", "0"))
-        if length < 2 or length > 65536:
+        if length < 2 or length > request_max_bytes:
             self.send_response(413); self.end_headers(); return
         try:
             event = json.loads(self.rfile.read(length))
-        except json.JSONDecodeError:
+            event["received_at"] = time.time()
+            work.put_nowait(event)
+            print(f"AI stream_received packets={event.get('packets')} audio={event.get('audio_bytes', 0)} "
+                  f"calls={event.get('call_ids')}", flush=True)
+        except (json.JSONDecodeError, TypeError):
             self.send_response(400); self.end_headers(); return
-        # Deterministic first MVP inference: classify an RTP window as audio activity.
-        received_at = time.time()
-        processing_started = time.perf_counter_ns()
-        event["inference"] = "speech_activity" if event.get("packets", 0) > 0 else "silence"
-        event["backend_id"] = "deterministic-activity-control-v1"
-        event["received_at"] = received_at
-        event["processed_at"] = time.time()
-        event["processing_ms"] = (time.perf_counter_ns() - processing_started) / 1_000_000
-        observed_at = event.get("observed_at")
-        event["adapter_to_worker_ms"] = ((received_at - observed_at) * 1000
-                                          if isinstance(observed_at, (int, float)) else None)
-        with lock:
-            events.append(event)
-            del events[:-event_retention]
-        print(f"AI inference={event['inference']} packets={event.get('packets')} calls={event.get('call_ids')}", flush=True)
+        except queue.Full:
+            self.send_response(429); self.end_headers(); return
         self.send_response(202); self.end_headers()
-    def log_message(self, *_): pass
 
+    def log_message(self, *_):
+        pass
+
+
+threading.Thread(target=load_model, daemon=True).start()
+threading.Thread(target=process_events, daemon=True).start()
 port = int(os.environ["AI_WORKER_PORT"])
-print(f"AI Worker listening :{port} mode=OBSERVE", flush=True)
+print(f"AI Worker listening :{port} mode=OBSERVE backend={backend} model={model_size} device={device}", flush=True)
 ThreadingHTTPServer(("0.0.0.0", port), Api).serve_forever()

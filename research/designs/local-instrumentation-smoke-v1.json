@@ -16,7 +16,10 @@
     "container_state",
     "container_cpu_percent",
     "container_memory_bytes",
-    "pseudonymized_event_log"
+    "pseudonymized_event_log",
+    "live_pcmu_audio_duration_seconds",
+    "local_stt_transcript_presence",
+    "local_stt_processing_ms"
   ],
   "capture": {
     "compose_project": "lab-docker",
@@ -31,6 +34,7 @@
       {"id": "ims-registration", "command": ["bash", "scripts/verify-ims-registration.sh"]},
       {"id": "ims-call-and-observe", "command": ["bash", "scripts/verify-ims-call.sh"]},
       {"id": "voice-agent", "command": ["bash", "scripts/verify-voice-agent.sh"]},
+      {"id": "real-ai-stream", "command": ["bash", "scripts/verify-real-ai-stream.sh"]},
       {"id": "security-privacy", "command": ["bash", "scripts/verify-security.sh"]},
       {"id": "topology-literals", "command": ["python", "scripts/check-no-hardcoded-topology.py"]}
     ]
