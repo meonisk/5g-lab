@@ -10,6 +10,21 @@ from http.server import BaseHTTPRequestHandler
 from . import runtime
 
 
+def start_worker_call(call_id, service_mode):
+    try:
+        request = urllib.request.Request(
+            runtime.worker_base_url + "/calls",
+            json.dumps({"call_id": call_id, "service_mode": service_mode}).encode(),
+            {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {runtime.control_token}",
+            },
+        )
+        urllib.request.urlopen(request, timeout=2).read()
+    except Exception as exc:
+        print(f"MEDIA worker registration failed type={type(exc).__name__}", flush=True)
+
+
 def end_worker_call(call_id):
     try:
         request = urllib.request.Request(
@@ -96,6 +111,11 @@ class Api(BaseHTTPRequestHandler):
                 f"relay_port={relay_port}",
                 flush=True,
             )
+            threading.Thread(
+                target=start_worker_call,
+                args=(call_id, data["service_mode"]),
+                daemon=True,
+            ).start()
         else:
             self.send_response(400)
             self.end_headers()

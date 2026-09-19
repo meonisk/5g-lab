@@ -70,6 +70,43 @@ def wait_until(check, timeout):
     raise TimeoutError("Timed out waiting for a test precondition")
 
 
+def recreate_parallel_clients():
+    compose = [
+        "docker",
+        "compose",
+        "--env-file",
+        str(ROOT / "lab.env"),
+        "--env-file",
+        str(ROOT / "secrets/ims.env"),
+        "-f",
+        str(ROOT / "docker-compose.yml"),
+        "-f",
+        str(ROOT / "docker-compose.parallel.yml"),
+    ]
+    run(*compose, "up", "-d", "--no-deps", "--force-recreate", "sipue1", "sipue2")
+    wait_until(
+        lambda: all(
+            "Response msg 200/REGISTER" in run("docker", "logs", f"lab-sipue{i}") for i in (1, 2)
+        ),
+        60,
+    )
+
+
+def processing_overlapped(events):
+    intervals = [
+        (event["call_ids"][0], event.get("ai_started_at"), event.get("processed_at"))
+        for event in events
+        if len(event.get("call_ids", [])) == 1
+        and isinstance(event.get("ai_started_at"), (int, float))
+        and isinstance(event.get("processed_at"), (int, float))
+    ]
+    return any(
+        left_call != right_call and max(left_start, right_start) < min(left_end, right_end)
+        for left_call, left_start, left_end in intervals
+        for right_call, right_start, right_end in intervals
+    )
+
+
 def scenario(count, config, wait_seconds):
     if voice()["calls"] or adapter()["sessions"]:
         raise RuntimeError("Stand is busy: active calls/sessions must finish before this test")
@@ -99,10 +136,14 @@ def scenario(count, config, wait_seconds):
         time.sleep(float(config["AI_UTTERANCE_MAX_SECONDS"]) + 0.5)
         together(clients, "cd\n1\n4\n")
         peak_queue = 0
+        peak_utterance_queue = 0
+        peak_pending = 0
         deadline = time.monotonic() + wait_seconds
         while time.monotonic() < deadline:
             state = ai()
             peak_queue = max(peak_queue, state.get("queue_depth", 0))
+            peak_utterance_queue = max(peak_utterance_queue, state.get("utterance_queue_depth", 0))
+            peak_pending = max(peak_pending, state.get("pending_utterances", 0))
             matching = [
                 e
                 for e in state.get("events", [])
@@ -135,6 +176,10 @@ def scenario(count, config, wait_seconds):
                 "calls_with_ai_reply": len(replied),
                 "calls_with_completed_reply_rtp": len({e["call_id"] for e in tts}),
                 "peak_observed_queue_depth": peak_queue,
+                "peak_utterance_queue_depth": peak_utterance_queue,
+                "peak_pending_utterances": peak_pending,
+                "processing_workers": state.get("processing_workers"),
+                "parallel_processing_observed": processing_overlapped(matching),
                 "stt_ms": [round(e.get("processing_ms", 0), 1) for e in matching],
                 "elapsed_seconds": round(time.time() - started, 1),
             }
@@ -143,6 +188,7 @@ def scenario(count, config, wait_seconds):
             replied == ids
             and len({e["call_id"] for e in tts}) == count
             and result["ambiguous_call_events"] == 0
+            and (count == 1 or result["parallel_processing_observed"])
         )
     finally:
         together(clients, "cd\n1\n4\nha\n")
@@ -171,6 +217,7 @@ def main():
         "scenarios": [],
     }
     for count in (1, 2, 1):
+        recreate_parallel_clients()
         print(f"Starting {count} simultaneous translation call(s)", flush=True)
         report["scenarios"].append(scenario(count, config, args.response_wait))
     if args.output:

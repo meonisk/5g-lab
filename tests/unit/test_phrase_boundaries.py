@@ -39,7 +39,16 @@ class PhraseBoundaries(unittest.TestCase):
         cls.temp.cleanup()
 
     def setUp(self):
-        for name in ("buffers", "recordings", "conversations", "reply_counts", "turn_counts"):
+        for name in (
+            "buffers",
+            "recordings",
+            "conversations",
+            "reply_counts",
+            "turn_counts",
+            "active_calls",
+            "pending_utterances",
+            "call_locks",
+        ):
             getattr(self.runtime, name).clear()
 
     def event(self, audio, call="test-call", observed=100, mode="bilingual_test"):
@@ -56,7 +65,7 @@ class PhraseBoundaries(unittest.TestCase):
         }
 
     def test_long_dialogue_phrase_survives_five_seconds(self):
-        with patch.object(self.segmentation, "process_utterance") as emitted:
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
             self.segmentation.process_event(self.event(b"\x00" * 8000 * 8))
             emitted.assert_not_called()
             self.segmentation.process_event(self.event(b"\xff" * 8000 * 2, observed=102))
@@ -65,14 +74,14 @@ class PhraseBoundaries(unittest.TestCase):
             self.assertGreater(len(emitted.call_args.args[0]), 8000 * 8)
 
     def test_suppressed_rtp_gap_finishes_previous_phrase(self):
-        with patch.object(self.segmentation, "process_utterance") as emitted:
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
             self.segmentation.process_event(self.event(b"\x00" * 8000))
             self.segmentation.process_event(self.event(b"\x00" * 8000, observed=110))
             self.assertEqual(emitted.call_count, 1)
             self.assertEqual(emitted.call_args.args[3], "stream-gap")
 
     def test_call_id_prevents_ssrc_reuse_from_mixing_calls(self):
-        with patch.object(self.segmentation, "process_utterance") as emitted:
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
             self.segmentation.process_event(self.event(b"\x00" * 8000, call="one"))
             self.segmentation.process_event(self.event(b"\x00" * 8000, call="two", observed=110))
             emitted.assert_not_called()
@@ -80,7 +89,7 @@ class PhraseBoundaries(unittest.TestCase):
 
     def test_bye_flushes_tail_and_removes_call_state(self):
         self.segmentation.process_event(self.event(b"\x00" * 8000))
-        with patch.object(self.lifecycle, "process_utterance") as emitted:
+        with patch.object(self.lifecycle, "enqueue_utterance") as emitted:
             self.lifecycle.finalize_call("test-call")
             self.assertEqual(emitted.call_count, 1)
             self.assertEqual(emitted.call_args.args[3], "call-ended")
@@ -93,7 +102,7 @@ class PhraseBoundaries(unittest.TestCase):
         self.assertFalse(self.runtime.buffers)
 
     def test_short_limit_remains_for_interactive_agent(self):
-        with patch.object(self.segmentation, "process_utterance") as emitted:
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
             self.segmentation.process_event(self.event(b"\x00" * 8000 * 6, mode="assistant"))
             self.assertEqual(emitted.call_count, 1)
             self.assertEqual(emitted.call_args.args[3], "maximum-duration")

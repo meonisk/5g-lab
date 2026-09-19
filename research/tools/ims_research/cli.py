@@ -20,7 +20,7 @@ def main() -> int:
     args = parser.parse_args()
     root = args.root.resolve()
     design = (
-        args.design or root / "research" / "designs" / "local-language-services-smoke-v1.json"
+        args.design or root / "research" / "designs" / "local-language-services-smoke-v2.json"
     ).resolve()
     try:
         if args.command == "prepare":

@@ -3,36 +3,44 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import time
 
 import numpy as np
 
 from . import runtime, settings
 from .audio import decode_audio, decode_pcm8
+from .interpretation import (
+    INTERPRETER_MODES,
+    delivery_call,
+    output_voice,
+    source_language,
+    validate_output,
+)
 from .llm import (
     cyrillic_chars,
     deliver_reply,
     generate_reply,
     normalize_transcript,
     remember_turn,
+    repair_translation_language,
 )
 from .maintenance import expire_events
 from .recording import recording_session, save_recording_turn
 
 
-def process_utterance(ulaw, event, received_at, end_reason):
+def process_utterance(ulaw, event, received_at, end_reason, queued_at):
     service_mode = event.get("service_mode", "observe")
+    ai_started_at = time.time()
     audio = decode_audio(ulaw)
     rms = float(np.sqrt(np.mean(np.square(audio)))) if len(audio) else 0.0
-    started = time.perf_counter_ns()
+    stt_started = time.perf_counter_ns()
     transcript = ""
     detected_language = None
     language_probability = None
     if runtime.model is not None and rms > settings.stt_min_rms:
-        requested_language = (
-            None if service_mode == "bilingual_test" else (settings.language or None)
-        )
+        requested_language = source_language(service_mode)
+        if requested_language is None and service_mode != "bilingual_test":
+            requested_language = settings.language or None
         segments, info = runtime.model.transcribe(
             audio,
             language=requested_language,
@@ -44,11 +52,17 @@ def process_utterance(ulaw, event, received_at, end_reason):
         transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
         detected_language = info.language
         language_probability = info.language_probability
-    processed_at = time.time()
+    stt_ms = (time.perf_counter_ns() - stt_started) / 1_000_000
     result = {
         key: value
         for key, value in event.items()
-        if key not in {"audio_sha256", "audio_ulaw_b64", "received_at"}
+        if key
+        not in {
+            "audio_sha256",
+            "audio_ulaw_b64",
+            "received_at",
+            "_utterance_started_at",
+        }
     }
     call_ids = event.get("call_ids") or []
     call_id = call_ids[0] if len(call_ids) == 1 else None
@@ -66,11 +80,19 @@ def process_utterance(ulaw, event, received_at, end_reason):
             "detected_language": detected_language,
             "language_probability": language_probability,
             "received_at": received_at,
-            "processed_at": processed_at,
+            "sentence_ready_at": queued_at,
+            "ai_started_at": ai_started_at,
             "utterance_end_reason": end_reason,
             "turn_index": runtime.turn_counts.get(call_id) if call_id else None,
             "service_mode": service_mode,
-            "processing_ms": (time.perf_counter_ns() - started) / 1_000_000,
+            "processing_ms": stt_ms,
+            "stt_processing_ms": stt_ms,
+            "sentence_assembly_ms": (
+                (queued_at - event["_utterance_started_at"]) * 1000
+                if isinstance(event.get("_utterance_started_at"), (int, float))
+                else None
+            ),
+            "queue_wait_ms": (ai_started_at - queued_at) * 1000,
             "adapter_to_worker_ms": (
                 (received_at - event["observed_at"]) * 1000
                 if isinstance(event.get("observed_at"), (int, float))
@@ -140,25 +162,30 @@ def process_utterance(ulaw, event, received_at, end_reason):
     if (
         transcript
         and call_id
-        and service_mode in {"translate", "assistant"}
+        and service_mode in {"translate", "assistant", *INTERPRETER_MODES}
         and runtime.reply_counts.get(call_id, 0) < settings.max_replies_per_call
     ):
         try:
             reply, llm_ms = generate_reply(call_id, transcript, service_mode)
             if reply:
-                latin_chars = sum(char.isascii() and char.isalpha() for char in reply)
                 reply_cyrillic = cyrillic_chars(reply)
-                if service_mode == "translate" and (
-                    latin_chars < settings.translation_min_latin
-                    or reply_cyrillic > settings.translation_max_cyrillic
-                ):
-                    raise ValueError("translation output language mismatch")
-                reply_voice = (
-                    settings.translation_voice
-                    if service_mode == "translate"
-                    else os.environ["TTS_VOICE"]
-                )
-                deliver_reply(call_id, reply, reply_voice)
+                try:
+                    latin_chars = validate_output(reply, service_mode, reply_cyrillic)
+                except ValueError:
+                    if service_mode not in INTERPRETER_MODES:
+                        raise
+                    reply, repair_ms = repair_translation_language(reply, service_mode)
+                    llm_ms += repair_ms
+                    reply_cyrillic = cyrillic_chars(reply)
+                    latin_chars = validate_output(reply, service_mode, reply_cyrillic)
+                reply_voice = output_voice(service_mode)
+                target_call_id = delivery_call(call_id, service_mode)
+                reply_id = hashlib.sha256(
+                    f"{call_id}:{result['turn_index']}:{queued_at}".encode()
+                ).hexdigest()[:16]
+                dispatch_started = time.perf_counter_ns()
+                deliver_reply(target_call_id, reply, reply_voice, reply_id)
+                reply_dispatch_ms = (time.perf_counter_ns() - dispatch_started) / 1_000_000
                 runtime.reply_counts[call_id] = runtime.reply_counts.get(call_id, 0) + 1
                 remember_turn(call_id, transcript, reply)
                 while len(runtime.reply_counts) > settings.buffer_max:
@@ -173,8 +200,17 @@ def process_utterance(ulaw, event, received_at, end_reason):
                         "llm_response_cyrillic_chars": reply_cyrillic,
                         "llm_response_latin_chars": latin_chars,
                         "reply_voice": reply_voice,
+                        "reply_id": reply_id,
                         "llm_processing_ms": llm_ms,
                         "reply_delivered": True,
+                        "reply_dispatch_ms": reply_dispatch_ms,
+                        "reply_destination_mode": (
+                            "interpret_en"
+                            if service_mode == "interpret_ru"
+                            else "interpret_ru"
+                            if service_mode == "interpret_en"
+                            else service_mode
+                        ),
                         "reply_index": runtime.reply_counts[call_id],
                     }
                 )
@@ -195,6 +231,14 @@ def process_utterance(ulaw, event, received_at, end_reason):
                 f"AI reply_failed model={settings.llm_model} type={type(exc).__name__} calls={call_ids}",
                 flush=True,
             )
+    processed_at = time.time()
+    result.update(
+        {
+            "processed_at": processed_at,
+            "ai_total_ms": (processed_at - ai_started_at) * 1000,
+            "sentence_to_reply_ms": (processed_at - queued_at) * 1000,
+        }
+    )
     with runtime.lock:
         runtime.events.append(result)
         expire_events(processed_at)

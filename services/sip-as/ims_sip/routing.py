@@ -16,7 +16,7 @@ def terminate_for_agent(message, peer, service_mode):
     method = first.split(" ", 1)[0]
     call_id = header(message, "Call-ID") or header(message, "i")
     tag = hashlib.sha256(call_id.encode()).hexdigest()[:16]
-    service_user = runtime.transcriber_user if service_mode == "transcribe" else runtime.voice_user
+    service_user = runtime.service_users[service_mode]
     if method == "INVITE":
         runtime.sock.sendto(local_response(message, 100, "Trying").encode(), peer)
         connection = re.search(r"(?im)^c=IN IP4 ([^\s]+)", message)

@@ -123,12 +123,14 @@ def verify(root: Path) -> None:
     conversational = root / "research" / "designs" / "local-conversational-loop-smoke-v1.json"
     russian = root / "research" / "designs" / "local-russian-conversation-smoke-v1.json"
     language_services = root / "research" / "designs" / "local-language-services-smoke-v1.json"
+    language_services_v2 = root / "research" / "designs" / "local-language-services-smoke-v2.json"
     candidate = load_json(root / "research" / "designs" / "ai-scale-study-v1.json")
     design = load_json(smoke)
     validate_design(design)
     validate_design(load_json(conversational))
     validate_design(load_json(russian))
     validate_design(load_json(language_services))
+    validate_design(load_json(language_services_v2))
     if candidate.get("design_status") != "DRAFT_REQUIRES_PILOT_FREEZE":
         raise ValueError("AI scale candidate must remain explicitly unfrozen")
     for schema in ("run-manifest.schema.json", "metric-record.schema.json"):

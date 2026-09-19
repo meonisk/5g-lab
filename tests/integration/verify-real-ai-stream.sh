@@ -4,9 +4,11 @@
 set -Eeuo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+root=$(cd -- "$script_dir/.." && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 
+base=(docker compose --env-file "$root/lab.env" --env-file "$root/secrets/ims.env" -f "$root/docker-compose.yml")
 fail=0
 check() {
     local label=$1; shift
@@ -52,6 +54,15 @@ check 'faster-whisper model is ready' test -n "$status"
 check 'configured backend is live' grep -q '"backend": "faster-whisper"' <<<"$status"
 llm_list=$(docker exec lab-llm-worker ollama list 2>/dev/null || true)
 check 'pinned local LLM is available' grep -q "${LLM_MODEL}.*${LLM_MODEL_DIGEST:0:12}" <<<"$llm_list"
+
+"${base[@]}" up -d --no-deps --force-recreate sipue1 >/dev/null
+deadline=$((SECONDS + 70))
+while ((SECONDS < deadline)); do
+    (docker logs lab-sipue1 2>&1 || true) | grep -q 'Response msg 200/REGISTER' && break
+    sleep 2
+done
+check 'fresh translation client registered through IMS' \
+    grep -q 'Response msg 200/REGISTER' <<<"$(docker logs lab-sipue1 2>&1 || true)"
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 since_epoch=$(python -c 'import time; print(time.time())')

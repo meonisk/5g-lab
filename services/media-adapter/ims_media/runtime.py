@@ -28,6 +28,8 @@ allowed_service_modes = {
     "transcribe",
     "assistant",
     "bilingual_test",
+    "interpret_ru",
+    "interpret_en",
 }
 sessions = {}
 counters = defaultdict(lambda: {"packets": 0, "payload_bytes": 0, "audio": bytearray()})

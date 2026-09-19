@@ -9,20 +9,19 @@ import time
 from . import runtime, settings
 from .audio import frame_rms
 from .maintenance import expire_transient
-from .utterances import process_utterance
+from .queueing import enqueue_utterance
 
 
 def process_event(event):
     service_mode = event.get("service_mode", "observe")
+    dialogue_mode = service_mode in {"bilingual_test", "interpret_ru", "interpret_en"}
     current_silence_bytes_required = (
         settings.dialogue_silence_bytes_required
-        if service_mode == "bilingual_test"
+        if dialogue_mode
         else settings.silence_bytes_required
     )
     current_max_utterance_bytes = (
-        settings.dialogue_max_utterance_bytes
-        if service_mode == "bilingual_test"
-        else settings.max_utterance_bytes
+        settings.dialogue_max_utterance_bytes if dialogue_mode else settings.max_utterance_bytes
     )
     subscriber_directions = {"caller_to_core", "caller_to_agent"}
     if event.get("direction") not in subscriber_directions and service_mode != "bilingual_test":
@@ -56,13 +55,14 @@ def process_event(event):
             "speech_bytes": 0,
             "silence_bytes": 0,
             "in_speech": False,
+            "utterance_started_at": None,
             "last_seen": now,
         },
     )
     observed_at = event.get("observed_at")
     previous_observed_at = state.get("observed_at")
     if (
-        service_mode == "bilingual_test"
+        dialogue_mode
         and state["in_speech"]
         and state["speech_bytes"] >= settings.min_utterance_bytes
         and isinstance(observed_at, (int, float))
@@ -72,9 +72,11 @@ def process_event(event):
         # Silence-suppressing SIP clients send no RTP frames from which the VAD
         # could count silence. A gap between two batches is the media-level
         # equivalent and must close the previous phrase before the new one.
-        process_utterance(
+        completed_event = dict(state.get("event", event))
+        completed_event["_utterance_started_at"] = state.get("utterance_started_at")
+        enqueue_utterance(
             bytes(state["utterance"]),
-            state.get("event", event),
+            completed_event,
             state.get("received_at", received_at),
             "stream-gap",
         )
@@ -85,6 +87,7 @@ def process_event(event):
                 "speech_bytes": 0,
                 "silence_bytes": 0,
                 "in_speech": False,
+                "utterance_started_at": None,
             }
         )
     state["last_seen"] = now
@@ -101,6 +104,7 @@ def process_event(event):
                 state["utterance"].extend(state["preroll"])
                 state["preroll"].clear()
                 state["in_speech"] = True
+                state["utterance_started_at"] = time.time()
             state["utterance"].extend(frame)
             state["speech_bytes"] += len(frame)
             state["silence_bytes"] = 0
@@ -122,6 +126,8 @@ def process_event(event):
             end_reason = "maximum-duration"
         if end_reason:
             ulaw = bytes(state["utterance"])
+            completed_event = dict(event)
+            completed_event["_utterance_started_at"] = state.get("utterance_started_at")
             state.update(
                 {
                     "utterance": bytearray(),
@@ -129,6 +135,7 @@ def process_event(event):
                     "speech_bytes": 0,
                     "silence_bytes": 0,
                     "in_speech": False,
+                    "utterance_started_at": None,
                 }
             )
-            process_utterance(ulaw, event, received_at, end_reason)
+            enqueue_utterance(ulaw, completed_event, received_at, end_reason)

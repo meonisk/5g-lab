@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "interpreter-dialogue-v1",
+  "purpose": "A four-turn Russian/English conversation paced for complete local STT, translation, TTS, and opposite-leg RTP delivery.",
+  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from the script and installed OS voices.",
+  "tracks": {
+    "ue1": {
+      "language": "ru-RU",
+      "voice": "Microsoft Pavel",
+      "rate": 0,
+      "leading_silence_ms": 2000,
+      "between_turns_ms": 56000,
+      "trailing_silence_ms": 65000,
+      "turns": [
+        "Здравствуйте, Эмили. Проверяем двусторонний перевод через локальную сеть ай эм эс. Как вы меня слышите?",
+        "Да, перевод звучит понятно. После звонка сравним четыре реплики на двух языках."
+      ]
+    },
+    "ue2": {
+      "language": "en-US",
+      "voice": "Microsoft Zira Desktop",
+      "rate": 0,
+      "leading_silence_ms": 35000,
+      "between_turns_ms": 54000,
+      "trailing_silence_ms": 30000,
+      "turns": [
+        "Hello, Alex. I hear the English translation clearly. Can you hear me in Russian?",
+        "Great. Let us end the call and verify both translated audio channels."
+      ]
+    }
+  },
+  "playback_seconds": 145,
+  "audio_format": {"sample_rate_hz": 8000, "bits_per_sample": 16, "channels": 1}
+}

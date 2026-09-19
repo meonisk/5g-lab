@@ -4,13 +4,14 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import queue
 import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 from . import runtime
-from .media import send_audio
+from .media import enqueue_audio, play_queued_audio
 
 
 class Api(BaseHTTPRequestHandler):
@@ -41,6 +42,10 @@ class Api(BaseHTTPRequestHandler):
                     "status": "ok",
                     "mode": "TERMINATE",
                     "calls": runtime.calls,
+                    "reply_queue_depths": {
+                        call_id: pending.qsize()
+                        for call_id, pending in runtime.reply_queues.items()
+                    },
                     "events": runtime.events,
                 }
             ).encode()
@@ -65,6 +70,7 @@ class Api(BaseHTTPRequestHandler):
                 data = json.loads(self.rfile.read(length))
                 text = " ".join(data["text"].split())
                 voice = data.get("voice", runtime.tts_voice)
+                reply_id = data.get("reply_id")
             except (TypeError, KeyError, json.JSONDecodeError):
                 self.send_response(400)
                 self.end_headers()
@@ -74,6 +80,7 @@ class Api(BaseHTTPRequestHandler):
                 or len(text) > runtime.reply_max_chars
                 or any(ord(char) < 32 for char in text)
                 or voice not in runtime.allowed_tts_voices
+                or (reply_id is not None and not runtime.reply_id_pattern.fullmatch(reply_id))
             ):
                 self.send_response(400)
                 self.end_headers()
@@ -83,9 +90,10 @@ class Api(BaseHTTPRequestHandler):
                     self.send_response(404)
                     self.end_headers()
                     return
-            threading.Thread(
-                target=send_audio, args=(call_id, text, "llm_reply", voice), daemon=True
-            ).start()
+            if not enqueue_audio(call_id, text, "llm_reply", voice, reply_id):
+                self.send_response(429)
+                self.end_headers()
+                return
             self.send_response(202)
             self.end_headers()
             return
@@ -137,18 +145,29 @@ class Api(BaseHTTPRequestHandler):
                 "service_mode": service_mode,
                 "started_at": time.time(),
             }
-            runtime.send_locks.setdefault(call_id, threading.Lock())
+            reply_queue = runtime.reply_queues.setdefault(
+                call_id, queue.Queue(maxsize=runtime.reply_queue_max)
+            )
+        threading.Thread(
+            target=play_queued_audio,
+            args=(call_id, reply_queue),
+            daemon=True,
+        ).start()
         print(
             f"VOICE call_started call_id={call_id} service={service_mode} "
             f"remote={data['remote_ip']}:{data['remote_port']}",
             flush=True,
         )
-        prompt = runtime.transcriber_greeting if service_mode == "transcribe" else runtime.greeting
-        threading.Thread(
-            target=send_audio,
-            args=(call_id, prompt, "greeting", runtime.tts_voice),
-            daemon=True,
-        ).start()
+        greetings = {
+            "transcribe": (runtime.transcriber_greeting, runtime.tts_voice),
+            "interpret_ru": (runtime.interpreter_ru_greeting, runtime.tts_voice),
+            "interpret_en": (
+                runtime.interpreter_en_greeting,
+                runtime.tts_translation_voice,
+            ),
+        }
+        prompt, prompt_voice = greetings.get(service_mode, (runtime.greeting, runtime.tts_voice))
+        enqueue_audio(call_id, prompt, "greeting", prompt_voice)
         self.send_response(202)
         self.end_headers()
 
@@ -167,7 +186,12 @@ class Api(BaseHTTPRequestHandler):
             return
         with runtime.lock:
             call = runtime.calls.pop(call_id, None)
-            runtime.send_locks.pop(call_id, None)
+            reply_queue = runtime.reply_queues.pop(call_id, None)
+            if reply_queue:
+                try:
+                    reply_queue.put_nowait(None)
+                except queue.Full:
+                    pass
         print(
             f"VOICE call_ended call_id={call_id} received={call.get('received_packets', 0) if call else 0}",
             flush=True,

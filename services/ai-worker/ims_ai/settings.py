@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 
 queue_max = int(os.environ["AI_QUEUE_MAX"])
+utterance_queue_max = int(os.environ["AI_UTTERANCE_QUEUE_MAX"])
+processing_workers = int(os.environ["AI_PROCESSING_WORKERS"])
 reply_http_timeout = float(os.environ["AI_REPLY_HTTP_TIMEOUT_SECONDS"])
 stt_min_rms = float(os.environ["AI_STT_MIN_RMS"])
 stt_beam_size = int(os.environ["AI_STT_BEAM_SIZE"])
@@ -67,6 +69,7 @@ llm_temperature = float(os.environ["LLM_TEMPERATURE"])
 llm_system_prompt = os.environ["LLM_SYSTEM_PROMPT"]
 
 llm_translation_prompt = os.environ["LLM_TRANSLATION_PROMPT"]
+llm_reverse_translation_prompt = os.environ["LLM_REVERSE_TRANSLATION_PROMPT"]
 
 llm_transcription_prompt = os.environ["LLM_TRANSCRIPTION_PROMPT"]
 
@@ -74,15 +77,33 @@ llm_english_transcription_prompt = os.environ["LLM_ENGLISH_TRANSCRIPTION_PROMPT"
 
 llm_normalization_max_tokens = int(os.environ["LLM_NORMALIZATION_MAX_TOKENS"])
 
+llm_normalization_min_length_ratio = float(os.environ["LLM_NORMALIZATION_MIN_LENGTH_RATIO"])
+
 normalized_transcript_max_chars = int(os.environ["TRANSCRIPT_NORMALIZED_MAX_CHARS"])
 
 llm_response_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
 
 translation_voice = os.environ["TTS_TRANSLATION_VOICE"]
 
+default_voice = os.environ["TTS_VOICE"]
+
 translation_min_latin = int(os.environ["TRANSLATION_MIN_LATIN_CHARS"])
 
 translation_max_cyrillic = int(os.environ["TRANSLATION_MAX_CYRILLIC_CHARS"])
+
+reverse_translation_min_cyrillic = int(os.environ["REVERSE_TRANSLATION_MIN_CYRILLIC_CHARS"])
+
+reverse_translation_max_latin = int(os.environ["REVERSE_TRANSLATION_MAX_LATIN_CHARS"])
+
+service_modes = {
+    "observe",
+    "translate",
+    "transcribe",
+    "assistant",
+    "bilingual_test",
+    "interpret_ru",
+    "interpret_en",
+}
 
 voice_agent_url = os.environ["VOICE_AGENT_URL"].rstrip("/")
 

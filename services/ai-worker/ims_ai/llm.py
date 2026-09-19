@@ -8,6 +8,7 @@ import time
 import urllib.request
 
 from . import runtime, settings
+from .interpretation import prompt_for
 
 
 def cyrillic_chars(text):
@@ -19,11 +20,7 @@ def generate_reply(call_id, transcript, service_mode):
         call_id, {"messages": [], "last_seen": time.time()}
     )
     conversation["last_seen"] = time.time()
-    system_prompt = (
-        settings.llm_translation_prompt
-        if service_mode == "translate"
-        else settings.llm_system_prompt
-    )
+    system_prompt = prompt_for(service_mode)
     request_body = json.dumps(
         {
             "model": settings.llm_model,
@@ -46,6 +43,38 @@ def generate_reply(call_id, transcript, service_mode):
     response = json.load(urllib.request.urlopen(request, timeout=settings.llm_timeout))
     text = " ".join(response["message"]["content"].split())[: settings.llm_response_max_chars]
     return text, (time.perf_counter_ns() - started) / 1_000_000
+
+
+def repair_translation_language(text, service_mode):
+    if service_mode == "interpret_en":
+        prompt = (
+            "Перепиши перевод полностью на русском языке и только кириллицей. "
+            "Имена и сокращения транслитерируй. Верни только исправленный перевод."
+        )
+    else:
+        prompt = (
+            "Rewrite the translation entirely in English using Latin letters only. "
+            "Return only the corrected translation."
+        )
+    request_body = json.dumps(
+        {
+            "model": settings.llm_model,
+            "stream": False,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": text},
+            ],
+            "options": {"temperature": 0, "num_predict": settings.llm_max_tokens},
+        }
+    ).encode()
+    request = urllib.request.Request(
+        settings.llm_url, request_body, {"Content-Type": "application/json"}
+    )
+    started = time.perf_counter_ns()
+    response = json.load(urllib.request.urlopen(request, timeout=settings.llm_timeout))
+    repaired = " ".join(response["message"]["content"].split())
+    repaired = repaired[: settings.llm_response_max_chars].strip().strip('"«»').strip()
+    return repaired, (time.perf_counter_ns() - started) / 1_000_000
 
 
 def normalize_transcript(transcript, detected_language):
@@ -93,6 +122,10 @@ def normalize_transcript(transcript, detected_language):
         normalized,
     ):
         raise ValueError("normalized transcript contains a preamble")
+    if len(normalized) < len(transcript) * settings.llm_normalization_min_length_ratio:
+        # A small local model may summarize instead of editing. Completeness is
+        # more important than disfluency removal, so retain the source text.
+        normalized = transcript
     return normalized, (time.perf_counter_ns() - started) / 1_000_000
 
 
@@ -110,8 +143,8 @@ def remember_turn(call_id, transcript, reply):
     conversation["last_seen"] = time.time()
 
 
-def deliver_reply(call_id, text, voice):
-    body = json.dumps({"text": text, "voice": voice}).encode()
+def deliver_reply(call_id, text, voice, reply_id):
+    body = json.dumps({"text": text, "voice": voice, "reply_id": reply_id}).encode()
     request = urllib.request.Request(
         f"{settings.voice_agent_url}/calls/{urllib.parse.quote(call_id, safe='')}/reply",
         body,

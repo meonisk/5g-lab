@@ -8,6 +8,8 @@
 | `deploy/compose/ims.yml` | DNS, HSS, CSCF и RTPengine |
 | `deploy/compose/ai.yml` | SIP AS, Media Adapter, AI Worker, LLM, Voice Agent |
 | `docker-compose.dialogue.yml` | Подключение двух локальных WAV для теста |
+| `docker-compose.interpreter.yml` | Два языковых входа и WAV полного перевода |
+| `docker-compose.parallel.yml` | Одинаковые WAV для проверки параллельной обработки |
 | `lab.env` | Публичные параметры, образы, лимиты, модели, топология |
 | `secrets/` | Пример секретов и игнорируемый локальный env |
 | `configs/` | Шаблоны конфигураций сетевых компонентов |

@@ -4,6 +4,7 @@ evidence/private/
 hardening/context.local.md
 private/recordings/
 private/dialogue/
+private/interpreter/
 __pycache__/
 *.py[cod]
 .ruff_cache/

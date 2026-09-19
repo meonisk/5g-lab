@@ -87,6 +87,11 @@ def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
             "scripts/verify-transcription-recording.sh",
             "scripts/verify-bilingual-dialogue.sh",
             "fixtures/bilingual-dialogue-v1.json",
+            "fixtures/interpreter-dialogue-v1.json",
+            "docker-compose.interpreter.yml",
+            "docker-compose.parallel.yml",
+            "tests/integration/check_bidirectional_interpreter.py",
+            "tests/integration/check_parallel_calls.py",
             "research/tools/research_run.py",
             "research/schemas/run-manifest.schema.json",
             "research/schemas/metric-record.schema.json",
@@ -100,6 +105,7 @@ def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
             | set((root / "research/tools").rglob("*.py"))
             | set((root / "deploy/compose").glob("*.yml"))
             | set((root / "tests/integration").glob("*.sh"))
+            | set((root / "tests/integration").glob("*.py"))
         )
         if p.is_file()
     ]

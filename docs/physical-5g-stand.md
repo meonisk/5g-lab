@@ -13,8 +13,9 @@ is not evidence of RF, mobility, QoS, or physical-device behavior.
 ```text
 physical UE/USIM -> NR-Uu -> physical gNB -> N2/N3 -> Open5GS/UPF
   -> IMS DNN -> P-CSCF -> I-CSCF -> S-CSCF -> iFC/ISC -> SIP AS
-  -> RTPengine -> Voice Agent / Media Adapter -> STT -> translation LLM -> English TTS
-  -> RTPengine -> IMS DNN -> physical UE
+  -> RTPengine -> Voice Agent / Media Adapter -> sentence VAD -> STT
+  -> bounded inference queue -> translation LLM -> language-specific TTS
+  -> RTPengine -> IMS DNN -> Russian or English physical UE
 ```
 
 The AI service remains outside the 5GC control plane. It receives media only
@@ -71,15 +72,18 @@ Advance only when every preceding stage is retained as evidence:
    tied to physical UE addresses, audible bidirectional PCMU.
 5. **Translation call:** translator-number iFC/ISC trigger, Russian greeting,
    at least two Russian-to-English spoken turns under one Call-ID, and clean BYE.
-6. **Transcription call:** separate recorder-number trigger, audible recording
+6. **Interpreted call:** separate Russian and English service legs, no raw-media
+   bridge, at least two complete translations in each direction, target-language
+   validation, completed TTS/RTP on both legs, and per-stage latency records.
+7. **Transcription call:** separate recorder-number trigger, audible recording
    disclosure, private WAV creation, local-LLM text normalization without
    content in operational logs, transcript persistence, and finalization on BYE.
-7. **Failure containment:** ordinary RTP remains usable when AI is stopped;
+8. **Failure containment:** ordinary RTP remains usable when AI is stopped;
    terminate-service failure is bounded and visible.
-8. **Privacy:** inspect logs, packet captures, traces, crash dumps and backups;
+9. **Privacy:** inspect logs, packet captures, traces, crash dumps and backups;
    no Ki/OPc, Digest secret, raw audio, transcript or prompt may enter the
    shareable evidence set.
-9. **Radio study:** only after stages 1–8, freeze mobility, RF, QFI/QoS, load,
+10. **Radio study:** only after stages 1–9, freeze mobility, RF, QFI/QoS, load,
    model, repetitions and outcome definitions before collecting results.
 
 ## Physical-only claims

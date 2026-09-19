@@ -14,7 +14,11 @@ This directory starts the complete local stand on Docker Desktop/WSL2:
   faster-whisper STT worker, and isolated Ollama/Qwen LLM;
 - two native IMS services: Russian-to-English spoken translation on
   `VOICE_TRANSLATOR_MSISDN`, and explicit opt-in recording/transcription on
-  `VOICE_TRANSCRIBER_MSISDN`.
+  `VOICE_TRANSCRIBER_MSISDN`;
+- a two-leg interpreter room: the Russian participant calls
+  `VOICE_INTERPRETER_RU_MSISDN`, the English participant calls
+  `VOICE_INTERPRETER_EN_MSISDN`, and each receives only translated TTS in the
+  participant's own language.
 
 The media path copies only subscriber-originated PCMU from RTPengine, forms
 bounded Russian utterances with VAD in memory, transcribes them with a
@@ -72,6 +76,7 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-real-ai-stream.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-transcription-recording.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-bilingual-dialogue.sh
+python tests/integration/check_bidirectional_interpreter.py
 python tests/integration/check_parallel_calls.py
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
@@ -103,6 +108,16 @@ neither transcript nor generated reply is written to evidence.
 The parallel-isolation gate runs `1 -> 2 -> 1` translation calls. It requires
 one opaque Call-ID per audio event and one completed STT/LLM/TTS RTP reply per
 call; it is a functional concurrency probe, not a capacity benchmark.
+
+The bidirectional-interpreter gate uses separate terminated IMS legs, so raw
+speech is never bridged between participants. VAD and RTP-gap detection first
+assemble a complete sentence, then a bounded inference queue distributes
+different calls across `AI_PROCESSING_WORKERS`. Russian source speech is sent
+as English TTS only to the English leg; English source speech is sent as
+Russian TTS only to the Russian leg. The report separates sentence assembly,
+queue wait, STT, LLM, dispatch, TTS synthesis, and RTP playout latency.
+Each call also has a bounded FIFO TTS queue, so a newly completed translation
+does not truncate a reply that the subscriber is already hearing.
 
 The bilingual-dialogue gate generates a coherent four-turn fixture locally
 with the installed Windows `Microsoft Pavel` and `Microsoft Zira Desktop`
@@ -147,6 +162,10 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
   NG endpoint by opaque Call-ID and maps the subscriber-facing relay port to
   exactly one session. The original relay remains independent of AS/AI
   availability.
+- Media batches are assembled into complete VAD-delimited sentences by one
+  ordered stage. Completed sentences enter a separate bounded queue and are
+  processed concurrently across calls; turns within one call retain a
+  per-call lock and therefore cannot corrupt conversation order.
 - The Voice Agent terminates only its env-defined service number; ordinary
   subscriber-to-subscriber calls remain proxied through P/I/S-CSCF.
 - Voice prompts, VAD threshold, silence interval, RTP/HTTP ports, service

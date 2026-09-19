@@ -8,6 +8,7 @@ root=$(cd -- "$script_dir/.." && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 
+base=(docker compose --env-file "$root/lab.env" --env-file "$root/secrets/ims.env" -f "$root/docker-compose.yml")
 fail=0
 check() {
     local label=$1; shift
@@ -49,6 +50,15 @@ check 'normalization probe removed fillers, repeats, and false starts' python -c
     'import json,sys; raise SystemExit(0 if json.load(sys.stdin)["disfluencies_removed"] else 1)' <<<"$normalization_probe"
 check 'normalization probe preserved factual content' python -c \
     'import json,sys; raise SystemExit(0 if json.load(sys.stdin)["meaning_preserved"] else 1)' <<<"$normalization_probe"
+
+"${base[@]}" up -d --no-deps --force-recreate sipue1 >/dev/null
+deadline=$((SECONDS + 70))
+while ((SECONDS < deadline)); do
+    (docker logs lab-sipue1 2>&1 || true) | grep -q 'Response msg 200/REGISTER' && break
+    sleep 2
+done
+check 'fresh transcription client registered through IMS' \
+    grep -q 'Response msg 200/REGISTER' <<<"$(docker logs lab-sipue1 2>&1 || true)"
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 since_epoch=$(python -c 'import time; print(time.time())')

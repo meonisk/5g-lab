@@ -44,8 +44,13 @@ class Api(BaseHTTPRequestHandler):
                     "device": settings.device,
                     "model_error": runtime.model_error,
                     "queue_depth": runtime.work.qsize(),
+                    "media_queue_depth": runtime.work.qsize(),
+                    "utterance_queue_depth": runtime.utterance_work.qsize(),
+                    "processing_workers": settings.processing_workers,
+                    "pending_utterances": sum(runtime.pending_utterances.values()),
                     "buffered_streams": len(runtime.buffers),
                     "active_conversations": len(runtime.conversations),
+                    "active_calls": len(runtime.active_calls),
                     "events": runtime.events,
                 }
             ).encode()
@@ -55,12 +60,15 @@ class Api(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if self.path != "/observe":
-            self.send_response(404)
-            self.end_headers()
-            return
         if not self.authorized():
             self.send_response(401)
+            self.end_headers()
+            return
+        if self.path == "/calls":
+            self.register_call()
+            return
+        if self.path != "/observe":
+            self.send_response(404)
             self.end_headers()
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -85,6 +93,35 @@ class Api(BaseHTTPRequestHandler):
             self.send_response(429)
             self.end_headers()
             return
+        self.send_response(202)
+        self.end_headers()
+
+    def register_call(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length < 2 or length > 4096:
+            self.send_response(413)
+            self.end_headers()
+            return
+        try:
+            data = json.loads(self.rfile.read(length))
+            call_id = data["call_id"]
+            service_mode = data["service_mode"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            self.send_response(400)
+            self.end_headers()
+            return
+        if (
+            not runtime.call_id_pattern.fullmatch(call_id)
+            or service_mode not in settings.service_modes
+        ):
+            self.send_response(400)
+            self.end_headers()
+            return
+        with runtime.lock:
+            runtime.active_calls[call_id] = {
+                "service_mode": service_mode,
+                "started_at": time.time(),
+            }
         self.send_response(202)
         self.end_headers()
 
