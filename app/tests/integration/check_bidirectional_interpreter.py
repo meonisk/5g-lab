@@ -219,6 +219,11 @@ def latency_rows(ai_events, tts_events):
         rows.append(
             {
                 "source_language": event.get("detected_language"),
+                "speech_end_to_audible_rtp_ms": (
+                    round((tts["first_voice_rtp_at"] - event["last_voice_packet_at"]) * 1000, 1)
+                    if tts.get("first_voice_rtp_at") and event.get("last_voice_packet_at")
+                    else None
+                ),
                 # Capture -> first translated packet sent; not physical
                 # handset playback latency (UE jitter buffer is excluded).
                 "speech_end_to_first_rtp_ms": (
@@ -334,6 +339,11 @@ def main():
         )
     rx = {client: received_packets(client) for client in ("lab-sipue1", "lab-sipue2")}
     latencies = latency_rows(ru_events + en_events, english_tts + russian_tts)
+    response_limit = float(settings["INTERPRETER_MAX_RESPONSE_DELAY_MS"])
+    delays = [row["speech_end_to_audible_rtp_ms"] for row in latencies]
+    latency_passed = len(delays) == 4 and all(
+        delay is not None and 0 <= delay <= response_limit for delay in delays
+    )
     report = {
         "test": "two-leg-bidirectional-ims-interpreter",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -346,9 +356,12 @@ def main():
         "russian_leg_tts": 2,
         "processing_workers": ai_status().get("processing_workers"),
         "latency_by_turn": latencies,
+        "response_delay_limit_ms": response_limit,
+        "audible_rtp_latency_pass": latency_passed,
+        "latency_boundary": "source speech capture to audible RTP sent; excludes UE jitter buffer",
         "subscriber_rx_packets": rx,
         "pass": (
-            all(rx.values()) and len(ru_events) >= 2 and len(en_events) >= 2 and len(latencies) >= 4
+            all(rx.values()) and len(ru_events) == 2 and len(en_events) == 2 and latency_passed
         ),
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))

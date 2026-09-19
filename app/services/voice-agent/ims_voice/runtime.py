@@ -43,6 +43,7 @@ allowed_service_modes = {
 reply_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
 llm_mode = os.environ["VOICE_AGENT_LLM_MODE"] == "1"
 vad_rms = int(os.environ["VOICE_AGENT_VAD_RMS"])
+audible_rms = int(os.environ["TTS_AUDIBLE_RMS"])
 silence_seconds = int(os.environ["VOICE_AGENT_SILENCE_MS"]) / 1000
 call_timeout = int(os.environ["VOICE_AGENT_CALL_TIMEOUT"])
 max_calls = int(os.environ["VOICE_AGENT_MAX_CALLS"])

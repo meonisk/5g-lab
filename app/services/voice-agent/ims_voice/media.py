@@ -27,6 +27,7 @@ class PlaybackState:
     packets_sent: int = 0
     interrupted: bool = False
     first_rtp_at: float | None = None
+    first_voice_rtp_at: float | None = None
 
 
 def elapsed_ms(started_at_ns: int) -> float:
@@ -80,6 +81,8 @@ def send_rtp_frames(call_id: str, audio_payload: bytes, playback: PlaybackState)
         runtime.rtp.sendto(rtp_header + frame, playback.destination)
         if playback.first_rtp_at is None:
             playback.first_rtp_at = time.time()
+        if playback.first_voice_rtp_at is None and ulaw_rms(frame) >= runtime.audible_rms:
+            playback.first_voice_rtp_at = time.time()
 
         playback.sequence = (playback.sequence + 1) & 0xFFFF
         playback.timestamp = (playback.timestamp + PCMU_FRAME_BYTES) & 0xFFFFFFFF
@@ -121,6 +124,7 @@ def finish_playback(
                 "at": time.time(),
                 "reply_id": reply_id,
                 "first_rtp_at": playback.first_rtp_at,
+                "first_voice_rtp_at": playback.first_voice_rtp_at,
                 "synthesis_ms": synthesis_ms,
                 "rtp_playout_ms": playout_ms,
                 "tts_total_ms": total_ms,

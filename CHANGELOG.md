@@ -9,6 +9,13 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- perf: 100 ms audio windows and 600 ms dialogue endpoint silence; enforce a
+  configurable 5-second speech-end-to-audible-RTP gate with exactly four turns.
+
+- feat: offline four-track experiment transcription with word timestamps, audio
+  statistics, paired dialogue and service timeline; explicitly distinguish
+  reconstructed ASR from unavailable historical STT/LLM text.
+
 - feat: pinned Unsloth Qwen3 4B Q4_K_M GGUF import, optional NVIDIA runtime,
   resident LLM and STT/LLM warmup before readiness; Gemma configuration guide.
 - fix: publish audio every 250 ms and finalize DTX speech without waiting for

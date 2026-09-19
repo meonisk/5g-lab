@@ -42,6 +42,8 @@
 | `quality/check_layout.py` | Лимит 300 логических строк и синтаксис Python |
 | `check-no-hardcoded-topology.py` | Проверка отсутствия зашитой топологии |
 | `build-experiment-manifest.py` | Проверка WAV и формирование манифеста эксперимента |
+| `transcribe_experiment.py` | Повторное локальное распознавание четырёх WAV: `python scripts/transcribe_experiment.py local/experiments/<run>` |
+| `transcript_timeline.py` | Формирование транскрипции, общей шкалы событий и явно обозначенных восстановленных времён |
 
 Это не каталог временных экспериментов. Live-тесты находятся в
 `app/tests/integration/`, unit-тесты — в `app/tests/unit/`, текстовые сценарии —
