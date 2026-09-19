@@ -83,7 +83,7 @@ while ((SECONDS < deadline)); do
 import json,sys
 d=json.load(sys.stdin); cid=sys.argv[1]; since=float(sys.argv[2])
 m=[e for e in d.get("events",[]) if cid in e.get("call_ids",[]) and e.get("processed_at",0)>=since and e.get("service_mode")=="transcribe" and e.get("recording_saved")]
-best=max(m,key=lambda e:e.get("recording_turn",0),default={})
+best=max(m,key=lambda e:(bool(e.get("normalization_applied")),e.get("normalized_transcript_chars",0),e.get("transcript_chars",0)),default={})
 print(json.dumps({k:best.get(k) for k in ("recording_session_id","recording_saved","recording_turn","audio_duration_seconds","transcript_chars","transcript_cyrillic_chars","detected_language","normalization_applied","normalization_llm_model","normalization_processing_ms","normalized_transcript_chars","normalized_transcript_cyrillic_chars")},ensure_ascii=False))' \
             "$call_id" "$since_epoch" <<<"$status")
         session_id=$(python -c 'import json,sys; print(json.load(sys.stdin).get("recording_session_id") or "")' <<<"$summary")
