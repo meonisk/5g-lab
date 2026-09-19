@@ -37,6 +37,12 @@ def flush_buffered_speech(call_id: str) -> None:
             completed_event = dict(buffered_event)
             completed_event["_utterance_started_at"] = buffered_stream.get("utterance_started_at")
             completed_event["last_voice_packet_at"] = buffered_stream.get("last_voice_packet_at")
+            completed_event["first_voice_packet_at"] = buffered_stream.get("first_voice_packet_at")
+            if settings.streaming_enabled and buffered_event.get("service_mode") in {
+                "interpret_ru",
+                "interpret_en",
+            }:
+                completed_event["stream_phrase_id"] = str(buffered_stream["utterance_started_at"])
             enqueue_utterance(
                 bytes(buffered_stream["utterance"]),
                 completed_event,
@@ -76,6 +82,9 @@ def clear_call_state(call_id: str) -> None:
     runtime.reply_counts.pop(call_id, None)
     runtime.turn_counts.pop(call_id, None)
     runtime.call_locks.pop(call_id, None)
+    for identity in list(runtime.stream_hypotheses):
+        if identity[0] == call_id:
+            runtime.stream_hypotheses.pop(identity, None)
 
     with runtime.lock:
         runtime.active_calls.pop(call_id, None)

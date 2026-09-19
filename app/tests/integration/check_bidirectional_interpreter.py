@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fixture_checks import verify_interpreter_fixture
+from streaming_checks import acceptance, all_audio_sent, finalized
 
 ROOT = Path(__file__).resolve().parents[3]
 MIN_TRANSLATION_TIMEOUT_SECONDS = 180
@@ -219,6 +220,12 @@ def latency_rows(ai_events, tts_events):
         rows.append(
             {
                 "source_language": event.get("detected_language"),
+                "stream_phrase_id": event.get("stream_phrase_id"),
+                "speech_start_to_audible_rtp_ms": (
+                    round((tts["first_voice_rtp_at"] - event["first_voice_packet_at"]) * 1000, 1)
+                    if tts.get("first_voice_rtp_at") and event.get("first_voice_packet_at")
+                    else None
+                ),
                 "speech_end_to_audible_rtp_ms": (
                     round((tts["first_voice_rtp_at"] - event["last_voice_packet_at"]) * 1000, 1)
                     if tts.get("first_voice_rtp_at") and event.get("last_voice_packet_at")
@@ -254,6 +261,7 @@ def received_packets(client):
 
 def main():
     settings = load_configuration()
+    streaming = settings["AI_STREAMING_ENABLED"] == "1"
     fixture = verify_interpreter_fixture(ROOT)
     recreate_dialogue_clients()
     if voice_status()["calls"] or adapter_status()["sessions"]:
@@ -313,6 +321,8 @@ def main():
 
         def translated():
             ru_events, en_events = translated_events(started, calls, settings)
+            if streaming and len(finalized(ai_status()["events"], calls)) < 4:
+                return None
             return (ru_events, en_events) if len(ru_events) >= 2 and len(en_events) >= 2 else None
 
         ru_events, en_events = wait_until(
@@ -321,7 +331,11 @@ def main():
             "Four bidirectional translated turns did not complete",
         )
         english_tts, russian_tts = wait_until(
-            lambda: completed_tts(calls, settings, 2),
+            lambda: (
+                completed_tts(calls, settings, 2)
+                if not streaming or all_audio_sent(voice_status()["events"], ru_events + en_events)
+                else None
+            ),
             60,
             "Translated RTP did not complete on both language legs",
         )
@@ -344,6 +358,19 @@ def main():
     latency_passed = len(delays) == 4 and all(
         delay is not None and 0 <= delay <= response_limit for delay in delays
     )
+    stream_report = (
+        acceptance(
+            latencies,
+            finalized(ai_status()["events"], calls),
+            float(settings["AI_STREAM_START_DELAY_LIMIT_MS"]),
+        )
+        if streaming
+        else None
+    )
+    if streaming:
+        latency_passed = (
+            stream_report["source_text_coverage_pass"] and stream_report["start_latency_pass"]
+        )
     report = {
         "test": "two-leg-bidirectional-ims-interpreter",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -352,8 +379,9 @@ def main():
         "original_speech_bridged": False,
         "ru_to_en_turns": len(ru_events),
         "en_to_ru_turns": len(en_events),
-        "english_leg_tts": 2,
-        "russian_leg_tts": 2,
+        "english_leg_tts": len(english_tts),
+        "russian_leg_tts": len(russian_tts),
+        "streaming": stream_report,
         "processing_workers": ai_status().get("processing_workers"),
         "latency_by_turn": latencies,
         "response_delay_limit_ms": response_limit,
@@ -361,7 +389,9 @@ def main():
         "latency_boundary": "source speech capture to audible RTP sent; excludes UE jitter buffer",
         "subscriber_rx_packets": rx,
         "pass": (
-            all(rx.values()) and len(ru_events) == 2 and len(en_events) == 2 and latency_passed
+            all(rx.values())
+            and (streaming or (len(ru_events) == 2 and len(en_events) == 2))
+            and latency_passed
         ),
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))

@@ -136,6 +136,25 @@ class PhraseBoundaries(unittest.TestCase):
             self.assertEqual(payload["keep_alive"], -1)
             self.assertEqual(payload["options"]["num_ctx"], 2048)
 
+    def test_streaming_waits_for_agreement_and_releases_final_tail(self):
+        from ims_ai.streaming import stable_prefix
+
+        self.assertEqual(stable_prefix("", "Hello Alex"), [])
+        self.assertEqual(stable_prefix("Hello Alex", "Hello Alex I hear you"), ["Hello"])
+        self.assertEqual(stable_prefix("Hello Alice", "Hello Alex I hear you"), [])
+        self.assertEqual(stable_prefix("Hello", "Hello Alex", final=True), ["Hello", "Alex"])
+
+    def test_partial_snapshot_does_not_cut_audio_or_reset_phrase(self):
+        with (
+            patch.object(self.settings, "streaming_enabled", True),
+            patch.object(self.segmentation, "enqueue_utterance") as emitted,
+        ):
+            self.segmentation.process_event(self.event(b"\x00" * 8000, mode="interpret_ru"))
+            self.assertEqual(emitted.call_args.args[3], "stream-partial")
+            state = next(iter(self.runtime.buffers.values()))
+            self.assertEqual(len(state["utterance"]), 8000)
+            self.assertTrue(state["in_speech"])
+
 
 if __name__ == "__main__":
     unittest.main()

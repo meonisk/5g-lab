@@ -75,13 +75,18 @@ def process_utterances():
         try:
             # Историю одного звонка меняет только один worker в каждый момент.
             with runtime.call_locks[task.call_id]:
-                process_utterance(
-                    task.pcmu_audio,
-                    task.event,
-                    task.received_at,
-                    task.end_reason,
-                    task.queued_at,
-                )
+                if "stream_phrase_id" in task.event:
+                    from .streaming import process_snapshot
+
+                    process_snapshot(task)
+                else:
+                    process_utterance(
+                        task.pcmu_audio,
+                        task.event,
+                        task.received_at,
+                        task.end_reason,
+                        task.queued_at,
+                    )
         except Exception as error:
             print(
                 f"AI utterance_failed type={type(error).__name__}",

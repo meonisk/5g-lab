@@ -10,10 +10,16 @@ def source_language(service_mode):
 
 
 def prompt_for(service_mode):
+    suffix = ""
+    if settings.streaming_enabled and service_mode in INTERPRETER_MODES:
+        suffix = (
+            " The input is a stable fragment of ongoing speech. Translate only this fragment."
+            " Do not invent its continuation or repeat previous translations."
+        )
     if service_mode in {"translate", "interpret_ru"}:
-        return settings.llm_translation_prompt
+        return settings.llm_translation_prompt + suffix
     if service_mode == "interpret_en":
-        return settings.llm_reverse_translation_prompt
+        return settings.llm_reverse_translation_prompt + suffix
     return settings.llm_system_prompt
 
 

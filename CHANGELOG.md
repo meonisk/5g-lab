@@ -9,6 +9,10 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- feat: experimental cumulative-audio streaming with two-hypothesis prefix
+  agreement, bounded pending snapshots, explicit revision/coverage failures,
+  and a speech-start-to-audible-RTP acceptance metric (not handset playback).
+
 - perf: 100 ms audio windows and 600 ms dialogue endpoint silence; enforce a
   configurable 5-second speech-end-to-audible-RTP gate with exactly four turns.
 

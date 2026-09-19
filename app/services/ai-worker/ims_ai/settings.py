@@ -57,6 +57,11 @@ compute_type = os.environ["AI_COMPUTE_TYPE"]
 language = os.environ["AI_LANGUAGE"]
 
 llm_url = os.environ["LLM_URL"]
+streaming_enabled = os.environ["AI_STREAMING_ENABLED"] == "1"
+stream_interval_bytes = int(float(os.environ["AI_STREAM_INTERVAL_MS"]) * 8)
+stream_min_words = int(os.environ["AI_STREAM_MIN_WORDS"])
+stream_holdback_words = int(os.environ["AI_STREAM_HOLDBACK_WORDS"])
+stream_max_replies = int(os.environ["AI_STREAM_MAX_REPLIES_PER_CALL"])
 
 llm_model = os.environ["LLM_MODEL"]
 

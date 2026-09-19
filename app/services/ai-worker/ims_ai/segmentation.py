@@ -70,6 +70,8 @@ def empty_stream_state(now: float) -> dict:
         "in_speech": False,
         "utterance_started_at": None,
         "last_voice_packet_at": None,
+        "first_voice_packet_at": None,
+        "snapshot_bytes": 0,
         "last_seen": now,
     }
 
@@ -101,6 +103,9 @@ def queue_completed_phrase(
     completed_event = dict(event)
     completed_event["_utterance_started_at"] = state.get("utterance_started_at")
     completed_event["last_voice_packet_at"] = state.get("last_voice_packet_at")
+    completed_event["first_voice_packet_at"] = state.get("first_voice_packet_at")
+    if settings.streaming_enabled and event.get("service_mode") in {"interpret_ru", "interpret_en"}:
+        completed_event["stream_phrase_id"] = str(state["utterance_started_at"])
     completed_audio = bytes(state["utterance"])
 
     reset_phrase(state)
@@ -206,10 +211,37 @@ def process_audio_frames(
         frame_index = frame_offset // PCMU_FRAME_BYTES
         if state["in_speech"] and state["silence_bytes"] == 0 and frame_index < len(timestamps):
             state["last_voice_packet_at"] = timestamps[frame_index]
+            if state["first_voice_packet_at"] is None:
+                state["first_voice_packet_at"] = timestamps[frame_index]
 
         reason = completion_reason(state, silence_limit, utterance_limit)
         if reason:
             queue_completed_phrase(state, event, received_at, reason)
+        elif settings.streaming_enabled and event.get("service_mode") in {
+            "interpret_ru",
+            "interpret_en",
+        }:
+            offer_snapshot(state, event, received_at)
+
+
+def offer_snapshot(state, event, received_at):
+    """At most one partial task per call; skip stale snapshots instead of building latency."""
+    size = len(state["utterance"])
+    if size - state["snapshot_bytes"] < settings.stream_interval_bytes:
+        return
+    call_id = (event.get("call_ids") or [None])[0]
+    with runtime.lock:
+        if runtime.pending_utterances.get(call_id, 0):
+            return
+    partial = dict(event)
+    partial.update(
+        stream_phrase_id=str(state["utterance_started_at"]),
+        first_voice_packet_at=state["first_voice_packet_at"],
+        last_voice_packet_at=state["last_voice_packet_at"],
+        _utterance_started_at=state["utterance_started_at"],
+    )
+    enqueue_utterance(bytes(state["utterance"]), partial, received_at, "stream-partial")
+    state["snapshot_bytes"] = size
 
 
 def flush_idle_streams(now: float) -> None:

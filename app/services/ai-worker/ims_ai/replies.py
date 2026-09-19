@@ -34,7 +34,10 @@ def may_reply(call_id: str | None, transcript: str, service_mode: str) -> bool:
         return False
 
     delivered_replies = runtime.reply_counts.get(call_id, 0)
-    return delivered_replies < settings.max_replies_per_call
+    limit = settings.max_replies_per_call
+    if settings.streaming_enabled and service_mode in INTERPRETER_MODES:
+        limit = settings.stream_max_replies
+    return delivered_replies < limit
 
 
 def create_reply_id(call_id: str, turn_index: int, queued_at: float) -> str:

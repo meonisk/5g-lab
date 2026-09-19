@@ -20,6 +20,7 @@ recordings = {}
 active_calls = {}
 pending_utterances = {}
 call_locks = {}
+stream_hypotheses = {}
 pending_condition = threading.Condition(lock)
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
