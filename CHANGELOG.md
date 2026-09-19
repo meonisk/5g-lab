@@ -19,6 +19,8 @@ milestones; they are not release tags or scientific benchmark results.
 
 - feat: local bilingual Piper speech with pinned Denis and LJ Speech models, build-time
   checksums, resident CPU inference, and unchanged PCMU/8000 media transport.
+- fix: configure host dialogue voices through the public ENV so a fresh clone
+  does not depend on one hard-coded Windows voice name.
 - feat: capture complete phone-side input and received WAV files, all container
   logs, runtime metadata, hashes, latency, and Git provenance for one private
   two-language IMS interpreter experiment.

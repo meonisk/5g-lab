@@ -10,6 +10,19 @@ param(
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
 
+$LabRoot = Split-Path -Parent $PSScriptRoot
+$PublicEnvironment = @{}
+Get-Content -LiteralPath (Join-Path $LabRoot 'app/config/lab.env') | ForEach-Object {
+    if ($_ -match '^([^#=]+)=(.*)$') {
+        $PublicEnvironment[$matches[1]] = $matches[2]
+    }
+}
+
+$VoiceByLanguage = @{
+    'ru-RU' = $PublicEnvironment.DIALOGUE_RU_WINDOWS_VOICE
+    'en-US' = $PublicEnvironment.DIALOGUE_EN_WINDOWS_VOICE
+}
+
 $dialogueDesign = Get-Content -Raw -Encoding UTF8 $Design | ConvertFrom-Json
 $audioFormat = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(
     [int]$dialogueDesign.audio_format.sample_rate_hz,
@@ -22,6 +35,10 @@ New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $manifestTracks = [ordered]@{}
 foreach ($trackName in @('ue1', 'ue2')) {
     $trackDesign = $dialogueDesign.tracks.$trackName
+    $voiceName = $VoiceByLanguage[[string]$trackDesign.language]
+    if (-not $voiceName) {
+        throw "No Windows dialogue voice configured for $($trackDesign.language)"
+    }
     $speechSynthesizer = New-Object System.Speech.Synthesis.SpeechSynthesizer
 
     try {
@@ -29,14 +46,15 @@ foreach ($trackName in @('ue1', 'ue2')) {
             $speechSynthesizer.GetInstalledVoices() |
                 ForEach-Object { $_.VoiceInfo.Name }
         )
-        if ($trackDesign.voice -notin $installedVoices) {
+        if ($voiceName -notin $installedVoices) {
             throw (
-                "Required TTS voice '$($trackDesign.voice)' is not installed. " +
+                "Required TTS voice '$voiceName' is not installed. " +
+                'Change DIALOGUE_*_WINDOWS_VOICE in app/config/lab.env. ' +
                 "Installed: $($installedVoices -join ', ')"
             )
         }
 
-        $speechSynthesizer.SelectVoice([string]$trackDesign.voice)
+        $speechSynthesizer.SelectVoice([string]$voiceName)
         $speechSynthesizer.Rate = [int]$trackDesign.rate
 
         # SSML-паузы задают очередность собеседников. Они являются частью
@@ -85,7 +103,7 @@ foreach ($trackName in @('ue1', 'ue2')) {
         $audioFile = Get-Item $audioPath
         $manifestTracks[$trackName] = [ordered]@{
             file = $audioFile.Name
-            voice = [string]$trackDesign.voice
+            voice = [string]$voiceName
             language = [string]$trackDesign.language
             bytes = $audioFile.Length
             sha256 = (Get-FileHash -Algorithm SHA256 $audioPath).Hash.ToLowerInvariant()

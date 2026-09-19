@@ -23,7 +23,9 @@ CONTRIBUTING.md    Development workflow
 ## Run
 
 Requires Docker Desktop with Linux containers/WSL2, Git for Windows, Python
-3.12+, and Windows Pavel/Zira voices for synthetic dialogue fixtures.
+3.12+, and one installed Windows TTS voice per configured language for the
+synthetic dialogue fixtures. Defaults are Irina Desktop and Zira Desktop;
+change `DIALOGUE_*_WINDOWS_VOICE` in `app/config/lab.env` when needed.
 
 ```powershell
 python -m pip install -r requirements-dev.txt

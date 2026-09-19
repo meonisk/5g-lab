@@ -6,7 +6,6 @@
   "tracks": {
     "ue1": {
       "language": "ru-RU",
-      "voice": "Microsoft Pavel",
       "rate": 0,
       "leading_silence_ms": 2000,
       "between_turns_ms": 28000,
@@ -18,7 +17,6 @@
     },
     "ue2": {
       "language": "en-US",
-      "voice": "Microsoft Zira Desktop",
       "rate": 0,
       "leading_silence_ms": 17000,
       "between_turns_ms": 29000,

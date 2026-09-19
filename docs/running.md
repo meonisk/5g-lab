@@ -141,8 +141,8 @@ because its implementation cannot be identified by commit alone. The directory
 contains complete speech and is intentionally excluded from Git.
 
 The bilingual-dialogue gate generates a coherent four-turn fixture locally
-with the installed Windows `Microsoft Pavel` and `Microsoft Zira Desktop`
-voices, places a real UE1-to-UE2 IMS call, and sends both WAV tracks as
+with the installed Windows voices named by `DIALOGUE_*_WINDOWS_VOICE`, places
+a real UE1-to-UE2 IMS call, and sends both WAV tracks as
 PCMU/8000 through the subscribers' IMS PDU sessions and RTPengine. It proves
 automatic Russian/English recognition, two pseudonymous speaker streams, local
 LLM normalization, and exactly four complete private transcript turns. Long
