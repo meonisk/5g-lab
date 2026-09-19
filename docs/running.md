@@ -221,6 +221,19 @@ AI workers. Dedicated per-tenant cells are reserved for tenants whose legal or
 contractual isolation requirements justify separate compute, keys, and data.
 - This repository contains the runnable implementation and its deployment documentation.
 
+## If the simulated radio link stops
+
+A running container does not prove a working PDU session. If UE logs report
+`signal lost` / `Service Request` timeouts and gNB reports
+`Discarding RRC Setup Request, UE context already exists`, SIP retransmissions
+and a missing BYE can originate below the application layer. Inspect the UE/gNB
+logs and run `app/tests/integration/verify-ims.sh` before blaming an AI queue.
+
+With no user calls active, restart `gnb ue1 ue2` through `scripts/compose.ps1`,
+then recreate `sipue1 sipue2` so their sockets bind the current IMS PDU addresses.
+Repeat registration and the failed gate. Do not erase database/model volumes.
+A failed run remains failed; a later retry is separate evidence.
+
 ## Stop
 
 ```powershell

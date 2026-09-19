@@ -40,20 +40,26 @@ AI Worker: `app/services/ai-worker/ims_ai/`.
 - `audio.py`: декодирование PCMU и энергия кадра.
 - `segmentation.py`: границы реплик по тишине и промежуткам RTP.
 - `models.py`: загрузка фиксированной версии Whisper.
-- `utterances.py`: STT → нормализация/ответ → сохранение или доставка.
+- `utterances.py`: распознавание STT и сбор метрик обработки.
+- `transcription.py`: нормализация текста и приватная запись.
+- `replies.py`: перевод/ответ и доставка в нужный языковой канал.
+- `queueing.py`: типизированное задание реплики и ограниченная очередь.
 - `llm.py`: запросы к локальной LLM и проверки текста.
 - `recording.py`: приватные WAV, транскрипция и manifest.
 - `lifecycle.py`: очередь обработки и сохранение хвоста при BYE.
 - `maintenance.py`: удаление устаревшего состояния из памяти.
-- `api.py`: HTTP-аутентификация, приём аудио и статус.
+- `api.py`: короткие HTTP-маршруты приёма аудио и статуса.
 - `app.py`: запуск потоков и HTTP-сервера.
 
 SIP AS: `app/services/sip-as/ims_sip/`: сообщения, управление сервисами и маршрутизация.
 Voice Agent: `app/services/voice-agent/ims_voice/`: синтез, RTP, HTTP-управление.
+Его `calls.py` отвечает за начало/завершение звонка и единственную очередь озвучки.
 Media Adapter: `app/services/media-adapter/ims_media/`: захват RTP, публикация, API.
+Общая обвязка `app/services/lab_common/http.py`: Flask, Waitress, HTTPX,
+проверка токена и ограничения запросов. Карта чтения кода — `app/services/README.md`.
 Файлы `worker.py`, `server.py`, `agent.py`, `adapter.py` — короткие точки входа.
 
-Сборщик исследований: `app/research/tools/ims_app/research/`: CLI, общие функции,
+Сборщик исследований: `app/research/tools/ims_research/`: CLI, общие функции,
 инвентаризация, сбор, приватность и валидация. `research_run.py` сохраняет CLI.
 
 Compose include использует корень проекта как `project_directory`: относительные

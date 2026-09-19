@@ -2,10 +2,11 @@
 
 import os
 import threading
-from http.server import ThreadingHTTPServer
+
+from lab_common.http import run_api
 
 from . import settings
-from .api import Api
+from .api import api
 from .lifecycle import process_events
 from .models import load_model
 from .queueing import process_utterances
@@ -27,4 +28,4 @@ def main():
         f"processing_workers={settings.processing_workers}",
         flush=True,
     )
-    ThreadingHTTPServer((os.environ["AI_WORKER_BIND"], port), Api).serve_forever()
+    run_api(api, os.environ["AI_WORKER_BIND"], port)

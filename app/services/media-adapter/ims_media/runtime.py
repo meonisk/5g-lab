@@ -2,7 +2,6 @@
 
 import ipaddress
 import os
-import re
 import threading
 from collections import defaultdict
 
@@ -21,7 +20,6 @@ voice_agent_ip = str(ipaddress.ip_address(os.environ["VOICE_AGENT_IP"]))
 ims_ue_network = ipaddress.ip_network(os.environ["IMS_UE_CIDR"])
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
-call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
 allowed_service_modes = {
     "observe",
     "translate",

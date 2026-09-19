@@ -13,7 +13,7 @@
 | STT | `AI_MODEL_SIZE`, `AI_MODEL_REVISION`, `AI_DEVICE`, `AI_COMPUTE_TYPE`, `AI_LANGUAGE`, `AI_STT_*` |
 | Границы обычных реплик | `AI_UTTERANCE_*`, `AI_VAD_RMS`, `AI_AUDIO_PREROLL_MS` |
 | Границы исследовательского диалога | `AI_DIALOGUE_UTTERANCE_*`, `AI_DIALOGUE_EVENT_GAP_MS` |
-| Очереди и параллельность | `AI_QUEUE_MAX`, `AI_UTTERANCE_QUEUE_MAX`, `AI_PROCESSING_WORKERS`, `VOICE_AGENT_REPLY_QUEUE_MAX`, `LLM_NUM_PARALLEL` |
+| Очереди и параллельность | `AI_QUEUE_MAX`, `AI_UTTERANCE_QUEUE_MAX`, `AI_PROCESSING_WORKERS`, `VOICE_AGENT_REPLY_QUEUE_MAX`, `LLM_NUM_PARALLEL`, `SERVICE_HTTP_THREADS` |
 | Защита полноты транскрипта | `LLM_NORMALIZATION_MIN_LENGTH_RATIO`, `TRANSCRIPT_NORMALIZED_MAX_CHARS` |
 | LLM | `LLM_MODEL`, `LLM_MODEL_DIGEST`, `LLM_*PROMPT`, `LLM_TIMEOUT_SECONDS`, `LLM_KEEP_ALIVE`, `LLM_NUM_PARALLEL` |
 | Синтез речи | `TTS_BACKEND`, `TTS_VOICE`, `TTS_TRANSLATION_VOICE`, `TTS_RATE` |
@@ -27,12 +27,12 @@
 создаётся в приватном Docker-томе; в публичный env он не попадает.
 
 Текст, голоса и расписание синтетического разговора описаны в
-`fixtures/bilingual-dialogue-v1.json`. Это входные данные теста. После изменения
+`app/tests/fixtures/bilingual-dialogue-v1.json`. Это входные данные теста. После изменения
 запустите `scripts/generate-bilingual-dialogue.ps1`; продолжительность воспроизведения
 в `app/config/lab.env` должна покрывать все реплики и не достигать повторного начала WAV.
 
 Полудуплексный тест полного перевода описан отдельно в
-`fixtures/interpreter-dialogue-v1.json`. Увеличенные паузы являются частью
+`app/tests/fixtures/interpreter-dialogue-v1.json`. Увеличенные паузы являются частью
 CPU-профиля: следующий синтетический собеседник начинает только после полного
 STT, LLM и TTS-проигрывания предыдущей реплики.
 

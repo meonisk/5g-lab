@@ -1,152 +1,85 @@
-"""Authenticated HTTP ingress and metadata-only operational status."""
+"""HTTP принимает работу в очередь; распознавание не выполняется в запросе."""
 
-from __future__ import annotations
-
-import hmac
-import json
 import queue
 import time
-import urllib.request
-from http.server import BaseHTTPRequestHandler
+
+from flask import abort, jsonify
+from lab_common.http import create_api, json_object, require, valid_call_id
 
 from . import runtime, settings
 from .maintenance import expire_events
 
+api = create_api(__name__, runtime.control_token, settings.request_max_bytes)
 
-class Api(BaseHTTPRequestHandler):
-    def authorized(self):
-        return hmac.compare_digest(
-            self.headers.get("Authorization", ""), f"Bearer {runtime.control_token}"
+
+@api.get("/healthz")
+def health():
+    return "", 204 if runtime.model is not None else 503
+
+
+@api.get("/events")
+def events():
+    """Отдаём метаданные: текст и аудио остаются внутри конвейера."""
+    with runtime.lock:
+        expire_events(time.time())
+        return jsonify(
+            status="ok" if runtime.model is not None else "loading",
+            mode="OBSERVE",
+            backend=settings.backend,
+            model=settings.model_size,
+            model_revision=settings.model_revision,
+            device=settings.device,
+            model_error=runtime.model_error,
+            queue_depth=runtime.work.qsize(),
+            media_queue_depth=runtime.work.qsize(),
+            utterance_queue_depth=runtime.utterance_work.qsize(),
+            processing_workers=settings.processing_workers,
+            pending_utterances=sum(runtime.pending_utterances.values()),
+            buffered_streams=len(runtime.buffers),
+            active_conversations=len(runtime.conversations),
+            active_calls=len(runtime.active_calls),
+            events=runtime.events,
         )
 
-    def do_GET(self):
-        if self.path == "/healthz":
-            self.send_response(204 if runtime.model is not None else 503)
-            self.end_headers()
-            return
-        if self.path != "/events":
-            self.send_response(404)
-            self.end_headers()
-            return
-        if not self.authorized():
-            self.send_response(401)
-            self.end_headers()
-            return
-        with runtime.lock:
-            expire_events(time.time())
-            body = json.dumps(
-                {
-                    "status": "ok" if runtime.model is not None else "loading",
-                    "mode": "OBSERVE",
-                    "backend": settings.backend,
-                    "model": settings.model_size,
-                    "model_revision": settings.model_revision,
-                    "device": settings.device,
-                    "model_error": runtime.model_error,
-                    "queue_depth": runtime.work.qsize(),
-                    "media_queue_depth": runtime.work.qsize(),
-                    "utterance_queue_depth": runtime.utterance_work.qsize(),
-                    "processing_workers": settings.processing_workers,
-                    "pending_utterances": sum(runtime.pending_utterances.values()),
-                    "buffered_streams": len(runtime.buffers),
-                    "active_conversations": len(runtime.conversations),
-                    "active_calls": len(runtime.active_calls),
-                    "events": runtime.events,
-                }
-            ).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(body)
 
-    def do_POST(self):
-        if not self.authorized():
-            self.send_response(401)
-            self.end_headers()
-            return
-        if self.path == "/calls":
-            self.register_call()
-            return
-        if self.path != "/observe":
-            self.send_response(404)
-            self.end_headers()
-            return
-        length = int(self.headers.get("Content-Length", "0"))
-        if length < 2 or length > settings.request_max_bytes:
-            self.send_response(413)
-            self.end_headers()
-            return
-        try:
-            event = json.loads(self.rfile.read(length))
-            event["received_at"] = time.time()
-            runtime.work.put_nowait(event)
-            print(
-                f"AI stream_received packets={event.get('packets')} audio={event.get('audio_bytes', 0)} "
-                f"calls={event.get('call_ids')}",
-                flush=True,
-            )
-        except (json.JSONDecodeError, TypeError):
-            self.send_response(400)
-            self.end_headers()
-            return
-        except queue.Full:
-            self.send_response(429)
-            self.end_headers()
-            return
-        self.send_response(202)
-        self.end_headers()
+def enqueue(event: dict):
+    try:
+        runtime.work.put_nowait(event)
+    except queue.Full:
+        abort(429)
+    return "", 202
 
-    def register_call(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length < 2 or length > 4096:
-            self.send_response(413)
-            self.end_headers()
-            return
-        try:
-            data = json.loads(self.rfile.read(length))
-            call_id = data["call_id"]
-            service_mode = data["service_mode"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            self.send_response(400)
-            self.end_headers()
-            return
-        if (
-            not runtime.call_id_pattern.fullmatch(call_id)
-            or service_mode not in settings.service_modes
-        ):
-            self.send_response(400)
-            self.end_headers()
-            return
-        with runtime.lock:
-            runtime.active_calls[call_id] = {
-                "service_mode": service_mode,
-                "started_at": time.time(),
-            }
-        self.send_response(202)
-        self.end_headers()
 
-    def do_DELETE(self):
-        if not self.authorized():
-            self.send_response(401)
-            self.end_headers()
-            return
-        if not self.path.startswith("/calls/"):
-            self.send_response(404)
-            self.end_headers()
-            return
-        call_id = urllib.parse.unquote(self.path.removeprefix("/calls/"))
-        if not runtime.call_id_pattern.fullmatch(call_id):
-            self.send_response(400)
-            self.end_headers()
-            return
-        try:
-            runtime.work.put_nowait({"control": "end_call", "call_id": call_id})
-        except queue.Full:
-            self.send_response(429)
-            self.end_headers()
-            return
-        self.send_response(202)
-        self.end_headers()
+@api.post("/observe")
+def observe():
+    event = json_object()
+    # Управляющее событие создаёт только DELETE /calls, не аудиозапрос.
+    require("control" not in event)
+    event["received_at"] = time.time()
+    response = enqueue(event)
+    # Метаданные приёма нужны для проверки OBSERVE даже на тихом аудиоканале.
+    print(
+        f"AI stream_received packets={event.get('packets')} audio={event.get('audio_bytes', 0)} "
+        f"calls={event.get('call_ids')}",
+        flush=True,
+    )
+    return response
 
-    def log_message(self, *_):
-        pass
+
+@api.post("/calls")
+def register_call():
+    data = json_object(4096)
+    call_id = data.get("call_id")
+    mode = data.get("service_mode")
+    require(valid_call_id(call_id))
+    require(isinstance(mode, str) and mode in settings.service_modes)
+    with runtime.lock:
+        runtime.active_calls[call_id] = {"service_mode": mode, "started_at": time.time()}
+    return "", 202
+
+
+@api.delete("/calls/<call_id>")
+def end_call(call_id):
+    require(valid_call_id(call_id))
+    # BYE идёт через ту же очередь: принятый хвост аудио обрабатывается первым.
+    return enqueue({"control": "end_call", "call_id": call_id})

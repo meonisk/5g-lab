@@ -11,10 +11,18 @@ milestones; they are not release tags or scientific benchmark results.
 
 ### Added
 
+- test: HTTP authentication, input bounds, queue overload, duplicate call startup,
+  and playback worker shutdown regression tests.
+- docs: service reading guide with pipeline, library roles, and in-memory limits.
 - docs: chronological changelog derived from Git history.
 
 ### Changed
 
+- refactor: replace handwritten HTTP handlers with Flask and Waitress; share
+  HTTPX clients, authentication, JSON validation, and server settings.
+- refactor: separate speech recognition, transcription, reply delivery, and
+  voice call lifecycle; use explicit dataclass fields for queued utterances.
+- test: validate structured JSON and HTTP codes independently of formatting.
 - refactor: simplify app to services, infrastructure, tests, research, and config;
   move operator scripts and documentation to the root and private state to local.
 
@@ -23,6 +31,11 @@ milestones; they are not release tags or scientific benchmark results.
 - build: initialize private credentials and generate both audio fixtures on first start.
 - refactor: remove nine redundant verification wrappers; invoke integration
   tests directly. Research gate command paths follow the new entry points.
+
+### Fixed
+
+- fix: duplicate call notifications no longer start extra playback workers;
+  closing a full playback queue no longer leaves its worker waiting forever.
 
 ## 2026-09-19 — Local language services
 

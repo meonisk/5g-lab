@@ -94,11 +94,18 @@ def enqueue_audio(call_id, text, reason, voice, reply_id=None):
 def play_queued_audio(call_id, reply_queue):
     """Preserve audible turn order while AI work continues in parallel."""
     while True:
-        item = reply_queue.get()
-        try:
-            if item is None:
+        with runtime.lock:
+            if runtime.reply_queues.get(call_id) is not reply_queue:
                 return
+        try:
+            item = reply_queue.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        try:
             send_audio(call_id, *item)
+        except Exception as exc:
+            # Ошибка одного синтеза не должна навсегда остановить очередь звонка.
+            print(f"VOICE synthesis_failed type={type(exc).__name__}", flush=True)
         finally:
             reply_queue.task_done()
 
@@ -133,25 +140,3 @@ def receive_audio():
                     responses.append(call_id)
         for call_id in responses:
             enqueue_audio(call_id, runtime.reply_text, "vad_reply", runtime.tts_voice)
-
-
-def expire_calls():
-    while True:
-        time.sleep(min(30, max(1, runtime.call_timeout)))
-        cutoff = time.time() - runtime.call_timeout
-        with runtime.lock:
-            expired = [
-                (call_id, call["received_packets"])
-                for call_id, call in runtime.calls.items()
-                if call["started_at"] < cutoff
-            ]
-            for call_id, _ in expired:
-                runtime.calls.pop(call_id, None)
-                reply_queue = runtime.reply_queues.pop(call_id, None)
-                if reply_queue:
-                    try:
-                        reply_queue.put_nowait(None)
-                    except queue.Full:
-                        pass
-        for call_id, received in expired:
-            print(f"VOICE call_expired call_id={call_id} received={received}", flush=True)

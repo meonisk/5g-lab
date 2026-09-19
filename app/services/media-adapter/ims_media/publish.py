@@ -2,11 +2,10 @@
 
 import base64
 import hashlib
-import json
 import threading
 import time
-import urllib.parse
-import urllib.request
+
+from lab_common.http import request_json
 
 from . import runtime
 from .api import end_worker_call
@@ -104,19 +103,20 @@ def publish():
                     }
                 )
             try:
-                req = urllib.request.Request(
+                request_json(
+                    "POST",
                     runtime.worker_url,
-                    json.dumps(event).encode(),
-                    {
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {runtime.control_token}",
-                    },
+                    payload=event,
+                    token=runtime.control_token,
+                    timeout=1,
                 )
-                urllib.request.urlopen(req, timeout=1).read()
                 print(
                     f"MEDIA delivered direction={direction} ssrc={ssrc} packets={value['packets']} "
                     f"audio={len(audio)} calls=1 service={session['service_mode']}",
                     flush=True,
                 )
             except Exception as exc:
-                print(f"MEDIA AI unavailable (media relay unaffected): {exc}", flush=True)
+                print(
+                    f"MEDIA AI unavailable (media relay unaffected) type={type(exc).__name__}",
+                    flush=True,
+                )

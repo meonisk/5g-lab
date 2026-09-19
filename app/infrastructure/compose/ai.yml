@@ -36,7 +36,9 @@ services:
 
   sip-as:
     <<: *custom-service
-    build: app/services/sip-as
+    build:
+      context: app/services
+      dockerfile: sip-as/Dockerfile
     image: lab-sip-as
     container_name: lab-sip-as
     user: "65532:65532"
@@ -57,7 +59,9 @@ services:
 
   media-adapter:
     <<: *custom-service
-    build: app/services/media-adapter
+    build:
+      context: app/services
+      dockerfile: media-adapter/Dockerfile
     image: lab-media-adapter
     container_name: lab-media-adapter
     env_file: [app/config/lab.env]
@@ -74,7 +78,9 @@ services:
 
   ai-worker:
     <<: *custom-service
-    build: app/services/ai-worker
+    build:
+      context: app/services
+      dockerfile: ai-worker/Dockerfile
     image: lab-ai-worker
     container_name: lab-ai-worker
     user: "65532:65532"
@@ -153,7 +159,9 @@ services:
 
   voice-agent:
     <<: *custom-service
-    build: app/services/voice-agent
+    build:
+      context: app/services
+      dockerfile: voice-agent/Dockerfile
     image: lab-voice-agent
     container_name: lab-voice-agent
     user: "65532:65532"

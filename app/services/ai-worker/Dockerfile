@@ -3,10 +3,12 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --requirement /app/requirements.txt
-COPY worker.py /app/worker.py
-COPY ims_ai /app/ims_ai
+COPY ai-worker/requirements.txt /app/requirements.txt
+COPY requirements-http.txt /app/requirements-http.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt -r /app/requirements-http.txt
+COPY lab_common /app/lab_common
+COPY ai-worker/worker.py /app/worker.py
+COPY ai-worker/ims_ai /app/ims_ai
 RUN mkdir -p /models && chown 65532:65532 /models
 USER 65532:65532
 ENTRYPOINT ["python", "/app/worker.py"]

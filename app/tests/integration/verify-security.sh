@@ -37,8 +37,14 @@ done
 check 'Media Adapter retains only NET_RAW capability' sh -c \
     "docker inspect --format '{{json .HostConfig.CapAdd}} {{json .HostConfig.CapDrop}}' lab-media-adapter | grep -q 'NET_RAW.*ALL'"
 
-unauthorized=$(docker exec lab-voice-agent wget -S -O- "http://127.0.0.1:${VOICE_AGENT_HTTP_PORT}/status" 2>&1 || true)
-check 'Voice Agent status rejects missing bearer token' grep -q '401 Unauthorized' <<<"$unauthorized"
+unauthorized=$(docker exec lab-voice-agent python -c '
+import os,urllib.error,urllib.request
+try:
+    urllib.request.urlopen("http://127.0.0.1:"+os.environ["VOICE_AGENT_HTTP_PORT"]+"/status",timeout=2)
+    print("unexpected-success")
+except urllib.error.HTTPError as exc:
+    print(exc.code)')
+check 'Voice Agent status rejects missing bearer token' test "$unauthorized" = 401
 
 ai_unauthorized=$(docker exec lab-ai-worker python -c '
 import os,urllib.error,urllib.request
@@ -59,7 +65,8 @@ check 'LLM publishes no host port' inspect_equals lab-llm-worker '{{json .HostCo
 token=$(docker exec lab-sip-as sh -c 'cat "$SERVICE_CONTROL_TOKEN_FILE"')
 authorized=$(docker exec lab-sip-as wget -qO- --header="Authorization: Bearer $token" \
     "http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}/status")
-check 'authenticated service control request succeeds' grep -q '"status": "ok"' <<<"$authorized"
+check 'authenticated service control request succeeds' python -c \
+    'import json,sys; assert json.load(sys.stdin)["status"] == "ok"' <<<"$authorized"
 
 bad_media=$(docker exec lab-sip-as python -c '
 import json,os,urllib.error,urllib.request

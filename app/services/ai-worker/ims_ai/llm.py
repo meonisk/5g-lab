@@ -1,51 +1,55 @@
-"""Local LLM requests, normalization checks, and bounded conversation history."""
+"""Три операции LLM используют один HTTP-клиент: ответ, перевод и очистка текста."""
 
-from __future__ import annotations
-
-import json
 import re
 import time
-import urllib.request
+from urllib.parse import quote
+
+from lab_common.http import request_json
 
 from . import runtime, settings
 from .interpretation import prompt_for
 
 
-def cyrillic_chars(text):
+def cyrillic_chars(text: str) -> int:
     return sum("\u0400" <= char <= "\u052f" for char in text)
 
 
-def generate_reply(call_id, transcript, service_mode):
-    conversation = runtime.conversations.setdefault(
-        call_id, {"messages": [], "last_seen": time.time()}
-    )
-    conversation["last_seen"] = time.time()
-    system_prompt = prompt_for(service_mode)
-    request_body = json.dumps(
-        {
+def chat(messages: list[dict], max_tokens: int, temperature: float = 0) -> tuple[str, float]:
+    """Единое место для протокола Ollama и измерения времени LLM."""
+    started = time.perf_counter()
+    response = request_json(
+        "POST",
+        settings.llm_url,
+        payload={
             "model": settings.llm_model,
             "stream": False,
-            "messages": (
-                [{"role": "system", "content": system_prompt}]
-                + conversation["messages"]
-                + [{"role": "user", "content": transcript}]
-            ),
-            "options": {
-                "temperature": settings.llm_temperature,
-                "num_predict": settings.llm_max_tokens,
-            },
-        }
-    ).encode()
-    request = urllib.request.Request(
-        settings.llm_url, request_body, {"Content-Type": "application/json"}
+            "messages": messages,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        },
+        timeout=settings.llm_timeout,
     )
-    started = time.perf_counter_ns()
-    response = json.load(urllib.request.urlopen(request, timeout=settings.llm_timeout))
-    text = " ".join(response["message"]["content"].split())[: settings.llm_response_max_chars]
-    return text, (time.perf_counter_ns() - started) / 1_000_000
+    text = " ".join(response["message"]["content"].split())
+    return text, (time.perf_counter() - started) * 1000
+
+
+def conversation_for(call_id: str) -> dict:
+    conversation = runtime.conversations.setdefault(call_id, {"messages": [], "last_seen": 0})
+    conversation["last_seen"] = time.time()
+    return conversation
+
+
+def generate_reply(call_id, transcript, service_mode):
+    messages = [
+        {"role": "system", "content": prompt_for(service_mode)},
+        *conversation_for(call_id)["messages"],
+        {"role": "user", "content": transcript},
+    ]
+    text, elapsed = chat(messages, settings.llm_max_tokens, settings.llm_temperature)
+    return text[: settings.llm_response_max_chars], elapsed
 
 
 def repair_translation_language(text, service_mode):
+    """Одна попытка исправить язык; окончательное решение принимает языковой барьер."""
     if service_mode == "interpret_en":
         prompt = (
             "Перепиши перевод полностью на русском языке и только кириллицей. "
@@ -56,101 +60,61 @@ def repair_translation_language(text, service_mode):
             "Rewrite the translation entirely in English using Latin letters only. "
             "Return only the corrected translation."
         )
-    request_body = json.dumps(
-        {
-            "model": settings.llm_model,
-            "stream": False,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": text},
-            ],
-            "options": {"temperature": 0, "num_predict": settings.llm_max_tokens},
-        }
-    ).encode()
-    request = urllib.request.Request(
-        settings.llm_url, request_body, {"Content-Type": "application/json"}
+    repaired, elapsed = chat(
+        [{"role": "system", "content": prompt}, {"role": "user", "content": text}],
+        settings.llm_max_tokens,
     )
-    started = time.perf_counter_ns()
-    response = json.load(urllib.request.urlopen(request, timeout=settings.llm_timeout))
-    repaired = " ".join(response["message"]["content"].split())
-    repaired = repaired[: settings.llm_response_max_chars].strip().strip('"«»').strip()
-    return repaired, (time.perf_counter_ns() - started) / 1_000_000
+    return repaired[: settings.llm_response_max_chars].strip(' "«»'), elapsed
 
 
 def normalize_transcript(transcript, detected_language):
+    english = detected_language == "en"
     prompt = (
-        settings.llm_english_transcription_prompt
-        if detected_language == "en"
-        else settings.llm_transcription_prompt
+        settings.llm_english_transcription_prompt if english else settings.llm_transcription_prompt
     )
-    wrapper = (
-        f"Input: «{transcript}»\nOutput:"
-        if detected_language == "en"
-        else f"Вход: «{transcript}»\nВыход:"
+    wrapper = f"Input: «{transcript}»\nOutput:" if english else f"Вход: «{transcript}»\nВыход:"
+    text, elapsed = chat(
+        [{"role": "system", "content": prompt}, {"role": "user", "content": wrapper}],
+        settings.llm_normalization_max_tokens,
     )
-    request_body = json.dumps(
-        {
-            "model": settings.llm_model,
-            "stream": False,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": wrapper},
-            ],
-            "options": {
-                "temperature": 0,
-                "num_predict": settings.llm_normalization_max_tokens,
-            },
-        }
-    ).encode()
-    request = urllib.request.Request(
-        settings.llm_url, request_body, {"Content-Type": "application/json"}
-    )
-    started = time.perf_counter_ns()
-    response = json.load(urllib.request.urlopen(request, timeout=settings.llm_timeout))
-    normalized = " ".join(response["message"]["content"].split())
-    normalized = normalized.strip().strip('"«»').strip()
-    if not normalized or len(normalized) > settings.normalized_transcript_max_chars:
+    text = text.strip(' "«»')
+    validate_normalization(transcript, text, detected_language)
+    # Маленькая модель иногда пересказывает вместо редактирования: сохраняем исходник.
+    if len(text) < len(transcript) * settings.llm_normalization_min_length_ratio:
+        text = transcript
+    return text, elapsed
+
+
+def validate_normalization(source: str, result: str, language: str):
+    if not result or len(result) > settings.normalized_transcript_max_chars:
         raise ValueError("normalized transcript has invalid length")
-    if cyrillic_chars(transcript) and not cyrillic_chars(normalized):
+    if cyrillic_chars(source) and not cyrillic_chars(result):
         raise ValueError("normalized transcript changed language")
-    if detected_language == "en" and not any(
-        char.isascii() and char.isalpha() for char in normalized
-    ):
+    if language == "en" and not any(char.isascii() and char.isalpha() for char in result):
         raise ValueError("normalized English transcript changed language")
     if re.match(
         r"(?i)^(?:(?:нормализованный|исправленный|очищенный)\s+текст|выход(?:ит)?|output)\s*:",
-        normalized,
+        result,
     ):
         raise ValueError("normalized transcript contains a preamble")
-    if len(normalized) < len(transcript) * settings.llm_normalization_min_length_ratio:
-        # A small local model may summarize instead of editing. Completeness is
-        # more important than disfluency removal, so retain the source text.
-        normalized = transcript
-    return normalized, (time.perf_counter_ns() - started) / 1_000_000
 
 
 def remember_turn(call_id, transcript, reply):
-    conversation = runtime.conversations.setdefault(
-        call_id, {"messages": [], "last_seen": time.time()}
-    )
-    conversation["messages"].extend(
+    history = conversation_for(call_id)["messages"]
+    history.extend(
         (
             {"role": "user", "content": transcript},
             {"role": "assistant", "content": reply},
         )
     )
-    conversation["messages"] = conversation["messages"][-settings.history_turns * 2 :]
-    conversation["last_seen"] = time.time()
+    del history[: -settings.history_turns * 2]
 
 
 def deliver_reply(call_id, text, voice, reply_id):
-    body = json.dumps({"text": text, "voice": voice, "reply_id": reply_id}).encode()
-    request = urllib.request.Request(
-        f"{settings.voice_agent_url}/calls/{urllib.parse.quote(call_id, safe='')}/reply",
-        body,
-        {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {runtime.control_token}",
-        },
+    request_json(
+        "POST",
+        f"{settings.voice_agent_url}/calls/{quote(call_id, safe='')}/reply",
+        payload={"text": text, "voice": voice, "reply_id": reply_id},
+        token=runtime.control_token,
+        timeout=settings.reply_http_timeout,
     )
-    urllib.request.urlopen(request, timeout=settings.reply_http_timeout).read()

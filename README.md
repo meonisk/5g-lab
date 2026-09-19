@@ -43,6 +43,7 @@ tests serially from the repository root; commands and service details are in
 [running guide](docs/running.md). Use `scripts/compose.ps1 down` to stop the lab.
 
 See [project layout](docs/project-layout.md),
+[service code guide](app/services/README.md),
 [research workflow](app/research/README.md), and [changelog](CHANGELOG.md).
 The two-language interpreter currently supports one pair of participants;
 local functional tests do not establish production capacity or physical-radio

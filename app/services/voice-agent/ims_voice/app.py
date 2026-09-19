@@ -1,11 +1,13 @@
 """Service startup; importing pipeline modules does not start worker threads."""
 
 import threading
-from http.server import ThreadingHTTPServer
+
+from lab_common.http import run_api
 
 from . import runtime
-from .api import Api
-from .media import expire_calls, receive_audio
+from .api import api
+from .calls import expire_calls
+from .media import receive_audio
 
 
 def main():
@@ -16,4 +18,4 @@ def main():
         f"tts={runtime.tts_backend}:{runtime.tts_voice}",
         flush=True,
     )
-    ThreadingHTTPServer(("0.0.0.0", runtime.http_port), Api).serve_forever()
+    run_api(api, "0.0.0.0", runtime.http_port)

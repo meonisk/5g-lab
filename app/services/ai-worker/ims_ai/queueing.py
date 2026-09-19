@@ -1,24 +1,30 @@
-"""Bounded utterance queue and parallel per-call-safe inference workers."""
+"""Готовые реплики ждут в ограниченной очереди; звонки обрабатываются параллельно."""
 
 import queue
 import threading
 import time
+from dataclasses import dataclass
 
 from . import runtime
 from .utterances import process_utterance
 
 
+@dataclass(frozen=True)
+class UtteranceTask:
+    """Явные поля задания вместо словаря со строковыми ключами."""
+
+    ulaw: bytes
+    event: dict
+    received_at: float
+    end_reason: str
+    queued_at: float
+    call_id: str
+
+
 def enqueue_utterance(ulaw, event, received_at, end_reason):
     call_ids = event.get("call_ids") or []
     call_id = call_ids[0] if len(call_ids) == 1 else "unbound"
-    task = {
-        "ulaw": ulaw,
-        "event": event,
-        "received_at": received_at,
-        "end_reason": end_reason,
-        "queued_at": time.time(),
-        "call_id": call_id,
-    }
+    task = UtteranceTask(ulaw, event, received_at, end_reason, time.time(), call_id)
     with runtime.pending_condition:
         runtime.pending_utterances[call_id] = runtime.pending_utterances.get(call_id, 0) + 1
         runtime.call_locks.setdefault(call_id, threading.Lock())
@@ -32,26 +38,27 @@ def enqueue_utterance(ulaw, event, received_at, end_reason):
 
 
 def wait_for_call(call_id):
+    """BYE завершает запись только после всех уже принятых реплик этого звонка."""
     with runtime.pending_condition:
-        while runtime.pending_utterances.get(call_id, 0):
-            runtime.pending_condition.wait(timeout=1)
+        runtime.pending_condition.wait_for(lambda: not runtime.pending_utterances.get(call_id, 0))
 
 
 def process_utterances():
     while True:
         task = runtime.utterance_work.get()
-        call_id = task["call_id"]
+        call_id = task.call_id
         try:
+            # Историю одного звонка меняет только один worker в каждый момент.
             with runtime.call_locks[call_id]:
                 process_utterance(
-                    task["ulaw"],
-                    task["event"],
-                    task["received_at"],
-                    task["end_reason"],
-                    task["queued_at"],
+                    task.ulaw,
+                    task.event,
+                    task.received_at,
+                    task.end_reason,
+                    task.queued_at,
                 )
         except Exception as exc:
-            print(f"AI utterance_failed type={type(exc).__name__} error={exc}", flush=True)
+            print(f"AI utterance_failed type={type(exc).__name__}", flush=True)
         finally:
             with runtime.pending_condition:
                 remaining = runtime.pending_utterances.get(call_id, 1) - 1

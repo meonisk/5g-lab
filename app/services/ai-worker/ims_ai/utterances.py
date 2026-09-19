@@ -8,24 +8,12 @@ import time
 import numpy as np
 
 from . import runtime, settings
-from .audio import decode_audio, decode_pcm8
-from .interpretation import (
-    INTERPRETER_MODES,
-    delivery_call,
-    output_voice,
-    source_language,
-    validate_output,
-)
-from .llm import (
-    cyrillic_chars,
-    deliver_reply,
-    generate_reply,
-    normalize_transcript,
-    remember_turn,
-    repair_translation_language,
-)
+from .audio import decode_audio
+from .interpretation import source_language
+from .llm import cyrillic_chars
 from .maintenance import expire_events
-from .recording import recording_session, save_recording_turn
+from .replies import reply_to_utterance
+from .transcription import record_transcript
 
 
 def process_utterance(ulaw, event, received_at, end_reason, queued_at):
@@ -100,137 +88,9 @@ def process_utterance(ulaw, event, received_at, end_reason, queued_at):
             ),
         }
     )
-    if call_id and service_mode in {"transcribe", "bilingual_test"}:
-        normalized_transcript = transcript
-        if service_mode == "bilingual_test":
-            recording = recording_session(call_id)
-            source_key = event.get("source_stream_id") or str(event.get("ssrc"))
-            speaker = recording["speakers"].setdefault(
-                source_key, f"speaker_{len(recording['speakers']) + 1}"
-            )
-        else:
-            speaker = "caller"
-        if transcript:
-            try:
-                normalized_transcript, normalization_ms = normalize_transcript(
-                    transcript, detected_language
-                )
-                result.update(
-                    {
-                        "normalization_applied": True,
-                        "normalization_llm_model": settings.llm_model,
-                        "normalization_processing_ms": normalization_ms,
-                        "normalized_transcript_chars": len(normalized_transcript),
-                        "normalized_transcript_cyrillic_chars": cyrillic_chars(
-                            normalized_transcript
-                        ),
-                    }
-                )
-                print(
-                    f"AI transcript_normalized model={settings.llm_model} input_chars={len(transcript)} "
-                    f"output_chars={len(normalized_transcript)} llm_ms={normalization_ms:.3f} "
-                    f"calls={call_ids}",
-                    flush=True,
-                )
-            except Exception as exc:
-                # Fail closed for text persistence: keep the WAV so the turn can
-                # be reprocessed, but never label raw STT output as normalized.
-                normalized_transcript = ""
-                result.update(
-                    {
-                        "normalization_applied": False,
-                        "normalization_error_type": type(exc).__name__,
-                    }
-                )
-                print(
-                    f"AI transcript_normalization_failed model={settings.llm_model} "
-                    f"type={type(exc).__name__} calls={call_ids}",
-                    flush=True,
-                )
-        saved = save_recording_turn(
-            call_id, decode_pcm8(ulaw), normalized_transcript, result, speaker
-        )
-        if saved:
-            result.update(
-                {
-                    "recording_session_id": saved["session_id"],
-                    "recording_saved": saved["saved"],
-                    "recording_turn": saved.get("turn"),
-                    "recording_limit_reached": saved.get("limit_reached", False),
-                }
-            )
-    if (
-        transcript
-        and call_id
-        and service_mode in {"translate", "assistant", *INTERPRETER_MODES}
-        and runtime.reply_counts.get(call_id, 0) < settings.max_replies_per_call
-    ):
-        try:
-            reply, llm_ms = generate_reply(call_id, transcript, service_mode)
-            if reply:
-                reply_cyrillic = cyrillic_chars(reply)
-                try:
-                    latin_chars = validate_output(reply, service_mode, reply_cyrillic)
-                except ValueError:
-                    if service_mode not in INTERPRETER_MODES:
-                        raise
-                    reply, repair_ms = repair_translation_language(reply, service_mode)
-                    llm_ms += repair_ms
-                    reply_cyrillic = cyrillic_chars(reply)
-                    latin_chars = validate_output(reply, service_mode, reply_cyrillic)
-                reply_voice = output_voice(service_mode)
-                target_call_id = delivery_call(call_id, service_mode)
-                reply_id = hashlib.sha256(
-                    f"{call_id}:{result['turn_index']}:{queued_at}".encode()
-                ).hexdigest()[:16]
-                dispatch_started = time.perf_counter_ns()
-                deliver_reply(target_call_id, reply, reply_voice, reply_id)
-                reply_dispatch_ms = (time.perf_counter_ns() - dispatch_started) / 1_000_000
-                runtime.reply_counts[call_id] = runtime.reply_counts.get(call_id, 0) + 1
-                remember_turn(call_id, transcript, reply)
-                while len(runtime.reply_counts) > settings.buffer_max:
-                    evicted = next(iter(runtime.reply_counts))
-                    runtime.reply_counts.pop(evicted, None)
-                    runtime.turn_counts.pop(evicted, None)
-                    runtime.conversations.pop(evicted, None)
-                result.update(
-                    {
-                        "llm_model": settings.llm_model,
-                        "llm_response_chars": len(reply),
-                        "llm_response_cyrillic_chars": reply_cyrillic,
-                        "llm_response_latin_chars": latin_chars,
-                        "reply_voice": reply_voice,
-                        "reply_id": reply_id,
-                        "llm_processing_ms": llm_ms,
-                        "reply_delivered": True,
-                        "reply_dispatch_ms": reply_dispatch_ms,
-                        "reply_destination_mode": (
-                            "interpret_en"
-                            if service_mode == "interpret_ru"
-                            else "interpret_ru"
-                            if service_mode == "interpret_en"
-                            else service_mode
-                        ),
-                        "reply_index": runtime.reply_counts[call_id],
-                    }
-                )
-                print(
-                    f"AI reply_delivered model={settings.llm_model} prompt_chars={len(transcript)} "
-                    f"response_chars={len(reply)} llm_ms={llm_ms:.3f} calls={call_ids}",
-                    flush=True,
-                )
-        except Exception as exc:
-            result.update(
-                {
-                    "llm_model": settings.llm_model,
-                    "reply_delivered": False,
-                    "llm_error_type": type(exc).__name__,
-                }
-            )
-            print(
-                f"AI reply_failed model={settings.llm_model} type={type(exc).__name__} calls={call_ids}",
-                flush=True,
-            )
+    # После STT выбираем независимые действия по режиму звонка.
+    record_transcript(ulaw, event, result, transcript, detected_language)
+    reply_to_utterance(event, result, transcript, queued_at)
     processed_at = time.time()
     result.update(
         {

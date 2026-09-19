@@ -41,7 +41,6 @@ rtp_port_min = int(os.environ["RTPENGINE_PORT_MIN"])
 rtp_port_max = int(os.environ["RTPENGINE_PORT_MAX"])
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
-call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
 reply_id_pattern = re.compile(r"^[a-f0-9]{16}$")
 
 rtp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

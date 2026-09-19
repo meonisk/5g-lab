@@ -1,5 +1,6 @@
 """Single offline developer/CI command; never changes the running stand."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,7 +37,8 @@ def main():
         [sys.executable, "app/research/tools/research_run.py", "verify", "--root", "."],
     ]
     for command in commands:
-        subprocess.run(command, cwd=ROOT, check=True)
+        environment = dict(os.environ, PYTHONPATH=str(ROOT / "app/services"))
+        subprocess.run(command, cwd=ROOT, check=True, env=environment)
     print("TEAM OFFLINE CHECKS: PASS")
 
 
