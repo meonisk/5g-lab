@@ -61,6 +61,12 @@ llm_url = os.environ["LLM_URL"]
 llm_model = os.environ["LLM_MODEL"]
 
 llm_timeout = float(os.environ["LLM_TIMEOUT_SECONDS"])
+llm_keep_alive = os.environ["LLM_KEEP_ALIVE"]
+# Ollama accepts durations like '5m', but infinite retention must be numeric.
+if llm_keep_alive.lstrip("-").isdigit():
+    llm_keep_alive = int(llm_keep_alive)
+llm_context_length = int(os.environ["LLM_CONTEXT_LENGTH"])
+llm_warmup_timeout = float(os.environ["LLM_WARMUP_TIMEOUT_SECONDS"])
 
 llm_max_tokens = int(os.environ["LLM_MAX_TOKENS"])
 

@@ -3,6 +3,7 @@
 import ipaddress
 import socket
 import struct
+import time
 
 from . import runtime
 
@@ -73,4 +74,12 @@ def capture():
                 and len(value["audio"]) < runtime.audio_max_bytes
             ):
                 remaining = runtime.audio_max_bytes - len(value["audio"])
-                value["audio"].extend(payload[:remaining])
+                accepted = payload[:remaining]
+                value["audio"].extend(accepted)
+                # Wall-clock capture times correlate source speech with first
+                # translated RTP on this host, without storing caller content.
+                captured_at = time.time()
+                value.setdefault("audio_frame_received_at", []).extend(
+                    captured_at - (len(accepted) - offset - 160) / 8000
+                    for offset in range(0, len(accepted) - 159, 160)
+                )

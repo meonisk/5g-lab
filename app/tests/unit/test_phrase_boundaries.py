@@ -68,7 +68,7 @@ class PhraseBoundaries(unittest.TestCase):
         with patch.object(self.segmentation, "enqueue_utterance") as emitted:
             self.segmentation.process_event(self.event(b"\x00" * 8000 * 8))
             emitted.assert_not_called()
-            self.segmentation.process_event(self.event(b"\xff" * 8000 * 2, observed=102))
+            self.segmentation.process_event(self.event(b"\xff" * 8000 * 2, observed=100.25))
             self.assertEqual(emitted.call_count, 1)
             self.assertEqual(emitted.call_args.args[3], "silence")
             self.assertGreater(len(emitted.call_args.args[0]), 8000 * 8)
@@ -101,11 +101,40 @@ class PhraseBoundaries(unittest.TestCase):
         self.segmentation.process_event(event)
         self.assertFalse(self.runtime.buffers)
 
+    def test_idle_rtp_finishes_without_next_sentence(self):
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(self.event(b"\x00" * 8000))
+            state = next(iter(self.runtime.buffers.values()))
+            self.segmentation.flush_idle_streams(state["last_seen"] + 0.25)
+            emitted.assert_not_called()
+            self.segmentation.flush_idle_streams(state["last_seen"] + 2)
+            self.assertEqual(emitted.call_count, 1)
+            self.assertEqual(emitted.call_args.args[3], "idle-gap")
+            self.segmentation.flush_idle_streams(state["last_seen"] + 3)
+            self.assertEqual(emitted.call_count, 1)
+
     def test_short_limit_remains_for_interactive_agent(self):
         with patch.object(self.segmentation, "enqueue_utterance") as emitted:
             self.segmentation.process_event(self.event(b"\x00" * 8000 * 6, mode="assistant"))
             self.assertEqual(emitted.call_count, 1)
             self.assertEqual(emitted.call_args.args[3], "maximum-duration")
+
+    def test_last_voice_timestamp_excludes_trailing_silence(self):
+        event = self.event(b"\x00" * 8000 + b"\xff" * 8000)
+        event["audio_frame_received_at"] = [100 + index * 0.02 for index in range(100)]
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(event)
+            self.assertAlmostEqual(emitted.call_args.args[1]["last_voice_packet_at"], 100.98)
+
+    def test_llm_requests_preserve_residency_and_bounded_context(self):
+        from ims_ai import llm
+
+        with patch.object(llm, "request_json", return_value={"message": {"content": "OK"}}) as api:
+            text, _ = llm.chat([{"role": "user", "content": "Test"}], 8)
+            self.assertEqual(text, "OK")
+            payload = api.call_args.kwargs["payload"]
+            self.assertEqual(payload["keep_alive"], -1)
+            self.assertEqual(payload["options"]["num_ctx"], 2048)
 
 
 if __name__ == "__main__":

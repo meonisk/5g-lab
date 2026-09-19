@@ -54,8 +54,8 @@ check 'faster-whisper model is ready' python -c \
     'import json,sys; assert json.load(sys.stdin)["status"] == "ok"' <<<"$status"
 check 'configured backend is live' python -c \
     'import json,sys; assert json.load(sys.stdin)["backend"] == "faster-whisper"' <<<"$status"
-llm_list=$(docker exec lab-llm-worker ollama list 2>/dev/null || true)
-check 'pinned local LLM is available' grep -q "${LLM_MODEL}.*${LLM_MODEL_DIGEST:0:12}" <<<"$llm_list"
+llm_source=$(docker exec lab-llm-worker ollama show "$LLM_MODEL" --modelfile 2>/dev/null || true)
+check 'pinned Unsloth GGUF is available' grep -q "sha256-${LLM_GGUF_SHA256}" <<<"$llm_source"
 
 "${base[@]}" up -d --no-deps --force-recreate sipue1 >/dev/null
 deadline=$((SECONDS + 70))

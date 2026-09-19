@@ -135,6 +135,7 @@ def build_observation(
                 "codec": "PCMU",
                 "sample_rate_hz": 8000,
                 "audio_bytes": len(audio),
+                "audio_frame_received_at": counters.get("audio_frame_received_at", []),
                 "audio_sha256": hashlib.sha256(audio).hexdigest(),
                 "audio_ulaw_b64": base64.b64encode(audio).decode("ascii"),
             }

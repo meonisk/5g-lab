@@ -96,6 +96,7 @@ services:
       VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
     depends_on:
       control-secret-init: {condition: service_completed_successfully}
+      llm-worker: {condition: service_started}
     volumes:
       - service-control-secret:/run/lab-control:ro
       - ai-model-cache:${AI_MODEL_CACHE}
@@ -106,12 +107,22 @@ services:
       lab5g:
         ipv4_address: ${AI_WORKER_IP}
       ai-backend: {}
+    healthcheck:
+      test: [CMD, python, -c, "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ['AI_WORKER_PORT']+'/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 180s
 
   # Ollama is intentionally reachable only by the AI Worker on an internal
   # network. The one-shot initializer is the only component allowed outbound
   # access while populating the content-verified model volume.
   llm-model-init:
-    image: ${OLLAMA_IMAGE}
+    build:
+      context: app/infrastructure/images/llm-init
+      args:
+        OLLAMA_IMAGE: ${OLLAMA_IMAGE}
+    image: lab-llm-init
     container_name: lab-llm-model-init
     restart: "no"
     read_only: true
@@ -119,16 +130,10 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       OLLAMA_HOST: 127.0.0.1:11434
+      OLLAMA_NO_CLOUD: "1"
       LLM_MODEL: ${LLM_MODEL}
-      LLM_MODEL_DIGEST: ${LLM_MODEL_DIGEST}
-    entrypoint: ["/bin/sh", "-ec"]
-    command: >-
-      '/bin/ollama serve & pid=$$!;
-      trap "kill $$pid" EXIT;
-      until /bin/ollama list >/dev/null 2>&1; do sleep 1; done;
-      /bin/ollama pull "$$LLM_MODEL";
-      set -- $$('/bin/ollama' list | grep "^$$LLM_MODEL "); actual=$$2;
-      case "$$LLM_MODEL_DIGEST" in "$$actual"*) ;; *) echo "model digest mismatch: $$actual" >&2; exit 1;; esac'
+      LLM_GGUF_URL: ${LLM_GGUF_URL}
+      LLM_GGUF_SHA256: ${LLM_GGUF_SHA256}
     volumes:
       - llm-model-cache:/root/.ollama
     tmpfs:
@@ -145,7 +150,15 @@ services:
     pids_limit: ${CUSTOM_SERVICE_PIDS_LIMIT}
     cpus: ${LLM_WORKER_CPU_LIMIT}
     mem_limit: ${LLM_WORKER_MEMORY_LIMIT}
+    runtime: ${LLM_CONTAINER_RUNTIME}
+    depends_on:
+      llm-model-init: {condition: service_completed_successfully}
     environment:
+      NVIDIA_VISIBLE_DEVICES: ${LLM_GPU_DEVICES}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_CONTEXT_LENGTH: ${LLM_CONTEXT_LENGTH}
+      OLLAMA_FLASH_ATTENTION: "1"
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_KEEP_ALIVE: ${LLM_KEEP_ALIVE}
       OLLAMA_NUM_PARALLEL: ${LLM_NUM_PARALLEL}

@@ -219,6 +219,13 @@ def latency_rows(ai_events, tts_events):
         rows.append(
             {
                 "source_language": event.get("detected_language"),
+                # Capture -> first translated packet sent; not physical
+                # handset playback latency (UE jitter buffer is excluded).
+                "speech_end_to_first_rtp_ms": (
+                    round((tts["first_rtp_at"] - event["last_voice_packet_at"]) * 1000, 1)
+                    if tts.get("first_rtp_at") and event.get("last_voice_packet_at")
+                    else None
+                ),
                 "sentence_assembly_ms": round(event.get("sentence_assembly_ms", 0), 1),
                 "queue_wait_ms": round(event.get("queue_wait_ms", 0), 1),
                 "stt_ms": round(event.get("stt_processing_ms", 0), 1),

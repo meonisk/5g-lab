@@ -9,6 +9,11 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- feat: pinned Unsloth Qwen3 4B Q4_K_M GGUF import, optional NVIDIA runtime,
+  resident LLM and STT/LLM warmup before readiness; Gemma configuration guide.
+- fix: publish audio every 250 ms and finalize DTX speech without waiting for
+  another sentence; record speech-end-to-first-translated-RTP latency.
+
 ### Removed
 
 - chore: remove unused vendored MySQL/PyHSS image build recipes and the unused

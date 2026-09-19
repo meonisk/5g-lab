@@ -52,6 +52,9 @@ Review `app/config/lab.env` before starting. Run integration
 tests serially from the repository root; commands and service details are in
 [running guide](docs/running.md). Use `scripts/compose.ps1 down` to stop the lab.
 
+LLM weights are pinned Unsloth Qwen3 4B Q4_K_M. See [local models](docs/local-models.md)
+for CPU/NVIDIA configuration, Gemma alternatives, warmup and latency definitions.
+
 See [project layout](docs/project-layout.md),
 [service code guide](app/services/README.md),
 [research workflow](app/research/README.md), and [changelog](CHANGELOG.md).

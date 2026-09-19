@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import queue
 import time
 
 from . import runtime, settings
 from .queueing import enqueue_utterance, wait_for_call
-from .segmentation import process_event
+from .segmentation import flush_idle_streams, process_event
 
 FINALIZED_RECORDING_MODES = {
     "transcribe",
@@ -35,6 +36,7 @@ def flush_buffered_speech(call_id: str) -> None:
         if has_complete_speech and mode_needs_tail:
             completed_event = dict(buffered_event)
             completed_event["_utterance_started_at"] = buffered_stream.get("utterance_started_at")
+            completed_event["last_voice_packet_at"] = buffered_stream.get("last_voice_packet_at")
             enqueue_utterance(
                 bytes(buffered_stream["utterance"]),
                 completed_event,
@@ -92,7 +94,14 @@ def finalize_call(call_id: str) -> None:
 def process_events():
     """Последовательно менять буферы; тяжёлые реплики уходят в отдельную очередь."""
     while True:
-        event = runtime.work.get()
+        try:
+            event = runtime.work.get(timeout=0.1)
+        except queue.Empty:
+            try:
+                flush_idle_streams(time.time())
+            except queue.Full:
+                print("AI idle_phrase_queue_full", flush=True)
+            continue
 
         try:
             if event.get("control") == "end_call":

@@ -186,9 +186,23 @@ def main():
     wait_for_pyhss(public_environment())
     provision_subscribers(bash)
     restart_registration_chain()
+    # Even --skip-verify must not advertise readiness while models are cold.
+    deadline = time.monotonic() + float(public_environment()["LLM_WARMUP_TIMEOUT_SECONDS"]) + 60
+    while time.monotonic() < deadline:
+        health = run(
+            ["docker", "inspect", "--format", "{{.State.Health.Status}}", "lab-ai-worker"],
+            "Could not inspect AI readiness",
+            capture_output=True,
+            text=True,
+        )
+        if health.stdout.strip() == "healthy":
+            break
+        time.sleep(2)
+    else:
+        raise RuntimeError("STT/LLM warmup failed; inspect lab-ai-worker logs")
     if not arguments.skip_verify:
         run_gates(bash)
-    print("LOCAL 5G IMS LAB: READY")
+    print("LOCAL 5G IMS LAB: READY (STT and LLM warmed)")
 
 
 if __name__ == "__main__":

@@ -69,6 +69,7 @@ def empty_stream_state(now: float) -> dict:
         "silence_bytes": 0,
         "in_speech": False,
         "utterance_started_at": None,
+        "last_voice_packet_at": None,
         "last_seen": now,
     }
 
@@ -99,6 +100,7 @@ def queue_completed_phrase(
     """Передать неизменяемый снимок фразы worker-у и очистить буфер."""
     completed_event = dict(event)
     completed_event["_utterance_started_at"] = state.get("utterance_started_at")
+    completed_event["last_voice_packet_at"] = state.get("last_voice_packet_at")
     completed_audio = bytes(state["utterance"])
 
     reset_phrase(state)
@@ -137,7 +139,11 @@ def remember_latest_event(state: dict, event: dict, received_at: float, now: flo
     state["last_seen"] = now
     state["observed_at"] = event.get("observed_at")
     state["received_at"] = received_at
-    state["event"] = {key: value for key, value in event.items() if key != "audio_ulaw_b64"}
+    state["event"] = {
+        key: value
+        for key, value in event.items()
+        if key not in {"audio_ulaw_b64", "audio_frame_received_at"}
+    }
 
 
 def append_frame(state: dict, frame: bytes) -> None:
@@ -196,10 +202,29 @@ def process_audio_frames(
             continue
 
         append_frame(state, frame)
+        timestamps = event.get("audio_frame_received_at", [])
+        frame_index = frame_offset // PCMU_FRAME_BYTES
+        if state["in_speech"] and state["silence_bytes"] == 0 and frame_index < len(timestamps):
+            state["last_voice_packet_at"] = timestamps[frame_index]
 
         reason = completion_reason(state, silence_limit, utterance_limit)
         if reason:
             queue_completed_phrase(state, event, received_at, reason)
+
+
+def flush_idle_streams(now: float) -> None:
+    """DTX produces no silent frames: finish without waiting for the next sentence.
+
+    Called only by the media-assembler thread, after its input queue is drained.
+    The timeout must exceed the publisher interval plus transport jitter.
+    """
+    for state in runtime.buffers.values():
+        if (
+            state["in_speech"]
+            and state["speech_bytes"] >= settings.min_utterance_bytes
+            and now - state["last_seen"] >= settings.dialogue_event_gap_seconds
+        ):
+            queue_completed_phrase(state, state["event"], state["received_at"], "idle-gap")
 
 
 def process_event(event: dict) -> None:

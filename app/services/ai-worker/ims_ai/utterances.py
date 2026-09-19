@@ -85,6 +85,7 @@ def public_event_metadata(event: dict) -> dict:
     private_fields = {
         "audio_sha256",
         "audio_ulaw_b64",
+        "audio_frame_received_at",
         "received_at",
         "_utterance_started_at",
     }

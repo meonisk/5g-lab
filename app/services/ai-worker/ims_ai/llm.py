@@ -23,12 +23,25 @@ def chat(messages: list[dict], max_tokens: int, temperature: float = 0) -> tuple
         payload={
             "model": settings.llm_model,
             "stream": False,
+            "keep_alive": settings.llm_keep_alive,
             "messages": messages,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "num_ctx": settings.llm_context_length,
+            },
         },
         timeout=settings.llm_timeout,
     )
     text = " ".join(response["message"]["content"].split())
+    # Timing only: never put caller text in operational logs.
+    print(
+        f"LLM timing load_ms={response.get('load_duration', 0) / 1e6:.1f} "
+        f"prompt_ms={response.get('prompt_eval_duration', 0) / 1e6:.1f} "
+        f"generation_ms={response.get('eval_duration', 0) / 1e6:.1f} "
+        f"tokens={response.get('eval_count', 0)}",
+        flush=True,
+    )
     return text, (time.perf_counter() - started) * 1000
 
 
