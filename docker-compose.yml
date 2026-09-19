@@ -442,6 +442,7 @@ services:
       HUGGINGFACE_HUB_CACHE: ${AI_MODEL_CACHE}
       XDG_CACHE_HOME: ${AI_MODEL_CACHE}
       HF_HUB_DISABLE_XET: ${AI_HF_DISABLE_XET}
+      VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
     depends_on:
       control-secret-init: {condition: service_completed_successfully}
     volumes:
@@ -452,6 +453,57 @@ services:
     networks:
       lab5g:
         ipv4_address: ${AI_WORKER_IP}
+      ai-backend: {}
+
+  # Ollama is intentionally reachable only by the AI Worker on an internal
+  # network. The one-shot initializer is the only component allowed outbound
+  # access while populating the content-verified model volume.
+  llm-model-init:
+    image: ollama/ollama@sha256:da6e0dc5651df159e45686fd663c4dbe1624a52c44d7280eeac1551d8f865532
+    container_name: lab-llm-model-init
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      OLLAMA_HOST: 127.0.0.1:11434
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_MODEL_DIGEST: ${LLM_MODEL_DIGEST}
+    entrypoint: ["/bin/sh", "-ec"]
+    command: >-
+      '/bin/ollama serve & pid=$$!;
+      trap "kill $$pid" EXIT;
+      until /bin/ollama list >/dev/null 2>&1; do sleep 1; done;
+      /bin/ollama pull "$$LLM_MODEL";
+      set -- $$('/bin/ollama' list | grep "^$$LLM_MODEL "); actual=$$2;
+      case "$$LLM_MODEL_DIGEST" in "$$actual"*) ;; *) echo "model digest mismatch: $$actual" >&2; exit 1;; esac'
+    volumes:
+      - llm-model-cache:/root/.ollama
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks: [lab5g]
+
+  llm-worker:
+    image: ollama/ollama@sha256:da6e0dc5651df159e45686fd663c4dbe1624a52c44d7280eeac1551d8f865532
+    container_name: lab-llm-worker
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: ${CUSTOM_SERVICE_PIDS_LIMIT}
+    cpus: ${LLM_WORKER_CPU_LIMIT}
+    mem_limit: ${LLM_WORKER_MEMORY_LIMIT}
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: 5m
+      OLLAMA_NUM_PARALLEL: 1
+      OLLAMA_MAX_QUEUE: ${AI_QUEUE_MAX}
+    volumes:
+      - llm-model-cache:/root/.ollama
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks: [ai-backend]
+    logging: *bounded-logging
 
   voice-agent:
     <<: *custom-service
@@ -514,8 +566,13 @@ networks:
     ipam:
       config:
         - subnet: ${LAB_NETWORK_CIDR}
+          ip_range: ${LAB_DYNAMIC_IP_RANGE}
+  ai-backend:
+    name: lab-ai-backend
+    internal: true
 
 volumes:
   mongo-data:
   service-control-secret:
   ai-model-cache:
+  llm-model-cache:

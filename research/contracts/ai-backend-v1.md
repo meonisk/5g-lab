@@ -1,7 +1,7 @@
 # AI backend measurement contract v1
 
-Status: live PCMU-to-STT contract implemented; scientific quality comparison
-remains blocked on the fixed-corpus pilot.
+Status: live PCMU-to-STT-to-LLM-to-TTS contract implemented; scientific quality
+comparison remains blocked on the fixed-corpus pilot.
 
 The IMS and media layers do not depend on a model vendor. The current
 `POST /observe` path carries bounded PCMU audio to the first replaceable local
@@ -11,8 +11,9 @@ backend. An event has:
 - `observed_at`, the adapter wall-clock timestamp;
 - RTP-window counts, codec metadata, an audio hash, and a base64 in-memory audio
   window, but no subscriber SIP identity;
-- `backend_id`, immutable `model_revision`, transcript, audio duration/RMS,
-  `received_at`, `processed_at`, `processing_ms`, and `adapter_to_worker_ms`.
+- `backend_id`, immutable model revisions, audio duration/RMS, character counts,
+  STT/LLM processing times, delivery status, and adapter timing. Raw transcript,
+  prompt, and generated reply are deliberately absent from the event API.
 
 `processing_ms` uses the worker monotonic clock and is the valid control-service
 time. `adapter_to_worker_ms` uses synchronized wall clocks and is diagnostic;

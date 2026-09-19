@@ -15,6 +15,11 @@ try {
     & "$PSScriptRoot\compose.ps1" up -d --build
     if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed' }
 
+    docker wait lab-llm-model-init | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'could not wait for pinned LLM initialization' }
+    $LlmInitExit = docker inspect --format '{{.State.ExitCode}}' lab-llm-model-init
+    if ($LASTEXITCODE -ne 0 -or $LlmInitExit -ne '0') { throw 'pinned LLM initialization failed' }
+
     docker cp "$LabRoot\scripts\subscribers.js" lab-mongo:/tmp/subscribers.js
     if ($LASTEXITCODE -ne 0) { throw 'Open5GS subscriber copy failed' }
     docker exec lab-mongo mongosh --quiet /tmp/subscribers.js
@@ -46,7 +51,7 @@ try {
     Start-Sleep -Seconds 12
 
     if (-not $SkipVerify) {
-        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-security.sh')) {
+        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-security.sh')) {
             & $Bash "scripts/$gate"
             if ($LASTEXITCODE -ne 0) { throw "$gate failed" }
         }

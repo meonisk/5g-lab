@@ -19,6 +19,11 @@ rtp_port = int(os.environ["VOICE_AGENT_RTP_PORT"])
 http_port = int(os.environ["VOICE_AGENT_HTTP_PORT"])
 greeting = os.environ["VOICE_AGENT_GREETING"]
 reply_text = os.environ["VOICE_AGENT_REPLY"]
+tts_backend = os.environ["TTS_BACKEND"]
+if tts_backend != "espeak-ng":
+    raise ValueError(f"unsupported lightweight TTS backend: {tts_backend}")
+reply_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
+llm_mode = os.environ["VOICE_AGENT_LLM_MODE"] == "1"
 vad_rms = int(os.environ["VOICE_AGENT_VAD_RMS"])
 silence_seconds = int(os.environ["VOICE_AGENT_SILENCE_MS"]) / 1000
 call_timeout = int(os.environ["VOICE_AGENT_CALL_TIMEOUT"])
@@ -87,10 +92,11 @@ def send_audio(call_id, text, reason):
         call["seq"] = seq
         call["timestamp"] = timestamp
         event = {"call_id": call_id, "event": "tts_sent", "reason": reason,
+                 "backend": tts_backend,
                  "packets": sent, "at": time.time()}
         events.append(event)
         del events[:-event_retention]
-    print(f"VOICE tts call_id={call_id} reason={reason} packets={sent}", flush=True)
+    print(f"VOICE tts call_id={call_id} reason={reason} backend={tts_backend} packets={sent}", flush=True)
 
 def receive_audio():
     while True:
@@ -109,7 +115,8 @@ def receive_audio():
                 if rms >= vad_rms:
                     call["speech_seen"] = True
                     call["last_voice"] = now
-                elif call["speech_seen"] and not call["replied"] and now - call["last_voice"] >= silence_seconds:
+                elif (not llm_mode and call["speech_seen"] and not call["replied"] and
+                      now - call["last_voice"] >= silence_seconds):
                     call["replied"] = True
                     responses.append(call_id)
         for call_id in responses:
@@ -144,10 +151,28 @@ class Api(BaseHTTPRequestHandler):
             body = json.dumps({"status": "ok", "mode": "TERMINATE", "calls": calls, "events": events}).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
     def do_POST(self):
-        if self.path != "/calls":
-            self.send_response(404); self.end_headers(); return
         if not self.authorized():
             self.reject_unauthorized(); return
+        if self.path.startswith("/calls/") and self.path.endswith("/reply"):
+            encoded_call_id = self.path.removeprefix("/calls/").removesuffix("/reply").rstrip("/")
+            call_id = urllib.parse.unquote(encoded_call_id)
+            length = int(self.headers.get("Content-Length", "0"))
+            if not call_id_pattern.fullmatch(call_id) or length < 2 or length > 4096:
+                self.send_response(400); self.end_headers(); return
+            try:
+                data = json.loads(self.rfile.read(length))
+                text = " ".join(data["text"].split())
+            except (TypeError, KeyError, json.JSONDecodeError):
+                self.send_response(400); self.end_headers(); return
+            if not text or len(text) > reply_max_chars or any(ord(char) < 32 for char in text):
+                self.send_response(400); self.end_headers(); return
+            with lock:
+                if call_id not in calls:
+                    self.send_response(404); self.end_headers(); return
+            threading.Thread(target=send_audio, args=(call_id, text, "llm_reply"), daemon=True).start()
+            self.send_response(202); self.end_headers(); return
+        if self.path != "/calls":
+            self.send_response(404); self.end_headers(); return
         length = int(self.headers.get("Content-Length", "0"))
         if length < 2 or length > 4096:
             self.send_response(413); self.end_headers(); return

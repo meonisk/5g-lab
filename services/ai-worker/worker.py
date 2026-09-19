@@ -7,6 +7,8 @@ import os
 import queue
 import threading
 import time
+import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
@@ -20,6 +22,7 @@ event_retention = int(os.environ["AI_EVENT_RETENTION"])
 retention_seconds = int(os.environ["AI_TRANSCRIPT_RETENTION_SECONDS"])
 buffer_max = int(os.environ["AI_STREAM_BUFFER_MAX"])
 buffer_ttl = int(os.environ["AI_STREAM_BUFFER_TTL_SECONDS"])
+max_replies_per_call = int(os.environ["AI_MAX_REPLIES_PER_CALL"])
 request_max_bytes = int(os.environ["AI_REQUEST_MAX_BYTES"])
 window_bytes = int(float(os.environ["AI_AUDIO_WINDOW_SECONDS"]) * 8000)
 backend = os.environ["AI_BACKEND"]
@@ -28,8 +31,17 @@ model_revision = os.environ["AI_MODEL_REVISION"]
 device = os.environ["AI_DEVICE"]
 compute_type = os.environ["AI_COMPUTE_TYPE"]
 language = os.environ["AI_LANGUAGE"]
+llm_url = os.environ["LLM_URL"]
+llm_model = os.environ["LLM_MODEL"]
+llm_timeout = float(os.environ["LLM_TIMEOUT_SECONDS"])
+llm_max_tokens = int(os.environ["LLM_MAX_TOKENS"])
+llm_temperature = float(os.environ["LLM_TEMPERATURE"])
+llm_system_prompt = os.environ["LLM_SYSTEM_PROMPT"]
+llm_response_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
+voice_agent_url = os.environ["VOICE_AGENT_URL"].rstrip("/")
 model = None
 model_error = None
+reply_counts = {}
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 
@@ -58,6 +70,33 @@ def decode_audio(ulaw):
     return np.frombuffer(pcm16, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+def generate_reply(transcript):
+    request_body = json.dumps({
+        "model": llm_model,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": llm_system_prompt},
+            {"role": "user", "content": transcript},
+        ],
+        "options": {"temperature": llm_temperature, "num_predict": llm_max_tokens},
+    }).encode()
+    request = urllib.request.Request(llm_url, request_body, {"Content-Type": "application/json"})
+    started = time.perf_counter_ns()
+    response = json.load(urllib.request.urlopen(request, timeout=llm_timeout))
+    text = " ".join(response["message"]["content"].split())[:llm_response_max_chars]
+    return text, (time.perf_counter_ns() - started) / 1_000_000
+
+
+def deliver_reply(call_id, text):
+    body = json.dumps({"text": text}).encode()
+    request = urllib.request.Request(
+        f"{voice_agent_url}/calls/{urllib.parse.quote(call_id, safe='')}/reply",
+        body,
+        {"Content-Type": "application/json", "Authorization": f"Bearer {control_token}"},
+    )
+    urllib.request.urlopen(request, timeout=3).read()
+
+
 def process_events():
     while True:
         event = work.get()
@@ -70,6 +109,8 @@ def process_events():
 
 
 def process_event(event):
+    if event.get("direction") != "caller_to_core":
+        return
     received_at = event.pop("received_at")
     encoded = event.pop("audio_ulaw_b64", "")
     try:
@@ -119,7 +160,6 @@ def process_event(event):
         "audio_sha256": hashlib.sha256(ulaw).hexdigest(),
         "audio_duration_seconds": len(ulaw) / 8000,
         "audio_rms": rms,
-        "transcript": transcript,
         "transcript_chars": len(transcript),
         "detected_language": detected_language,
         "language_probability": language_probability,
@@ -129,6 +169,24 @@ def process_event(event):
         "adapter_to_worker_ms": ((received_at - event["observed_at"]) * 1000
                                   if isinstance(event.get("observed_at"), (int, float)) else None),
     })
+    call_ids = event.get("call_ids") or []
+    call_id = call_ids[0] if len(call_ids) == 1 else None
+    if transcript and call_id and reply_counts.get(call_id, 0) < max_replies_per_call:
+        try:
+            reply, llm_ms = generate_reply(transcript)
+            if reply:
+                deliver_reply(call_id, reply)
+                reply_counts[call_id] = reply_counts.get(call_id, 0) + 1
+                while len(reply_counts) > buffer_max:
+                    reply_counts.pop(next(iter(reply_counts)))
+                result.update({"llm_model": llm_model, "llm_response_chars": len(reply),
+                               "llm_processing_ms": llm_ms, "reply_delivered": True})
+                print(f"AI reply_delivered model={llm_model} prompt_chars={len(transcript)} "
+                      f"response_chars={len(reply)} llm_ms={llm_ms:.3f} calls={call_ids}", flush=True)
+        except Exception as exc:
+            result.update({"llm_model": llm_model, "reply_delivered": False,
+                           "llm_error_type": type(exc).__name__})
+            print(f"AI reply_failed model={llm_model} type={type(exc).__name__} calls={call_ids}", flush=True)
     with lock:
         events.append(result)
         expire_events(processed_at)

@@ -390,9 +390,11 @@ def validate(root: Path, design_path: Path, run_id: str) -> None:
 
 def verify(root: Path) -> None:
     smoke = root / "research" / "designs" / "local-instrumentation-smoke-v1.json"
+    conversational = root / "research" / "designs" / "local-conversational-loop-smoke-v1.json"
     candidate = load_json(root / "research" / "designs" / "ai-scale-study-v1.json")
     design = load_json(smoke)
     validate_design(design)
+    validate_design(load_json(conversational))
     if candidate.get("design_status") != "DRAFT_REQUIRES_PILOT_FREEZE":
         raise ValueError("AI scale candidate must remain explicitly unfrozen")
     for schema in ("run-manifest.schema.json", "metric-record.schema.json"):
@@ -421,7 +423,7 @@ def main() -> int:
     parser.add_argument("--run-id")
     args = parser.parse_args()
     root = args.root.resolve()
-    design = (args.design or root / "research" / "designs" / "local-instrumentation-smoke-v1.json").resolve()
+    design = (args.design or root / "research" / "designs" / "local-conversational-loop-smoke-v1.json").resolve()
     try:
         if args.command == "prepare":
             prepare(root, design, args.run_id)

@@ -18,7 +18,7 @@ inspect_equals() {
     test "$actual" = "$expected"
 }
 
-for container in lab-sip-as lab-media-adapter lab-ai-worker lab-voice-agent; do
+for container in lab-sip-as lab-media-adapter lab-ai-worker lab-voice-agent lab-llm-worker; do
     check "$container root filesystem is read-only" inspect_equals "$container" '{{.HostConfig.ReadonlyRootfs}}' true
     check "$container has no-new-privileges" sh -c \
         "docker inspect --format '{{json .HostConfig.SecurityOpt}}' '$container' | grep -q 'no-new-privileges'"
@@ -30,7 +30,7 @@ done
 check 'PyHSS file logs are transient tmpfs' sh -c \
     "docker inspect --format '{{json .HostConfig.Tmpfs}}' lab-pyhss | grep -q '/pyhss/log'"
 
-for container in lab-sip-as lab-ai-worker lab-voice-agent; do
+for container in lab-sip-as lab-ai-worker lab-voice-agent lab-llm-worker; do
     check "$container drops every Linux capability" sh -c \
         "docker inspect --format '{{json .HostConfig.CapDrop}}' '$container' | grep -q '\"ALL\"'"
 done
@@ -50,6 +50,11 @@ except urllib.error.HTTPError as exc:
 check 'AI transcript endpoint rejects missing bearer token' test "$ai_unauthorized" = 401
 check 'AI model state is isolated in its dedicated volume' sh -c \
     "docker inspect --format '{{json .Mounts}}' lab-ai-worker | grep -q '\"Destination\":\"$AI_MODEL_CACHE\".*\"RW\":true'"
+check 'LLM model state is isolated in its dedicated volume' sh -c \
+    "docker inspect --format '{{json .Mounts}}' lab-llm-worker | grep -q '\"Destination\":\"/root/.ollama\".*\"RW\":true'"
+check 'LLM is attached only to its internal backend network' sh -c \
+    "docker inspect --format '{{json .NetworkSettings.Networks}}' lab-llm-worker | grep -q 'lab-ai-backend' && ! docker inspect --format '{{json .NetworkSettings.Networks}}' lab-llm-worker | grep -q 'lab5g'"
+check 'LLM publishes no host port' inspect_equals lab-llm-worker '{{json .HostConfig.PortBindings}}' '{}'
 
 token=$(docker exec lab-sip-as sh -c 'cat "$SERVICE_CONTROL_TOKEN_FILE"')
 authorized=$(docker exec lab-sip-as wget -qO- --header="Authorization: Bearer $token" \
@@ -82,8 +87,8 @@ custom_logs=$(docker logs lab-sip-as 2>&1; docker logs lab-media-adapter 2>&1; \
     docker logs lab-ai-worker 2>&1; docker logs lab-voice-agent 2>&1)
 check 'custom service logs contain no subscriber IMSI' sh -c \
     "! grep -qE '$UE1_IMSI|$UE2_IMSI'" <<<"$custom_logs"
-check 'AI operational logs contain no transcript text' sh -c \
-    "! grep -q 'transcript='" <<<"$(docker logs lab-ai-worker 2>&1)"
+check 'AI operational logs contain no prompt, transcript, or response text' sh -c \
+    "! grep -qE 'transcript=|prompt=|response='" <<<"$(docker logs lab-ai-worker 2>&1)"
 
 printf 'SECURITY/PRIVACY GATE: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
 exit "$fail"

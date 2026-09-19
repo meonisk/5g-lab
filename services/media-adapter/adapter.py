@@ -9,6 +9,7 @@ import time
 import urllib.request
 import urllib.parse
 import hmac
+import ipaddress
 import re
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +21,8 @@ interval = float(os.environ["MEDIA_OBSERVE_INTERVAL_SECONDS"])
 session_ttl = float(os.environ["MEDIA_SESSION_TTL_SECONDS"])
 audio_max_bytes = int(os.environ["MEDIA_AUDIO_MAX_BYTES"])
 worker_url = os.environ["AI_WORKER_URL"].rstrip("/") + "/observe"
+voice_agent_ip = str(ipaddress.ip_address(os.environ["VOICE_AGENT_IP"]))
+ims_ue_network = ipaddress.ip_network(os.environ["IMS_UE_CIDR"])
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
@@ -91,6 +94,17 @@ def rtp_payload(packet):
     end = len(packet) - padding
     return packet[offset:end] if offset <= end else b""
 
+def packet_direction(src_ip, dst_ip):
+    if dst_ip == voice_agent_ip:
+        return "caller_to_agent"
+    if src_ip == voice_agent_ip:
+        return "agent_to_caller"
+    if ipaddress.ip_address(src_ip) in ims_ue_network:
+        return "caller_to_core"
+    if ipaddress.ip_address(dst_ip) in ims_ue_network:
+        return "core_to_caller"
+    return "other"
+
 def capture():
     raw = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
     while True:
@@ -99,6 +113,8 @@ def capture():
             continue
         ihl = (packet[14] & 15) * 4
         udp = 14 + ihl
+        src_ip = socket.inet_ntoa(packet[26:30])
+        dst_ip = socket.inet_ntoa(packet[30:34])
         src_port, dst_port, length = struct.unpack("!HHH", packet[udp:udp+6])
         relay_port = src_port if port_min <= src_port <= port_max else dst_port
         if not (port_min <= relay_port <= port_max) or relay_port % 2:
@@ -111,12 +127,15 @@ def capture():
         if not payload:
             continue
         ssrc = struct.unpack("!I", rtp_packet[8:12])[0]
-        key = (ssrc, src_port, dst_port, payload_type)
+        direction = packet_direction(src_ip, dst_ip)
+        key = (ssrc, src_port, dst_port, payload_type, direction)
         with lock:
             value = counters[key]
             value["packets"] += 1
             value["payload_bytes"] += len(payload)
-            if payload_type == 0 and len(value["audio"]) < audio_max_bytes:
+            # Only packets sourced by an IMS-PDU subscriber cross the AI data
+            # boundary. Agent TTS is tagged agent_to_caller and cannot feed STT.
+            if direction == "caller_to_core" and payload_type == 0 and len(value["audio"]) < audio_max_bytes:
                 remaining = audio_max_bytes - len(value["audio"])
                 value["audio"].extend(payload[:remaining])
 
@@ -129,10 +148,11 @@ def publish():
             expired = [call_id for call_id, value in sessions.items() if value.get("observed_at", 0) < cutoff]
             for call_id in expired: sessions.pop(call_id, None)
             active = list(sessions)
-        for (ssrc, src, dst, payload_type), value in batch.items():
+        for (ssrc, src, dst, payload_type, direction), value in batch.items():
             audio = bytes(value["audio"])
             event = {"event": "normalized_audio_activity", "mode": "OBSERVE", "call_ids": active,
                      "ssrc": ssrc, "payload_type": payload_type, "packets": value["packets"],
+                     "direction": direction,
                      "payload_bytes": value["payload_bytes"], "window_seconds": interval,
                      "observed_at": time.time()}
             if audio:
@@ -145,7 +165,8 @@ def publish():
                     "Authorization": f"Bearer {control_token}",
                 })
                 urllib.request.urlopen(req, timeout=1).read()
-                print(f"MEDIA delivered ssrc={ssrc} packets={value['packets']} audio={len(audio)} calls={len(active)}", flush=True)
+                print(f"MEDIA delivered direction={direction} ssrc={ssrc} packets={value['packets']} "
+                      f"audio={len(audio)} calls={len(active)}", flush=True)
             except Exception as exc:
                 print(f"MEDIA AI unavailable (media relay unaffected): {exc}", flush=True)
 

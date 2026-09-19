@@ -6,18 +6,18 @@ This directory starts the complete local stand on Docker Desktop/WSL2:
 - `internet` and `ims` PDU sessions for each UE;
 - IMS DNS, PyHSS, Kamailio P/I/S-CSCF, and two PJSUA subscribers;
 - RTPengine media anchoring;
-- an iFC/ISC-triggered SIP Application Server, RTP Media Adapter, and local
-  OBSERVE-mode faster-whisper STT worker;
+- an iFC/ISC-triggered SIP Application Server, RTP Media Adapter, local
+  faster-whisper STT worker, and isolated Ollama/Qwen LLM;
 - a native IMS TERMINATE Voice Agent reachable at the service number defined
   by `VOICE_AGENT_MSISDN` in `lab.env`.
 
-The OBSERVE path copies real PCMU payloads from RTPengine, keeps bounded audio
-windows in memory, and transcribes them with a revision-pinned local
-faster-whisper model. It is outside the critical call path: stopping it does
-not stop SIP or RTP. The separate TERMINATE agent answers a real IMS call,
-plays a locally synthesized greeting, detects a completed speech segment, and
-synthesizes a deterministic reply. The transcript does not yet drive an LLM or
-the reply path.
+The media path copies only subscriber-originated PCMU from RTPengine, keeps
+bounded audio windows in memory, transcribes them with a revision-pinned local
+faster-whisper model, sends the transient text to a digest-verified local
+Qwen2.5 0.5B model, and passes the bounded response to the TERMINATE Voice
+Agent. The current lightweight TTS backend is `espeak-ng`; it returns PCMU RTP
+through RTPengine to the IMS subscriber. SIP and RTP remain operational if the
+AI path is unavailable.
 
 ## Configuration rule
 
@@ -82,9 +82,10 @@ The Phase 4C/4D gate proves all of the following from live evidence:
    the SIP Call-ID.
 5. RTP counters continue increasing while AI Worker is stopped.
 
-The real-stream gate additionally proves that live PCMU from an IMS call is
-decoded, resampled, processed by the local STT model, and produces an
-authenticated in-memory transcript tied to the SIP Call-ID.
+The real-stream gate additionally injects a deterministic spoken sentence from
+the UE conference bridge and proves `IMS PCMU -> STT -> local LLM -> espeak-ng
+-> RTP`. It records only durations, character counts, backend identifiers, and
+latencies; neither transcript nor generated reply is written to evidence.
 
 The Phase 4E gate calls the configured service number from UE1 and proves that
 the caller receives `200 OK`, PCMU is negotiated, the ACK reaches SIP AS, both
@@ -122,6 +123,12 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
   use a separate persistent cache volume; the model revision and Python
   dependencies are pinned. Operational logs record sizes and timings, not
   transcript text.
+- Ollama is connected only to the internal `lab-ai-backend` network and has no
+  host port or IMS-core network attachment. Its Qwen tag is checked against the
+  digest in `lab.env` before the runtime service is admitted.
+- OmniVoice is deliberately not part of the lightweight default profile. It
+  can be evaluated later as an independent GPU TTS factor without changing
+  IMS signalling, STT, LLM, or the Voice Agent HTTP contract.
 - Custom services use read-only root filesystems, no-new-privileges, bounded
   resources/logs/state, and minimal Linux capabilities. The Media Adapter is
   the only custom service retaining `NET_RAW` for RTP observation.
