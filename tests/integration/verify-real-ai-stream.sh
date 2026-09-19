@@ -148,7 +148,8 @@ check 'local semantic STT produced text' test "$chars" -gt 0
 check 'Russian STT produced Cyrillic text' test "$transcript_cyrillic" -gt 0
 check 'STT result is identified as Russian' test "$detected_language" = ru
 check 'result identifies the replaceable backend' grep -q '^faster-whisper:' <<<"$backend_id"
-check 'only IMS subscriber audio entered AI' test "$direction" = caller_to_core
+check 'only subscriber-originated audio entered AI' sh -c \
+    "test '$direction' = caller_to_core || test '$direction' = caller_to_agent"
 check 'local LLM generated and delivered a bounded reply' test "$delivered" = true
 check 'LLM reply is non-empty' test "$response_chars" -gt 0
 check 'service selected Russian-to-English translation mode' test "$service_mode" = translate

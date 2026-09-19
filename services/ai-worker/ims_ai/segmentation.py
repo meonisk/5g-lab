@@ -24,7 +24,8 @@ def process_event(event):
         if service_mode == "bilingual_test"
         else settings.max_utterance_bytes
     )
-    if event.get("direction") != "caller_to_core" and service_mode != "bilingual_test":
+    subscriber_directions = {"caller_to_core", "caller_to_agent"}
+    if event.get("direction") not in subscriber_directions and service_mode != "bilingual_test":
         return
     received_at = event.get("received_at", time.time())
     encoded = event.get("audio_ulaw_b64", "")

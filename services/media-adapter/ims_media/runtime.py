@@ -8,6 +8,9 @@ from collections import defaultdict
 
 port_min = int(os.environ["RTPENGINE_PORT_MIN"])
 port_max = int(os.environ["RTPENGINE_PORT_MAX"])
+rtpengine_ip = str(ipaddress.ip_address(os.environ["RTPENGINE_IP"]))
+rtpengine_ng_port = int(os.environ["RTPENGINE_NG_PORT"])
+rtpengine_query_timeout = float(os.environ["RTPENGINE_QUERY_TIMEOUT_SECONDS"])
 http_port = int(os.environ["MEDIA_ADAPTER_PORT"])
 interval = float(os.environ["MEDIA_OBSERVE_INTERVAL_SECONDS"])
 session_ttl = float(os.environ["MEDIA_SESSION_TTL_SECONDS"])

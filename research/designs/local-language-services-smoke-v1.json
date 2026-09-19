@@ -25,7 +25,8 @@
     "english_tts_rtp_delivery",
     "private_recording_created_and_finalized",
     "local_llm_transcript_normalization",
-    "two_phone_bilingual_dialogue"
+    "two_phone_bilingual_dialogue",
+    "parallel_translation_call_isolation"
   ],
   "capture": {
     "compose_project": "lab-docker",
@@ -40,6 +41,7 @@
       {"id": "russian-to-english", "command": ["bash", "scripts/verify-real-ai-stream.sh"]},
       {"id": "private-transcription", "command": ["bash", "scripts/verify-transcription-recording.sh"]},
       {"id": "two-phone-bilingual-dialogue", "command": ["bash", "scripts/verify-bilingual-dialogue.sh"]},
+      {"id": "parallel-translation-isolation", "command": ["python", "tests/integration/check_parallel_calls.py"]},
       {"id": "security-privacy", "command": ["bash", "scripts/verify-security.sh"]},
       {"id": "topology-literals", "command": ["python", "scripts/check-no-hardcoded-topology.py"]}
     ]

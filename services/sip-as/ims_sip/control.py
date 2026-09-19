@@ -1,6 +1,7 @@
 """Notify media and voice services through authenticated HTTP."""
 
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -9,12 +10,16 @@ from . import runtime
 from .messages import header
 
 
-def notify_adapter(message, service_mode="observe"):
+def notify_adapter(message, service_mode="observe", rtpengine_port=None):
+    if rtpengine_port is None:
+        media = re.search(r"(?im)^m=audio (\d+)\s+RTP/AVP", message)
+        rtpengine_port = int(media.group(1)) if media else None
     payload = json.dumps(
         {
             "call_id": header(message, "Call-ID") or header(message, "i"),
             "observed_at": time.time(),
             "service_mode": service_mode,
+            "rtpengine_port": rtpengine_port,
         }
     ).encode()
     try:

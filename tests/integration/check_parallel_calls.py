@@ -154,7 +154,7 @@ def scenario(count, config, wait_seconds):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--response-wait", type=float, default=40)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path, help="Optional ignored JSON evidence destination")
     args = parser.parse_args()
     config = {}
     for line in (ROOT / "lab.env").read_text(encoding="utf-8").splitlines():
@@ -173,10 +173,11 @@ def main():
     for count in (1, 2, 1):
         print(f"Starting {count} simultaneous translation call(s)", flush=True)
         report["scenarios"].append(scenario(count, config, args.response_wait))
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     raise SystemExit(0 if all(s["pass"] for s in report["scenarios"]) else 1)
 
 

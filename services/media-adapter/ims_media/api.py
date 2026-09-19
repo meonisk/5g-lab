@@ -75,16 +75,25 @@ class Api(BaseHTTPRequestHandler):
             "call_id": incoming.get("call_id", ""),
             "observed_at": incoming.get("observed_at", 0),
             "service_mode": incoming.get("service_mode", "observe"),
+            "rtpengine_port": incoming.get("rtpengine_port"),
         }
         call_id = data.get("call_id", "")
+        relay_port = data["rtpengine_port"]
+        relay_port_valid = relay_port is None or (
+            isinstance(relay_port, int)
+            and runtime.port_min <= relay_port <= runtime.port_max
+            and relay_port % 2 == 0
+        )
         if (
             runtime.call_id_pattern.fullmatch(call_id)
             and data["service_mode"] in runtime.allowed_service_modes
+            and relay_port_valid
         ):
             with runtime.lock:
                 runtime.sessions[call_id] = data
             print(
-                f"MEDIA session call_id={call_id} service={data['service_mode']}",
+                f"MEDIA session call_id={call_id} service={data['service_mode']} "
+                f"relay_port={relay_port}",
                 flush=True,
             )
         else:

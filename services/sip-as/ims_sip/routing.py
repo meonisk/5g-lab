@@ -55,9 +55,12 @@ def terminate_for_agent(message, peer, service_mode):
                 runtime.agent_calls[call_id] = {
                     "tag": tag,
                     "service_mode": service_mode,
+                    "rtpengine_port": offered_port,
                 }
                 threading.Thread(
-                    target=notify_adapter, args=(message, service_mode), daemon=True
+                    target=notify_adapter,
+                    args=(message, service_mode, offered_port),
+                    daemon=True,
                 ).start()
             except Exception as exc:
                 print(f"AS voice unavailable call_id={call_id}: {exc}", flush=True)

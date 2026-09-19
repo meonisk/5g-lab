@@ -72,6 +72,7 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-real-ai-stream.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-transcription-recording.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-bilingual-dialogue.sh
+python tests/integration/check_parallel_calls.py
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
 python research/tools/research_run.py verify --root .
@@ -98,6 +99,10 @@ the UE conference bridge and proves at least two turns of `IMS PCMU -> Russian
 STT -> local LLM translation -> English espeak-ng -> RTP` in one IMS dialog. It records only
 durations, language tags, character counts, backend identifiers, and latencies;
 neither transcript nor generated reply is written to evidence.
+
+The parallel-isolation gate runs `1 -> 2 -> 1` translation calls. It requires
+one opaque Call-ID per audio event and one completed STT/LLM/TTS RTP reply per
+call; it is a functional concurrency probe, not a capacity benchmark.
 
 The bilingual-dialogue gate generates a coherent four-turn fixture locally
 with the installed Windows `Microsoft Pavel` and `Microsoft Zira Desktop`
@@ -138,7 +143,10 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
 - Kamailio/PyHSS/MySQL upstream images are pinned by digest. Locally built
   Python service images use a versioned base image pinned by digest.
 - Media Adapter shares RTPengine's network namespace only to observe a copy of
-  relayed RTP. The original relay remains independent of AS/AI availability.
+  relayed RTP. For concurrent calls it queries the env-defined local RTPengine
+  NG endpoint by opaque Call-ID and maps the subscriber-facing relay port to
+  exactly one session. The original relay remains independent of AS/AI
+  availability.
 - The Voice Agent terminates only its env-defined service number; ordinary
   subscriber-to-subscriber calls remain proxied through P/I/S-CSCF.
 - Voice prompts, VAD threshold, silence interval, RTP/HTTP ports, service

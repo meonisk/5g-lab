@@ -63,10 +63,12 @@ def capture():
             value = runtime.counters[key]
             value["packets"] += 1
             value["payload_bytes"] += len(payload)
-            # Only packets sourced by an IMS-PDU subscriber cross the AI data
-            # boundary. Agent TTS is tagged agent_to_caller and cannot feed STT.
+            # Subscriber speech is visible on the original IMS leg and again
+            # after RTPengine forwards it to the Voice Agent. The forwarded
+            # leg has a per-call relay port, which makes concurrent routing
+            # unambiguous. Agent TTS is tagged agent_to_caller and is excluded.
             if (
-                direction == "caller_to_core"
+                direction in {"caller_to_core", "caller_to_agent"}
                 and payload_type == 0
                 and len(value["audio"]) < runtime.audio_max_bytes
             ):
