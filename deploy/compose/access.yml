@@ -1,0 +1,99 @@
+# access: service definitions; paths resolve from the repository root.
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${CUSTOM_SERVICE_LOG_MAX_SIZE}
+    max-file: ${CUSTOM_SERVICE_LOG_MAX_FILES}
+
+services:
+  gnb:
+    image: ${UERANSIM_IMAGE}
+    container_name: lab-gnb
+    restart: unless-stopped
+    networks: [lab5g]
+    depends_on: [amf]
+    command: gnb
+    environment:
+      AMF_HOSTNAME: amf
+      N2_IFACE: eth0
+      N3_IFACE: eth0
+      RADIO_IFACE: eth0
+    volumes:
+      - ./configs/ueransim/gnb.yaml:/etc/ueransim/gnb.yaml:ro
+    logging: *bounded-logging
+
+  ue1:
+    image: ${UERANSIM_IMAGE}
+    container_name: lab-ue1
+    restart: unless-stopped
+    networks: [lab5g]
+    depends_on: [gnb]
+    command: ue
+    cap_add: [NET_ADMIN]
+    env_file: [lab.env]
+    devices:
+      - /dev/net/tun
+    environment:
+      GNB_HOSTNAME: gnb
+      IMSI: ${UE1_IMSI}
+      SUBSCRIBER_K: ${SUBSCRIBER_K}
+      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
+      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
+    volumes:
+      - ./configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
+    logging: *bounded-logging
+
+  ue2:
+    image: ${UERANSIM_IMAGE}
+    container_name: lab-ue2
+    restart: unless-stopped
+    networks: [lab5g]
+    depends_on: [gnb]
+    command: ue
+    cap_add: [NET_ADMIN]
+    env_file: [lab.env]
+    devices:
+      - /dev/net/tun
+    environment:
+      GNB_HOSTNAME: gnb
+      IMSI: ${UE2_IMSI}
+      SUBSCRIBER_K: ${SUBSCRIBER_K}
+      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
+      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
+    volumes:
+      - ./configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
+    logging: *bounded-logging
+
+  # SIP clients share each UE network namespace and discover its IMS PDU route.
+
+  sipue1:
+    build: images/pjsua
+    image: lab-pjsua
+    container_name: lab-sipue1
+    depends_on: [ue1]
+    network_mode: service:ue1
+    cap_add: [NET_ADMIN]
+    env_file: [lab.env]
+    environment:
+      IMSI: ${UE1_IMSI}
+      IMS_DIGEST_PASSWORD: ${IMS_DIGEST_PASSWORD}
+    volumes:
+      - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
+    entrypoint: ["/lab/sip-ue-run.sh"]
+    logging: *bounded-logging
+
+  sipue2:
+    build: images/pjsua
+    image: lab-pjsua
+    container_name: lab-sipue2
+    depends_on: [ue2]
+    network_mode: service:ue2
+    cap_add: [NET_ADMIN]
+    env_file: [lab.env]
+    environment:
+      IMSI: ${UE2_IMSI}
+      IMS_DIGEST_PASSWORD: ${IMS_DIGEST_PASSWORD}
+    volumes:
+      - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
+    entrypoint: ["/lab/sip-ue-run.sh"]
+    logging: *bounded-logging

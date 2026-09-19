@@ -6,6 +6,7 @@ RUN apt-get update \
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --requirement /app/requirements.txt
 COPY worker.py /app/worker.py
+COPY ims_ai /app/ims_ai
 RUN mkdir -p /models && chown 65532:65532 /models
 USER 65532:65532
 ENTRYPOINT ["python", "/app/worker.py"]

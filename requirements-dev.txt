@@ -1,0 +1,3 @@
+# Runtime dependencies belong to each service image; these are offline QA tools.
+ruff==0.16.6
+numpy==2.5.1

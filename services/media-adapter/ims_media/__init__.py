@@ -1,0 +1,1 @@
+"""media-adapter implementation modules."""

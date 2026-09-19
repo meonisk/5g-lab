@@ -1,0 +1,170 @@
+# ai: service definitions; paths resolve from the repository root.
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${CUSTOM_SERVICE_LOG_MAX_SIZE}
+    max-file: ${CUSTOM_SERVICE_LOG_MAX_FILES}
+
+x-custom-service: &custom-service
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  init: true
+  pids_limit: ${CUSTOM_SERVICE_PIDS_LIMIT}
+  cpus: ${CUSTOM_SERVICE_CPU_LIMIT}
+  mem_limit: ${CUSTOM_SERVICE_MEMORY_LIMIT}
+  logging: *bounded-logging
+
+services:
+  control-secret-init:
+    image: ${CONTROL_INIT_IMAGE}
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    environment:
+      TOKEN_BYTES: ${SERVICE_CONTROL_TOKEN_BYTES}
+    command: >-
+      sh -eu -c 'umask 077; mkdir -p /run/lab-control;
+      if [ ! -s /run/lab-control/token ]; then
+      head -c "$${TOKEN_BYTES}" /dev/urandom | base64 > /run/lab-control/token;
+      fi; chmod 0555 /run/lab-control; chmod 0444 /run/lab-control/token'
+    volumes:
+      - service-control-secret:/run/lab-control
+
+  sip-as:
+    <<: *custom-service
+    build: services/sip-as
+    image: lab-sip-as
+    container_name: lab-sip-as
+    user: "65532:65532"
+    env_file: [lab.env]
+    environment:
+      MEDIA_ADAPTER_URL: http://${RTPENGINE_IP}:${MEDIA_ADAPTER_PORT}
+      VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
+    depends_on:
+      scscf: {condition: service_started}
+      media-adapter: {condition: service_started}
+      voice-agent: {condition: service_started}
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
+    networks:
+      lab5g:
+        ipv4_address: ${SIP_AS_IP}
+
+  media-adapter:
+    <<: *custom-service
+    build: services/media-adapter
+    image: lab-media-adapter
+    container_name: lab-media-adapter
+    env_file: [lab.env]
+    environment:
+      AI_WORKER_URL: http://${AI_WORKER_IP}:${AI_WORKER_PORT}
+    network_mode: service:rtpengine
+    cap_add: [NET_RAW]
+    depends_on:
+      rtpengine: {condition: service_started}
+      ai-worker: {condition: service_started}
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
+
+  ai-worker:
+    <<: *custom-service
+    build: services/ai-worker
+    image: lab-ai-worker
+    container_name: lab-ai-worker
+    user: "65532:65532"
+    cpus: ${AI_WORKER_CPU_LIMIT}
+    mem_limit: ${AI_WORKER_MEMORY_LIMIT}
+    env_file: [lab.env]
+    environment:
+      HOME: /tmp
+      HF_HOME: ${AI_MODEL_CACHE}
+      HUGGINGFACE_HUB_CACHE: ${AI_MODEL_CACHE}
+      XDG_CACHE_HOME: ${AI_MODEL_CACHE}
+      HF_HUB_DISABLE_XET: ${AI_HF_DISABLE_XET}
+      VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
+    depends_on:
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
+      - ai-model-cache:${AI_MODEL_CACHE}
+      - ./private/recordings:${RECORDING_ROOT}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks:
+      lab5g:
+        ipv4_address: ${AI_WORKER_IP}
+      ai-backend: {}
+
+  # Ollama is intentionally reachable only by the AI Worker on an internal
+  # network. The one-shot initializer is the only component allowed outbound
+  # access while populating the content-verified model volume.
+  llm-model-init:
+    image: ${OLLAMA_IMAGE}
+    container_name: lab-llm-model-init
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      OLLAMA_HOST: 127.0.0.1:11434
+      LLM_MODEL: ${LLM_MODEL}
+      LLM_MODEL_DIGEST: ${LLM_MODEL_DIGEST}
+    entrypoint: ["/bin/sh", "-ec"]
+    command: >-
+      '/bin/ollama serve & pid=$$!;
+      trap "kill $$pid" EXIT;
+      until /bin/ollama list >/dev/null 2>&1; do sleep 1; done;
+      /bin/ollama pull "$$LLM_MODEL";
+      set -- $$('/bin/ollama' list | grep "^$$LLM_MODEL "); actual=$$2;
+      case "$$LLM_MODEL_DIGEST" in "$$actual"*) ;; *) echo "model digest mismatch: $$actual" >&2; exit 1;; esac'
+    volumes:
+      - llm-model-cache:/root/.ollama
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks: [lab5g]
+
+  llm-worker:
+    image: ${OLLAMA_IMAGE}
+    container_name: lab-llm-worker
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: ${CUSTOM_SERVICE_PIDS_LIMIT}
+    cpus: ${LLM_WORKER_CPU_LIMIT}
+    mem_limit: ${LLM_WORKER_MEMORY_LIMIT}
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: ${LLM_KEEP_ALIVE}
+      OLLAMA_NUM_PARALLEL: ${LLM_NUM_PARALLEL}
+      OLLAMA_MAX_QUEUE: ${AI_QUEUE_MAX}
+    volumes:
+      - llm-model-cache:/root/.ollama
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
+    networks: [ai-backend]
+    logging: *bounded-logging
+
+  voice-agent:
+    <<: *custom-service
+    build: services/voice-agent
+    image: lab-voice-agent
+    container_name: lab-voice-agent
+    user: "65532:65532"
+    mem_limit: ${VOICE_AGENT_MEMORY_LIMIT}
+    env_file: [lab.env]
+    depends_on:
+      control-secret-init: {condition: service_completed_successfully}
+    volumes:
+      - service-control-secret:/run/lab-control:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    networks:
+      lab5g:
+        ipv4_address: ${VOICE_AGENT_IP}

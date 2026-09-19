@@ -4,3 +4,7 @@ evidence/private/
 hardening/context.local.md
 private/recordings/
 private/dialogue/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.venv/

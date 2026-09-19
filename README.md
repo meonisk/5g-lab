@@ -1,5 +1,9 @@
 # Local 5G SA + IMS + voice-agent lab
 
+Team development: [CONTRIBUTING.md](CONTRIBUTING.md),
+[project map](docs/project-layout.md), [configuration](docs/configuration.md).
+Run `python tools/quality/check.py` before submitting a change for review.
+
 This directory starts the complete local stand on Docker Desktop/WSL2:
 
 - Open5GS 5GC, one UERANSIM gNB, and two UEs;
