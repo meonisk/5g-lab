@@ -234,8 +234,10 @@ def update_call_from_audio(call: dict, audio_rms: float, now: float) -> bool:
     call["received_packets"] += 1
 
     if audio_rms >= runtime.vad_rms:
-        # Barge-in немедленно меняет поколение, поэтому текущий sender завершится.
-        if call["tts_active"]:
+        # Перевод собеседника должен прозвучать целиком, даже при одновременной
+        # речи. Прерывание ответа голосом остаётся только у обычного помощника.
+        interpreter_call = call.get("service_mode") in {"interpret_ru", "interpret_en"}
+        if call["tts_active"] and not interpreter_call:
             call["tts_generation"] += 1
             call["tts_active"] = False
 

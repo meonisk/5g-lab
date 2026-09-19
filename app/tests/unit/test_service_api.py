@@ -58,6 +58,21 @@ class ServiceApi(unittest.TestCase):
                 headers = {"Authorization": f"Bearer {module.runtime.control_token}"}
                 self.assertEqual(client.get(paths[name], headers=headers).status_code, 200)
 
+    def test_interpreter_keeps_translation_during_subscriber_speech(self):
+        media = importlib.import_module("ims_voice.media")
+        for mode in ("interpret_ru", "interpret_en", "assistant"):
+            with self.subTest(mode=mode):
+                call = {
+                    "received_packets": 0,
+                    "service_mode": mode,
+                    "tts_active": True,
+                    "tts_generation": 1,
+                }
+                media.update_call_from_audio(call, media.runtime.vad_rms + 1, 123.0)
+                expected_generation = 2 if mode == "assistant" else 1
+                self.assertEqual(call["tts_generation"], expected_generation)
+                self.assertTrue(call["speech_seen"])
+
     def test_json_rejects_arrays_malformed_and_oversized_bodies(self):
         app = create_api("test-json", "token", max_body=32)
 
