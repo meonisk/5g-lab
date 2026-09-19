@@ -9,8 +9,15 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+### Removed
+
+- chore: remove unused vendored MySQL/PyHSS image build recipes and the unused
+  local MySQL initializer; deployment continues to use the configured images.
+  Retain required runtime templates, upstream licenses, and public commands.
+
 ### Added
 
+- docs: script inventory distinguishing public commands from runtime helpers.
 - test: HTTP authentication, input bounds, queue overload, duplicate call startup,
   and playback worker shutdown regression tests.
 - docs: service reading guide with pipeline, library roles, and in-memory limits.
