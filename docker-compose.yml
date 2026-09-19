@@ -448,6 +448,7 @@ services:
     volumes:
       - service-control-secret:/run/lab-control:ro
       - ai-model-cache:${AI_MODEL_CACHE}
+      - ./private/recordings:${RECORDING_ROOT}
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
     networks:

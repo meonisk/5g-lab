@@ -18,12 +18,16 @@ agent_ip = os.environ["VOICE_AGENT_IP"]
 rtp_port = int(os.environ["VOICE_AGENT_RTP_PORT"])
 http_port = int(os.environ["VOICE_AGENT_HTTP_PORT"])
 greeting = os.environ["VOICE_AGENT_GREETING"]
+transcriber_greeting = os.environ["VOICE_TRANSCRIBER_GREETING"]
 reply_text = os.environ["VOICE_AGENT_REPLY"]
 tts_backend = os.environ["TTS_BACKEND"]
 if tts_backend != "espeak-ng":
     raise ValueError(f"unsupported lightweight TTS backend: {tts_backend}")
 tts_voice = os.environ["TTS_VOICE"]
+tts_translation_voice = os.environ["TTS_TRANSLATION_VOICE"]
 tts_rate = int(os.environ["TTS_RATE"])
+allowed_tts_voices = {tts_voice, tts_translation_voice}
+allowed_service_modes = {"translate", "transcribe", "assistant"}
 reply_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
 llm_mode = os.environ["VOICE_AGENT_LLM_MODE"] == "1"
 vad_rms = int(os.environ["VOICE_AGENT_VAD_RMS"])
@@ -59,12 +63,12 @@ def ulaw_rms(payload):
         return 0
     return int(math.sqrt(sum(ulaw_sample(value) ** 2 for value in payload) / len(payload)))
 
-def synthesize(text):
-    key = hashlib.sha256(f"{tts_voice}\0{tts_rate}\0{text}".encode()).hexdigest()[:16]
+def synthesize(text, voice):
+    key = hashlib.sha256(f"{voice}\0{tts_rate}\0{text}".encode()).hexdigest()[:16]
     raw_path = f"/tmp/{key}.ulaw"
     if not os.path.exists(raw_path):
         with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
-            subprocess.run(["espeak-ng", "-v", tts_voice, "-s", str(tts_rate),
+            subprocess.run(["espeak-ng", "-v", voice, "-s", str(tts_rate),
                             "-w", wav.name, text], check=True, timeout=30)
             subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav.name,
                             "-ar", "8000", "-ac", "1", "-f", "mulaw", raw_path],
@@ -72,7 +76,9 @@ def synthesize(text):
     with open(raw_path, "rb") as source:
         return source.read()
 
-def send_audio(call_id, text, reason):
+def send_audio(call_id, text, reason, voice):
+    if voice not in allowed_tts_voices:
+        return
     with lock:
         call = calls.get(call_id)
         call_send_lock = send_locks.get(call_id)
@@ -81,7 +87,7 @@ def send_audio(call_id, text, reason):
             generation = call["tts_generation"]
     if not call or not call_send_lock:
         return
-    payload = synthesize(text)
+    payload = synthesize(text, voice)
     interrupted = False
     with call_send_lock:
         with lock:
@@ -115,13 +121,13 @@ def send_audio(call_id, text, reason):
                 if current["tts_generation"] == generation:
                     current["tts_active"] = False
             event = {"call_id": call_id, "event": "tts_interrupted" if interrupted else "tts_sent",
-                     "reason": reason, "backend": tts_backend, "voice": tts_voice,
+                     "reason": reason, "backend": tts_backend, "voice": voice,
                      "packets": sent, "at": time.time()}
             events.append(event)
             del events[:-event_retention]
     state = "interrupted" if interrupted else "sent"
     print(f"VOICE tts call_id={call_id} reason={reason} state={state} backend={tts_backend} "
-          f"voice={tts_voice} packets={sent}", flush=True)
+          f"voice={voice} packets={sent}", flush=True)
 
 def receive_audio():
     while True:
@@ -148,7 +154,8 @@ def receive_audio():
                     call["replied"] = True
                     responses.append(call_id)
         for call_id in responses:
-            threading.Thread(target=send_audio, args=(call_id, reply_text, "vad_reply"), daemon=True).start()
+            threading.Thread(target=send_audio,
+                             args=(call_id, reply_text, "vad_reply", tts_voice), daemon=True).start()
 
 def expire_calls():
     while True:
@@ -191,14 +198,17 @@ class Api(BaseHTTPRequestHandler):
             try:
                 data = json.loads(self.rfile.read(length))
                 text = " ".join(data["text"].split())
+                voice = data.get("voice", tts_voice)
             except (TypeError, KeyError, json.JSONDecodeError):
                 self.send_response(400); self.end_headers(); return
-            if not text or len(text) > reply_max_chars or any(ord(char) < 32 for char in text):
+            if (not text or len(text) > reply_max_chars or any(ord(char) < 32 for char in text)
+                    or voice not in allowed_tts_voices):
                 self.send_response(400); self.end_headers(); return
             with lock:
                 if call_id not in calls:
                     self.send_response(404); self.end_headers(); return
-            threading.Thread(target=send_audio, args=(call_id, text, "llm_reply"), daemon=True).start()
+            threading.Thread(target=send_audio,
+                             args=(call_id, text, "llm_reply", voice), daemon=True).start()
             self.send_response(202); self.end_headers(); return
         if self.path != "/calls":
             self.send_response(404); self.end_headers(); return
@@ -210,9 +220,11 @@ class Api(BaseHTTPRequestHandler):
             call_id = data["call_id"]
             remote_ip = str(ipaddress.ip_address(data["remote_ip"]))
             remote_port = int(data["remote_port"])
+            service_mode = data["service_mode"]
         except (ValueError, TypeError, KeyError, json.JSONDecodeError):
             self.send_response(400); self.end_headers(); return
-        if (not call_id_pattern.fullmatch(call_id) or remote_ip != rtpengine_ip or
+        if (not call_id_pattern.fullmatch(call_id) or service_mode not in allowed_service_modes
+                or remote_ip != rtpengine_ip or
                 not rtp_port_min <= remote_port <= rtp_port_max):
             self.send_response(400); self.end_headers(); return
         with lock:
@@ -223,10 +235,14 @@ class Api(BaseHTTPRequestHandler):
                               "seq": 1, "timestamp": 0, "received_packets": 0,
                               "speech_seen": False, "last_voice": 0, "replied": False,
                               "tts_generation": 0, "tts_active": False,
+                              "service_mode": service_mode,
                               "started_at": time.time()}
             send_locks.setdefault(call_id, threading.Lock())
-        print(f"VOICE call_started call_id={call_id} remote={data['remote_ip']}:{data['remote_port']}", flush=True)
-        threading.Thread(target=send_audio, args=(call_id, greeting, "greeting"), daemon=True).start()
+        print(f"VOICE call_started call_id={call_id} service={service_mode} "
+              f"remote={data['remote_ip']}:{data['remote_port']}", flush=True)
+        prompt = transcriber_greeting if service_mode == "transcribe" else greeting
+        threading.Thread(target=send_audio,
+                         args=(call_id, prompt, "greeting", tts_voice), daemon=True).start()
         self.send_response(202); self.end_headers()
     def do_DELETE(self):
         if not self.authorized():

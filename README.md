@@ -8,13 +8,14 @@ This directory starts the complete local stand on Docker Desktop/WSL2:
 - RTPengine media anchoring;
 - an iFC/ISC-triggered SIP Application Server, RTP Media Adapter, local
   faster-whisper STT worker, and isolated Ollama/Qwen LLM;
-- a native IMS TERMINATE Voice Agent reachable at the service number defined
-  by `VOICE_AGENT_MSISDN` in `lab.env`.
+- two native IMS services: Russian-to-English spoken translation on
+  `VOICE_TRANSLATOR_MSISDN`, and explicit opt-in recording/transcription on
+  `VOICE_TRANSCRIBER_MSISDN`.
 
 The media path copies only subscriber-originated PCMU from RTPengine, forms
 bounded Russian utterances with VAD in memory, transcribes them with a
 revision-pinned multilingual faster-whisper model, sends the transient text and
-bounded per-call context to a digest-verified local Qwen2.5 0.5B model, and
+bounded per-call context to a digest-verified local Qwen2.5 1.5B model, and
 passes the bounded response to the TERMINATE Voice Agent. The current
 lightweight Russian TTS backend is `espeak-ng`; it returns PCMU RTP through
 RTPengine to the IMS subscriber. Multiple turns are supported in one call, and
@@ -65,6 +66,7 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-ims-call.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-voice-agent.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-real-ai-stream.sh
+& 'C:\Program Files\Git\bin\bash.exe' scripts/verify-transcription-recording.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
 python research/tools/research_run.py verify --root .
@@ -88,7 +90,7 @@ The Phase 4C/4D gate proves all of the following from live evidence:
 
 The real-stream gate additionally injects deterministic Russian speech from
 the UE conference bridge and proves at least two turns of `IMS PCMU -> Russian
-STT -> local LLM -> Russian espeak-ng -> RTP` in one IMS dialog. It records only
+STT -> local LLM translation -> English espeak-ng -> RTP` in one IMS dialog. It records only
 durations, language tags, character counts, backend identifiers, and latencies;
 neither transcript nor generated reply is written to evidence.
 
@@ -100,7 +102,7 @@ and BYE releases the SIP and media session.
 To place the same call manually after registration:
 
 ```powershell
-$number = (Select-String '^VOICE_AGENT_MSISDN=' lab.env).Line.Split('=', 2)[1]
+$number = (Select-String '^VOICE_TRANSLATOR_MSISDN=' lab.env).Line.Split('=', 2)[1]
 $domain = (Select-String '^IMS_DOMAIN=' lab.env).Line.Split('=', 2)[1]
 docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsua-control"
 ```
@@ -122,8 +124,13 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
   Docker volume. It is not placed in Git, `lab.env`, container command lines,
   or ordinary service logs.
 - Voice Agent accepts media only from the env-defined RTPengine address and
-  port allocation. Audio is processed in memory and is not recorded; the
-  analytics path receives no SIP `From`/`To` subscriber identities.
+  port allocation. Translation audio is processed in memory and is not
+  recorded; the analytics path receives no SIP `From`/`To` identities.
+- Only a call to `VOICE_TRANSCRIBER_MSISDN` enables recording, after an audible
+  disclosure. Private WAV and transcript files go to ignored
+  `private/recordings/<pseudonymous-session>/`, never to shareable evidence.
+  `RECORDING_RETENTION_DAYS` declares the review/deletion deadline; deletion is
+  currently an operator action, not an automatic claim.
 - STT utterances, transcripts, and bounded per-call LLM history are memory-only
   and expire automatically. Model files
   use a separate persistent cache volume; the model revision and Python

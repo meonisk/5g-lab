@@ -13,7 +13,7 @@ is not evidence of RF, mobility, QoS, or physical-device behavior.
 ```text
 physical UE/USIM -> NR-Uu -> physical gNB -> N2/N3 -> Open5GS/UPF
   -> IMS DNN -> P-CSCF -> I-CSCF -> S-CSCF -> iFC/ISC -> SIP AS
-  -> RTPengine -> Voice Agent / Media Adapter -> STT -> LLM -> TTS
+  -> RTPengine -> Voice Agent / Media Adapter -> STT -> translation LLM -> English TTS
   -> RTPengine -> IMS DNN -> physical UE
 ```
 
@@ -69,14 +69,16 @@ Advance only when every preceding stage is retained as evidence:
    success and a current registrar contact sourced from the IMS PDU address.
 4. **Subscriber call:** INVITE/200/ACK/BYE through P/I/S-CSCF, RTPengine streams
    tied to physical UE addresses, audible bidirectional PCMU.
-5. **Agent call:** service-number iFC/ISC trigger, Russian greeting, at least two
-   Russian subscriber/agent turns under one Call-ID, and clean BYE release.
-6. **Failure containment:** ordinary RTP remains usable when AI is stopped;
+5. **Translation call:** translator-number iFC/ISC trigger, Russian greeting,
+   at least two Russian-to-English spoken turns under one Call-ID, and clean BYE.
+6. **Transcription call:** separate recorder-number trigger, audible recording
+   disclosure, private WAV/transcript creation, LLM bypass, and finalization on BYE.
+7. **Failure containment:** ordinary RTP remains usable when AI is stopped;
    terminate-service failure is bounded and visible.
-7. **Privacy:** inspect logs, packet captures, traces, crash dumps and backups;
+8. **Privacy:** inspect logs, packet captures, traces, crash dumps and backups;
    no Ki/OPc, Digest secret, raw audio, transcript or prompt may enter the
    shareable evidence set.
-8. **Radio study:** only after stages 1–7, freeze mobility, RF, QFI/QoS, load,
+9. **Radio study:** only after stages 1–8, freeze mobility, RF, QFI/QoS, load,
    model, repetitions and outcome definitions before collecting results.
 
 ## Physical-only claims

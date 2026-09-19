@@ -20,15 +20,27 @@ http_port = int(os.environ["MEDIA_ADAPTER_PORT"])
 interval = float(os.environ["MEDIA_OBSERVE_INTERVAL_SECONDS"])
 session_ttl = float(os.environ["MEDIA_SESSION_TTL_SECONDS"])
 audio_max_bytes = int(os.environ["MEDIA_AUDIO_MAX_BYTES"])
-worker_url = os.environ["AI_WORKER_URL"].rstrip("/") + "/observe"
+worker_base_url = os.environ["AI_WORKER_URL"].rstrip("/")
+worker_url = worker_base_url + "/observe"
 voice_agent_ip = str(ipaddress.ip_address(os.environ["VOICE_AGENT_IP"]))
 ims_ue_network = ipaddress.ip_network(os.environ["IMS_UE_CIDR"])
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
+allowed_service_modes = {"observe", "translate", "transcribe", "assistant"}
 sessions = {}
 counters = defaultdict(lambda: {"packets": 0, "payload_bytes": 0, "audio": bytearray()})
 lock = threading.Lock()
+
+
+def end_worker_call(call_id):
+    try:
+        request = urllib.request.Request(
+            worker_base_url + "/calls/" + urllib.parse.quote(call_id, safe=""),
+            method="DELETE", headers={"Authorization": f"Bearer {control_token}"})
+        urllib.request.urlopen(request, timeout=2).read()
+    except Exception as exc:
+        print(f"MEDIA worker cleanup failed type={type(exc).__name__}", flush=True)
 
 class Api(BaseHTTPRequestHandler):
     def authorized(self):
@@ -57,11 +69,12 @@ class Api(BaseHTTPRequestHandler):
         # Data minimization boundary: subscriber SIP identities never enter the
         # analytics path. Only an opaque call correlation id and timing remain.
         data = {"call_id": incoming.get("call_id", ""),
-                "observed_at": incoming.get("observed_at", 0), "mode": "OBSERVE"}
+                "observed_at": incoming.get("observed_at", 0),
+                "service_mode": incoming.get("service_mode", "observe")}
         call_id = data.get("call_id", "")
-        if call_id_pattern.fullmatch(call_id):
+        if call_id_pattern.fullmatch(call_id) and data["service_mode"] in allowed_service_modes:
             with lock: sessions[call_id] = data
-            print(f"MEDIA session call_id={call_id} mode=OBSERVE", flush=True)
+            print(f"MEDIA session call_id={call_id} service={data['service_mode']}", flush=True)
         else:
             self.send_response(400); self.end_headers(); return
         self.send_response(202); self.end_headers()
@@ -75,6 +88,8 @@ class Api(BaseHTTPRequestHandler):
             self.send_response(400); self.end_headers(); return
         with lock:
             removed = sessions.pop(call_id, None)
+        if removed:
+            threading.Thread(target=end_worker_call, args=(call_id,), daemon=True).start()
         print(f"MEDIA session_ended call_id={call_id} existed={removed is not None}", flush=True)
         self.send_response(204); self.end_headers()
     def log_message(self, *_): pass
@@ -146,11 +161,17 @@ def publish():
             batch = dict(counters); counters.clear()
             cutoff = time.time() - session_ttl
             expired = [call_id for call_id, value in sessions.items() if value.get("observed_at", 0) < cutoff]
-            for call_id in expired: sessions.pop(call_id, None)
-            active = list(sessions)
+            for call_id in expired:
+                sessions.pop(call_id, None)
+            active = dict(sessions)
+        for call_id in expired:
+            threading.Thread(target=end_worker_call, args=(call_id,), daemon=True).start()
+        active_call_ids = list(active)
+        service_mode = active[active_call_ids[0]]["service_mode"] if len(active_call_ids) == 1 else "observe"
         for (ssrc, src, dst, payload_type, direction), value in batch.items():
             audio = bytes(value["audio"])
-            event = {"event": "normalized_audio_activity", "mode": "OBSERVE", "call_ids": active,
+            event = {"event": "normalized_audio_activity", "mode": "OBSERVE",
+                     "call_ids": active_call_ids, "service_mode": service_mode,
                      "ssrc": ssrc, "payload_type": payload_type, "packets": value["packets"],
                      "direction": direction,
                      "payload_bytes": value["payload_bytes"], "window_seconds": interval,
@@ -166,7 +187,7 @@ def publish():
                 })
                 urllib.request.urlopen(req, timeout=1).read()
                 print(f"MEDIA delivered direction={direction} ssrc={ssrc} packets={value['packets']} "
-                      f"audio={len(audio)} calls={len(active)}", flush=True)
+                      f"audio={len(audio)} calls={len(active_call_ids)} service={service_mode}", flush=True)
             except Exception as exc:
                 print(f"MEDIA AI unavailable (media relay unaffected): {exc}", flush=True)
 

@@ -89,6 +89,11 @@ check 'custom service logs contain no subscriber IMSI' sh -c \
     "! grep -qE '$UE1_IMSI|$UE2_IMSI'" <<<"$custom_logs"
 check 'AI operational logs contain no prompt, transcript, or response text' sh -c \
     "! grep -qE 'transcript=|prompt=|response='" <<<"$(docker logs lab-ai-worker 2>&1)"
+check 'private recordings are ignored by Git' git check-ignore private/recordings
+check 'recording directory is outside shareable evidence' sh -c \
+    "case '$RECORDING_ROOT' in /recordings) exit 0;; *) exit 1;; esac"
+check 'only AI Worker receives the private recording mount' sh -c \
+    "docker inspect --format '{{json .Mounts}}' lab-ai-worker | grep -q '\"Destination\":\"$RECORDING_ROOT\"' && ! docker inspect --format '{{json .Mounts}}' lab-sip-as lab-media-adapter lab-voice-agent | grep -q '\"Destination\":\"$RECORDING_ROOT\"'"
 
 printf 'SECURITY/PRIVACY GATE: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
 exit "$fail"

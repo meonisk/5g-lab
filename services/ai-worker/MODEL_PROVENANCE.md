@@ -1,5 +1,11 @@
 # Local STT model provenance
 
+The local translation profile additionally uses `qwen2.5:1.5b-instruct`
+through the pinned Ollama container. `lab.env` fixes and admission-checks its
+full content digest. The smaller 0.5B profile is not admitted: on the frozen
+Russian translation fixture it answered in Russian instead of translating to
+English.
+
 - Backend package: `faster-whisper==1.2.1`
 - Model repository: `Systran/faster-whisper-base`
 - Model revision: `ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66`

@@ -144,8 +144,10 @@ Data classes:
    identifiers removed; restricted access and a documented retention date.
 3. **Directly identifying/sensitive**: voice recordings, phone identities,
    prompts or transcripts containing personal data; never collected by the
-   default harness and never sent to a remote model without a separate legal
-   basis, processor agreement and explicit design.
+   shareable harness. The local transcription service may collect them only
+   through its separate opt-in IMS number and audible disclosure; files remain
+   in ignored restricted storage and never go to a remote model or evidence
+   bundle without a separate legal basis, processor agreement and design.
 
 Default rules:
 
@@ -166,8 +168,9 @@ Default rules:
 ### Demo A — available now
 
 Show two registered IMS users, a subscriber call through P/I/S-CSCF and
-RTPengine, the OBSERVE path, a two-turn Russian call to the local LLM voice
-agent, and call continuity while `ai-worker` is stopped. Label it an
+RTPengine, the OBSERVE path, a two-turn Russian-to-English spoken translation,
+the separate disclosed Russian recording/transcription call, and call
+continuity while `ai-worker` is stopped. Label it an
 integration and measurement baseline, not an AI-quality result.
 
 ### Demo B — after the pilot backend milestone

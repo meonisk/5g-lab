@@ -4,11 +4,14 @@ import hmac
 import json
 import os
 import queue
+import re
 import threading
 import time
 import urllib.parse
 import urllib.request
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -42,13 +45,23 @@ llm_timeout = float(os.environ["LLM_TIMEOUT_SECONDS"])
 llm_max_tokens = int(os.environ["LLM_MAX_TOKENS"])
 llm_temperature = float(os.environ["LLM_TEMPERATURE"])
 llm_system_prompt = os.environ["LLM_SYSTEM_PROMPT"]
+llm_translation_prompt = os.environ["LLM_TRANSLATION_PROMPT"]
 llm_response_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
+translation_voice = os.environ["TTS_TRANSLATION_VOICE"]
+translation_min_latin = int(os.environ["TRANSLATION_MIN_LATIN_CHARS"])
+translation_max_cyrillic = int(os.environ["TRANSLATION_MAX_CYRILLIC_CHARS"])
 voice_agent_url = os.environ["VOICE_AGENT_URL"].rstrip("/")
+recording_enabled = os.environ["RECORDING_ENABLED"] == "1"
+recording_root = Path(os.environ["RECORDING_ROOT"])
+recording_max_bytes = int(os.environ["RECORDING_MAX_BYTES_PER_CALL"])
+recording_retention_days = int(os.environ["RECORDING_RETENTION_DAYS"])
 model = None
 model_error = None
 reply_counts = {}
 turn_counts = {}
 conversations = {}
+recordings = {}
+call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 
@@ -113,13 +126,14 @@ def cyrillic_chars(text):
     return sum("\u0400" <= char <= "\u052f" for char in text)
 
 
-def generate_reply(call_id, transcript):
+def generate_reply(call_id, transcript, service_mode):
     conversation = conversations.setdefault(call_id, {"messages": [], "last_seen": time.time()})
     conversation["last_seen"] = time.time()
+    system_prompt = llm_translation_prompt if service_mode == "translate" else llm_system_prompt
     request_body = json.dumps({
         "model": llm_model,
         "stream": False,
-        "messages": ([{"role": "system", "content": llm_system_prompt}]
+        "messages": ([{"role": "system", "content": system_prompt}]
                      + conversation["messages"]
                      + [{"role": "user", "content": transcript}]),
         "options": {"temperature": llm_temperature, "num_predict": llm_max_tokens},
@@ -141,8 +155,8 @@ def remember_turn(call_id, transcript, reply):
     conversation["last_seen"] = time.time()
 
 
-def deliver_reply(call_id, text):
-    body = json.dumps({"text": text}).encode()
+def deliver_reply(call_id, text, voice):
+    body = json.dumps({"text": text, "voice": voice}).encode()
     request = urllib.request.Request(
         f"{voice_agent_url}/calls/{urllib.parse.quote(call_id, safe='')}/reply",
         body,
@@ -151,11 +165,83 @@ def deliver_reply(call_id, text):
     urllib.request.urlopen(request, timeout=3).read()
 
 
+def recording_session(call_id):
+    state = recordings.get(call_id)
+    if state:
+        return state
+    session_id = hashlib.sha256(call_id.encode()).hexdigest()[:20]
+    path = recording_root / session_id
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state = {"session_id": session_id, "path": path, "turns": 0, "audio_bytes": 0,
+             "started_at": time.time(), "transcript_chars": 0}
+    recordings[call_id] = state
+    notice = ("PRIVATE LOCAL RECORDING\n"
+              "Created only by an explicit call to the transcription service.\n"
+              f"Configured retention: {recording_retention_days} days.\n"
+              "Review and delete this directory according to the declared policy.\n")
+    (path / "README.txt").write_text(notice, encoding="utf-8")
+    return state
+
+
+def save_recording_turn(call_id, pcm8, transcript, result):
+    if not recording_enabled:
+        return None
+    state = recording_session(call_id)
+    audio_bytes = int(pcm8.nbytes)
+    if state["audio_bytes"] + audio_bytes > recording_max_bytes:
+        return {"session_id": state["session_id"], "saved": False, "limit_reached": True}
+    state["turns"] += 1
+    state["audio_bytes"] += audio_bytes
+    state["transcript_chars"] += len(transcript)
+    turn_name = f"turn-{state['turns']:04d}"
+    wav_path = state["path"] / f"{turn_name}.wav"
+    with wave.open(str(wav_path), "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(8000)
+        target.writeframes(pcm8.astype("<i2", copy=False).tobytes())
+    with (state["path"] / "transcript.txt").open("a", encoding="utf-8") as target:
+        target.write(transcript.strip() + "\n")
+    private_metadata = {
+        "turn": state["turns"], "audio_file": wav_path.name,
+        "audio_duration_seconds": result["audio_duration_seconds"],
+        "audio_sha256": result["audio_sha256"],
+        "transcript_chars": len(transcript),
+        "detected_language": result.get("detected_language"),
+        "processing_ms": result.get("processing_ms"),
+    }
+    with (state["path"] / "manifest.jsonl").open("a", encoding="utf-8") as target:
+        target.write(json.dumps(private_metadata, ensure_ascii=False) + "\n")
+    return {"session_id": state["session_id"], "saved": True,
+            "turn": state["turns"], "audio_bytes": audio_bytes}
+
+
+def finalize_call(call_id):
+    state = recordings.pop(call_id, None)
+    if state:
+        completed = {"completed_at": time.time(), "turns": state["turns"],
+                     "audio_bytes": state["audio_bytes"],
+                     "transcript_chars": state["transcript_chars"],
+                     "retention_days": recording_retention_days}
+        (state["path"] / "completed.json").write_text(
+            json.dumps(completed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"AI recording_finalized session={state['session_id']} turns={state['turns']} "
+              f"audio_bytes={state['audio_bytes']} transcript_chars={state['transcript_chars']}", flush=True)
+    conversations.pop(call_id, None)
+    reply_counts.pop(call_id, None)
+    turn_counts.pop(call_id, None)
+    for key in [key for key in buffers if key.startswith(call_id + ":")]:
+        buffers.pop(key, None)
+
+
 def process_events():
     while True:
         event = work.get()
         try:
-            process_event(event)
+            if event.get("control") == "end_call":
+                finalize_call(event["call_id"])
+            else:
+                process_event(event)
         except Exception as exc:
             print(f"AI processing_failed type={type(exc).__name__} error={exc}", flush=True)
         finally:
@@ -242,6 +328,7 @@ def process_utterance(ulaw, event, received_at, end_reason):
               if key not in {"audio_sha256", "audio_ulaw_b64", "received_at"}}
     call_ids = event.get("call_ids") or []
     call_id = call_ids[0] if len(call_ids) == 1 else None
+    service_mode = event.get("service_mode", "observe")
     if call_id:
         turn_counts[call_id] = turn_counts.get(call_id, 0) + 1
     result.update({
@@ -258,15 +345,31 @@ def process_utterance(ulaw, event, received_at, end_reason):
         "processed_at": processed_at,
         "utterance_end_reason": end_reason,
         "turn_index": turn_counts.get(call_id) if call_id else None,
+        "service_mode": service_mode,
         "processing_ms": (time.perf_counter_ns() - started) / 1_000_000,
         "adapter_to_worker_ms": ((received_at - event["observed_at"]) * 1000
                                   if isinstance(event.get("observed_at"), (int, float)) else None),
     })
-    if transcript and call_id and reply_counts.get(call_id, 0) < max_replies_per_call:
+    if call_id and service_mode == "transcribe":
+        saved = save_recording_turn(call_id, decode_pcm8(ulaw), transcript, result)
+        if saved:
+            result.update({"recording_session_id": saved["session_id"],
+                           "recording_saved": saved["saved"],
+                           "recording_turn": saved.get("turn"),
+                           "recording_limit_reached": saved.get("limit_reached", False)})
+    if (transcript and call_id and service_mode in {"translate", "assistant"}
+            and reply_counts.get(call_id, 0) < max_replies_per_call):
         try:
-            reply, llm_ms = generate_reply(call_id, transcript)
+            reply, llm_ms = generate_reply(call_id, transcript, service_mode)
             if reply:
-                deliver_reply(call_id, reply)
+                latin_chars = sum(char.isascii() and char.isalpha() for char in reply)
+                reply_cyrillic = cyrillic_chars(reply)
+                if (service_mode == "translate"
+                        and (latin_chars < translation_min_latin
+                             or reply_cyrillic > translation_max_cyrillic)):
+                    raise ValueError("translation output language mismatch")
+                reply_voice = translation_voice if service_mode == "translate" else os.environ["TTS_VOICE"]
+                deliver_reply(call_id, reply, reply_voice)
                 reply_counts[call_id] = reply_counts.get(call_id, 0) + 1
                 remember_turn(call_id, transcript, reply)
                 while len(reply_counts) > buffer_max:
@@ -275,7 +378,9 @@ def process_utterance(ulaw, event, received_at, end_reason):
                     turn_counts.pop(evicted, None)
                     conversations.pop(evicted, None)
                 result.update({"llm_model": llm_model, "llm_response_chars": len(reply),
-                               "llm_response_cyrillic_chars": cyrillic_chars(reply),
+                               "llm_response_cyrillic_chars": reply_cyrillic,
+                               "llm_response_latin_chars": latin_chars,
+                               "reply_voice": reply_voice,
                                "llm_processing_ms": llm_ms, "reply_delivered": True,
                                "reply_index": reply_counts[call_id]})
                 print(f"AI reply_delivered model={llm_model} prompt_chars={len(transcript)} "
@@ -332,6 +437,20 @@ class Api(BaseHTTPRequestHandler):
                   f"calls={event.get('call_ids')}", flush=True)
         except (json.JSONDecodeError, TypeError):
             self.send_response(400); self.end_headers(); return
+        except queue.Full:
+            self.send_response(429); self.end_headers(); return
+        self.send_response(202); self.end_headers()
+
+    def do_DELETE(self):
+        if not self.authorized():
+            self.send_response(401); self.end_headers(); return
+        if not self.path.startswith("/calls/"):
+            self.send_response(404); self.end_headers(); return
+        call_id = urllib.parse.unquote(self.path.removeprefix("/calls/"))
+        if not call_id_pattern.fullmatch(call_id):
+            self.send_response(400); self.end_headers(); return
+        try:
+            work.put_nowait({"control": "end_call", "call_id": call_id})
         except queue.Full:
             self.send_response(429); self.end_headers(); return
         self.send_response(202); self.end_headers()

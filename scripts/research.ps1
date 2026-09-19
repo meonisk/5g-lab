@@ -3,7 +3,7 @@ param(
     [ValidateSet('prepare','collect','validate','verify')]
     [string]$Command = 'verify',
     [string]$RunId,
-    [string]$Design = 'research/designs/local-russian-conversation-smoke-v1.json'
+    [string]$Design = 'research/designs/local-language-services-smoke-v1.json'
 )
 
 $ErrorActionPreference = 'Stop'

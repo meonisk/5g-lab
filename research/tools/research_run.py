@@ -159,6 +159,7 @@ def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
         "services/ai-worker/Dockerfile", "services/ai-worker/requirements.txt",
         "services/ai-worker/MODEL_PROVENANCE.md",
         "services/media-adapter/Dockerfile", "scripts/verify-real-ai-stream.sh",
+        "scripts/verify-transcription-recording.sh",
         "research/tools/research_run.py", "research/schemas/run-manifest.schema.json",
         "research/schemas/metric-record.schema.json"))
     return [{"path": str(p.relative_to(root)).replace("\\", "/"), "sha256": sha256_file(p)}
@@ -392,11 +393,13 @@ def verify(root: Path) -> None:
     smoke = root / "research" / "designs" / "local-instrumentation-smoke-v1.json"
     conversational = root / "research" / "designs" / "local-conversational-loop-smoke-v1.json"
     russian = root / "research" / "designs" / "local-russian-conversation-smoke-v1.json"
+    language_services = root / "research" / "designs" / "local-language-services-smoke-v1.json"
     candidate = load_json(root / "research" / "designs" / "ai-scale-study-v1.json")
     design = load_json(smoke)
     validate_design(design)
     validate_design(load_json(conversational))
     validate_design(load_json(russian))
+    validate_design(load_json(language_services))
     if candidate.get("design_status") != "DRAFT_REQUIRES_PILOT_FREEZE":
         raise ValueError("AI scale candidate must remain explicitly unfrozen")
     for schema in ("run-manifest.schema.json", "metric-record.schema.json"):
@@ -425,7 +428,7 @@ def main() -> int:
     parser.add_argument("--run-id")
     args = parser.parse_args()
     root = args.root.resolve()
-    design = (args.design or root / "research" / "designs" / "local-russian-conversation-smoke-v1.json").resolve()
+    design = (args.design or root / "research" / "designs" / "local-language-services-smoke-v1.json").resolve()
     try:
         if args.command == "prepare":
             prepare(root, design, args.run_id)

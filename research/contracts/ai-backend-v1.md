@@ -19,8 +19,12 @@ backend. An event has:
 time. `adapter_to_worker_ms` uses synchronized wall clocks and is diagnostic;
 it must not be used across hosts until clock offset/uncertainty is recorded.
 
-The implementation has a bounded queue, body limit, authenticated API, bounded
-retention, and no audio persistence. The next version must add sequence-aware
+The implementation has a bounded queue, body limit, authenticated API and two
+explicit persistence modes. Translation/observe audio remains memory-only.
+Only `service_mode=transcribe`, selected by the separate IMS number after an
+audible disclosure, writes private WAV/transcript files outside the evidence
+tree with a per-call byte limit and declared retention deadline. The next
+version must add automated retention enforcement plus sequence-aware
 RTP reassembly, an explicit frame-envelope version, end-of-turn events,
 deadlines, cancellation, and error taxonomy. It must not add subscriber
 identities. Model artifact ID, quantization, decoding parameters, warm/cold

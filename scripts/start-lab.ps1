@@ -51,7 +51,7 @@ try {
     Start-Sleep -Seconds 12
 
     if (-not $SkipVerify) {
-        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-security.sh')) {
+        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-transcription-recording.sh', 'verify-security.sh')) {
             & $Bash "scripts/$gate"
             if ($LASTEXITCODE -ne 0) { throw "$gate failed" }
         }

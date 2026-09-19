@@ -14,8 +14,10 @@ bind_port = int(os.environ["SIP_AS_PORT"])
 scscf = (os.environ["SCSCF_IP"], int(os.environ["SCSCF_SIP_PORT"]))
 adapter_url = os.environ["MEDIA_ADAPTER_URL"].rstrip("/") + "/sessions"
 voice_url = os.environ["VOICE_AGENT_URL"].rstrip("/") + "/calls"
-voice_number = os.environ["VOICE_AGENT_MSISDN"]
+voice_number = os.environ["VOICE_TRANSLATOR_MSISDN"]
+transcriber_number = os.environ["VOICE_TRANSCRIBER_MSISDN"]
 voice_user = os.environ["VOICE_AGENT_SIP_USER"]
+transcriber_user = os.environ["VOICE_TRANSCRIBER_SIP_USER"]
 voice_ip = os.environ["VOICE_AGENT_IP"]
 voice_rtp_port = int(os.environ["VOICE_AGENT_RTP_PORT"])
 rtpengine_ip = str(ipaddress.ip_address(os.environ["RTPENGINE_IP"]))
@@ -27,6 +29,12 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((bind_ip, bind_port))
 transactions = {}
 agent_calls = {}
+service_targets = {
+    voice_number: "translate",
+    voice_user: "translate",
+    transcriber_number: "transcribe",
+    transcriber_user: "transcribe",
+}
 
 def header(message, name):
     match = re.search(rf"(?im)^{re.escape(name)}\s*:\s*(.+)$", message)
@@ -42,11 +50,11 @@ def all_headers(message, long_name, compact_name=None):
     return [line.rstrip("\r") for line in
             re.findall(rf"(?im)^((?:{names})\s*:\s*.+)$", message)]
 
-def notify_adapter(message):
+def notify_adapter(message, service_mode="observe"):
     payload = json.dumps({
         "call_id": header(message, "Call-ID") or header(message, "i"),
         "observed_at": time.time(),
-        "mode": "OBSERVE",
+        "service_mode": service_mode,
     }).encode()
     try:
         req = urllib.request.Request(adapter_url, payload, {
@@ -66,8 +74,9 @@ def stop_adapter(call_id):
     except Exception as exc:
         print(f"AS adapter cleanup failed call_id={call_id}: {exc}", flush=True)
 
-def notify_voice(call_id, remote_ip, remote_port):
-    payload = json.dumps({"call_id": call_id, "remote_ip": remote_ip, "remote_port": remote_port}).encode()
+def notify_voice(call_id, remote_ip, remote_port, service_mode):
+    payload = json.dumps({"call_id": call_id, "remote_ip": remote_ip,
+                          "remote_port": remote_port, "service_mode": service_mode}).encode()
     req = urllib.request.Request(voice_url, payload, {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {control_token}",
@@ -83,7 +92,7 @@ def stop_voice(call_id):
     except Exception as exc:
         print(f"AS voice cleanup failed call_id={call_id}: {exc}", flush=True)
 
-def local_response(request, status, reason, body="", to_tag=""):
+def local_response(request, status, reason, body="", to_tag="", contact_user=None):
     lines = [f"SIP/2.0 {status} {reason}"]
     lines.extend(all_headers(request, "Via", "v"))
     lines.extend(all_headers(request, "Record-Route"))
@@ -95,16 +104,17 @@ def local_response(request, status, reason, body="", to_tag=""):
               f"Call-ID: {header(request, 'Call-ID') or header(request, 'i')}",
               f"CSeq: {header(request, 'CSeq')}"]
     if status == 200 and request.startswith("INVITE "):
-        lines += [f"Contact: <sip:{voice_user}@{bind_ip}:{bind_port};transport=udp>",
+        lines += [f"Contact: <sip:{contact_user or voice_user}@{bind_ip}:{bind_port};transport=udp>",
                   "Content-Type: application/sdp"]
     lines.append(f"Content-Length: {len(body.encode())}")
     return "\r\n".join(lines) + "\r\n\r\n" + body
 
-def terminate_for_agent(message, peer):
+def terminate_for_agent(message, peer, service_mode):
     first = message.split("\r\n", 1)[0]
     method = first.split(" ", 1)[0]
     call_id = header(message, "Call-ID") or header(message, "i")
     tag = hashlib.sha256(call_id.encode()).hexdigest()[:16]
+    service_user = transcriber_user if service_mode == "transcribe" else voice_user
     if method == "INVITE":
         sock.sendto(local_response(message, 100, "Trying").encode(), peer)
         connection = re.search(r"(?im)^c=IN IP4 ([^\s]+)", message)
@@ -127,9 +137,9 @@ def terminate_for_agent(message, peer):
             return
         if call_id not in agent_calls:
             try:
-                notify_voice(call_id, offered_ip, offered_port)
-                agent_calls[call_id] = tag
-                threading.Thread(target=notify_adapter, args=(message,), daemon=True).start()
+                notify_voice(call_id, offered_ip, offered_port, service_mode)
+                agent_calls[call_id] = {"tag": tag, "service_mode": service_mode}
+                threading.Thread(target=notify_adapter, args=(message, service_mode), daemon=True).start()
             except Exception as exc:
                 print(f"AS voice unavailable call_id={call_id}: {exc}", flush=True)
                 sock.sendto(local_response(message, 503, "Voice Agent Unavailable", to_tag=tag).encode(), peer)
@@ -143,12 +153,13 @@ def terminate_for_agent(message, peer):
                 "a=rtpmap:0 PCMU/8000\r\n"
                 "a=ptime:20\r\n"
                 "a=sendrecv\r\n")
-        sock.sendto(local_response(message, 200, "OK", body, tag).encode(), peer)
-        print(f"AS terminated INVITE for voice agent call_id={call_id}", flush=True)
+        sock.sendto(local_response(message, 200, "OK", body, tag, service_user).encode(), peer)
+        print(f"AS terminated INVITE for voice agent call_id={call_id} service={service_mode}", flush=True)
     elif method == "ACK":
         print(f"AS received ACK for voice agent call_id={call_id}", flush=True)
     elif method in {"BYE", "CANCEL"}:
-        sock.sendto(local_response(message, 200, "OK", to_tag=agent_calls.get(call_id, tag)).encode(), peer)
+        call = agent_calls.get(call_id, {})
+        sock.sendto(local_response(message, 200, "OK", to_tag=call.get("tag", tag)).encode(), peer)
         agent_calls.pop(call_id, None)
         threading.Thread(target=stop_voice, args=(call_id,), daemon=True).start()
         threading.Thread(target=stop_adapter, args=(call_id,), daemon=True).start()
@@ -158,8 +169,11 @@ def route_request(message, peer):
     first = message.split("\r\n", 1)[0]
     call_id = header(message, "Call-ID") or header(message, "i")
     target = re.search(r"^[A-Z]+\s+sip:([^@; ]+)", first)
-    if (target and target.group(1) in {voice_number, voice_user}) or call_id in agent_calls:
-        terminate_for_agent(message, peer)
+    service_mode = agent_calls.get(call_id, {}).get("service_mode")
+    if not service_mode and target:
+        service_mode = service_targets.get(target.group(1))
+    if service_mode:
+        terminate_for_agent(message, peer, service_mode)
         return
     branch_match = re.search(r"(?im)^Via\s*:\s*[^\r\n]*branch=([^;\s]+)", message)
     if not branch_match:
@@ -173,7 +187,7 @@ def route_request(message, peer):
     forwarded = first + "\r\n" + via + rest
     if first.startswith("INVITE "):
         print(f"AS observed INVITE call_id={header(message, 'Call-ID') or header(message, 'i')}", flush=True)
-        threading.Thread(target=notify_adapter, args=(message,), daemon=True).start()
+        threading.Thread(target=notify_adapter, args=(message, "observe"), daemon=True).start()
     elif first.startswith(("BYE ", "CANCEL ")):
         threading.Thread(target=stop_adapter, args=(call_id,), daemon=True).start()
     sock.sendto(forwarded.encode(), scscf)
