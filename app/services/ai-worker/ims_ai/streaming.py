@@ -62,6 +62,7 @@ def process_snapshot(task):
             runtime.events.append(
                 {
                     "event": "stream_finalized",
+                    "processed_at": time.time(),
                     "call_ids": [task.call_id],
                     "stream_phrase_id": task.event["stream_phrase_id"],
                     "stream_conflict": conflict or state.get("delivery_failed", False),
@@ -70,3 +71,5 @@ def process_snapshot(task):
                 }
             )
         runtime.stream_hypotheses.pop(identity, None)
+        if conflict or state.get("delivery_failed", False):
+            print("AI streaming_incomplete: revision or delivery failure; not accepted", flush=True)

@@ -29,6 +29,7 @@ def events():
             model=settings.model_size,
             model_revision=settings.model_revision,
             device=settings.device,
+            streaming_enabled=settings.streaming_enabled,
             model_error=runtime.model_error,
             queue_depth=runtime.work.qsize(),
             media_queue_depth=runtime.work.qsize(),
