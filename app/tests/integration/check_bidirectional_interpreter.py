@@ -11,12 +11,29 @@ from pathlib import Path
 from fixture_checks import verify_interpreter_fixture
 
 ROOT = Path(__file__).resolve().parents[3]
+MIN_TRANSLATION_TIMEOUT_SECONDS = 180
+POST_PLAYBACK_PROCESSING_BUDGET_SECONDS = 90
+
+# This script runs inside a service container. Keep it self-contained, but format
+# it as normal Python so that operators can understand what the probe requests.
 API_CODE = """
-import json,os,sys,urllib.request
-token=open(os.environ['SERVICE_CONTROL_TOKEN_FILE']).read().strip()
-url='http://127.0.0.1:'+os.environ[sys.argv[1]]+sys.argv[2]
-request=urllib.request.Request(url,headers={'Authorization':'Bearer '+token})
-print(urllib.request.urlopen(request,timeout=3).read().decode())
+import json
+import os
+import sys
+import urllib.request
+
+port_environment_name = sys.argv[1]
+endpoint_path = sys.argv[2]
+
+with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="utf-8") as token_file:
+    service_token = token_file.read().strip()
+
+endpoint_url = "http://127.0.0.1:" + os.environ[port_environment_name] + endpoint_path
+request = urllib.request.Request(
+    endpoint_url,
+    headers={"Authorization": "Bearer " + service_token},
+)
+print(urllib.request.urlopen(request, timeout=3).read().decode())
 """
 
 
@@ -24,7 +41,7 @@ def run(*args, timeout=30):
     return subprocess.run(args, capture_output=True, text=True, check=True, timeout=timeout).stdout
 
 
-def config():
+def load_configuration():
     values = {}
     for line in (ROOT / "app/config/lab.env").read_text(encoding="utf-8").splitlines():
         if line and not line.startswith("#") and "=" in line:
@@ -37,19 +54,19 @@ def query(container, port, path):
     return json.loads(run("docker", "exec", container, "python", "-c", API_CODE, port, path))
 
 
-def voice():
+def voice_status():
     return query("lab-voice-agent", "VOICE_AGENT_HTTP_PORT", "/status")
 
 
-def adapter():
+def adapter_status():
     return query("lab-media-adapter", "MEDIA_ADAPTER_PORT", "/sessions")
 
 
-def ai():
+def ai_status():
     return query("lab-ai-worker", "AI_WORKER_PORT", "/events")
 
 
-def control(client, command):
+def send_control_command(client, command):
     run(
         "docker",
         "exec",
@@ -62,9 +79,9 @@ def control(client, command):
     )
 
 
-def parallel(commands):
+def send_commands_in_parallel(commands):
     with ThreadPoolExecutor(max_workers=len(commands)) as pool:
-        list(pool.map(lambda item: control(*item), commands))
+        list(pool.map(lambda item: send_control_command(*item), commands))
 
 
 def wait_until(check, timeout, message):
@@ -100,10 +117,10 @@ def recreate_dialogue_clients():
     )
 
 
-def translated_events(started, calls, cfg):
+def translated_events(started, calls, settings):
     events = [
         event
-        for event in ai().get("events", [])
+        for event in ai_status().get("events", [])
         if event.get("processed_at", 0) >= started
         and event.get("call_ids") == [calls.get(event.get("service_mode"))]
         and event.get("reply_delivered")
@@ -113,34 +130,34 @@ def translated_events(started, calls, cfg):
         for event in events
         if event.get("service_mode") == "interpret_ru"
         and event.get("reply_destination_mode") == "interpret_en"
-        and event.get("reply_voice") == cfg["TTS_TRANSLATION_VOICE"]
-        and event.get("llm_response_latin_chars", 0) >= int(cfg["TRANSLATION_MIN_LATIN_CHARS"])
+        and event.get("reply_voice") == settings["TTS_TRANSLATION_VOICE"]
+        and event.get("llm_response_latin_chars", 0) >= int(settings["TRANSLATION_MIN_LATIN_CHARS"])
         and event.get("llm_response_cyrillic_chars", 1)
-        <= int(cfg["TRANSLATION_MAX_CYRILLIC_CHARS"])
+        <= int(settings["TRANSLATION_MAX_CYRILLIC_CHARS"])
     ]
     en_source = [
         event
         for event in events
         if event.get("service_mode") == "interpret_en"
         and event.get("reply_destination_mode") == "interpret_ru"
-        and event.get("reply_voice") == cfg["TTS_VOICE"]
+        and event.get("reply_voice") == settings["TTS_VOICE"]
         and event.get("llm_response_cyrillic_chars", 0)
-        >= int(cfg["REVERSE_TRANSLATION_MIN_CYRILLIC_CHARS"])
+        >= int(settings["REVERSE_TRANSLATION_MIN_CYRILLIC_CHARS"])
         and event.get("llm_response_latin_chars", 1)
-        <= int(cfg["REVERSE_TRANSLATION_MAX_LATIN_CHARS"])
+        <= int(settings["REVERSE_TRANSLATION_MAX_LATIN_CHARS"])
     ]
     return ru_source, en_source
 
 
-def completed_tts(calls, cfg, required):
-    events = voice().get("events", [])
+def completed_tts(calls, settings, required):
+    events = voice_status().get("events", [])
     english = [
         event
         for event in events
         if event.get("call_id") == calls["interpret_en"]
         and event.get("event") == "tts_sent"
         and event.get("reason") == "llm_reply"
-        and event.get("voice") == cfg["TTS_TRANSLATION_VOICE"]
+        and event.get("voice") == settings["TTS_TRANSLATION_VOICE"]
     ]
     russian = [
         event
@@ -148,7 +165,7 @@ def completed_tts(calls, cfg, required):
         if event.get("call_id") == calls["interpret_ru"]
         and event.get("event") == "tts_sent"
         and event.get("reason") == "llm_reply"
-        and event.get("voice") == cfg["TTS_VOICE"]
+        and event.get("voice") == settings["TTS_VOICE"]
     ]
     return (english, russian) if len(english) >= required and len(russian) >= required else None
 
@@ -185,29 +202,37 @@ def received_packets(client):
 
 
 def main():
-    cfg = config()
+    settings = load_configuration()
     fixture = verify_interpreter_fixture(ROOT)
     recreate_dialogue_clients()
-    if voice()["calls"] or adapter()["sessions"]:
+    if voice_status()["calls"] or adapter_status()["sessions"]:
         raise RuntimeError("Stand is busy: interpreter test requires no active calls")
+
+    # The final phrase starts near the end of the fixture. Reserve explicit time
+    # after playback for STT, LLM, TTS and RTP instead of relying on a magic 180 s.
+    translation_timeout_seconds = max(
+        MIN_TRANSLATION_TIMEOUT_SECONDS,
+        fixture["playback_seconds"] + POST_PLAYBACK_PROCESSING_BUDGET_SECONDS,
+    )
+
     started = time.time()
     calls = {}
     try:
-        domain = cfg["IMS_DOMAIN"]
-        parallel(
+        domain = settings["IMS_DOMAIN"]
+        send_commands_in_parallel(
             [
                 (
                     "lab-sipue1",
-                    f"m\nsip:{cfg['VOICE_INTERPRETER_RU_MSISDN']}@{domain}\n",
+                    f"m\nsip:{settings['VOICE_INTERPRETER_RU_MSISDN']}@{domain}\n",
                 ),
                 (
                     "lab-sipue2",
-                    f"m\nsip:{cfg['VOICE_INTERPRETER_EN_MSISDN']}@{domain}\n",
+                    f"m\nsip:{settings['VOICE_INTERPRETER_EN_MSISDN']}@{domain}\n",
                 ),
             ]
         )
         status = wait_until(
-            lambda: state if len((state := voice())["calls"]) == 2 else None,
+            lambda: state if len((state := voice_status())["calls"]) == 2 else None,
             30,
             "Both interpreter legs did not start",
         )
@@ -215,7 +240,7 @@ def main():
         if set(calls) != {"interpret_ru", "interpret_en"}:
             raise RuntimeError("Interpreter language legs were not isolated")
         wait_until(
-            lambda: ai().get("active_calls", 0) >= 2,
+            lambda: ai_status().get("active_calls", 0) >= 2,
             15,
             "AI worker did not register both interpreter legs",
         )
@@ -225,36 +250,38 @@ def main():
                     event.get("call_id") == call_id
                     and event.get("reason") == "greeting"
                     and event.get("event") == "tts_sent"
-                    for event in voice()["events"]
+                    for event in voice_status()["events"]
                 )
                 for call_id in calls.values()
             ),
             30,
             "Interpreter greetings did not complete",
         )
-        parallel([("lab-sipue1", "cc\n1\n4\n"), ("lab-sipue2", "cc\n1\n4\n")])
+        send_commands_in_parallel([("lab-sipue1", "cc\n1\n4\n"), ("lab-sipue2", "cc\n1\n4\n")])
 
         def translated():
-            ru_events, en_events = translated_events(started, calls, cfg)
+            ru_events, en_events = translated_events(started, calls, settings)
             return (ru_events, en_events) if len(ru_events) >= 2 and len(en_events) >= 2 else None
 
         ru_events, en_events = wait_until(
-            translated, 180, "Four bidirectional translated turns did not complete"
+            translated,
+            translation_timeout_seconds,
+            "Four bidirectional translated turns did not complete",
         )
         english_tts, russian_tts = wait_until(
-            lambda: completed_tts(calls, cfg, 2),
+            lambda: completed_tts(calls, settings, 2),
             60,
             "Translated RTP did not complete on both language legs",
         )
     finally:
-        parallel(
+        send_commands_in_parallel(
             [
                 ("lab-sipue1", "cd\n1\n4\nha\n"),
                 ("lab-sipue2", "cd\n1\n4\nha\n"),
             ]
         )
         wait_until(
-            lambda: not voice()["calls"] and not adapter()["sessions"],
+            lambda: not voice_status()["calls"] and not adapter_status()["sessions"],
             30,
             "Interpreter calls did not clean up",
         )
@@ -270,7 +297,7 @@ def main():
         "en_to_ru_turns": len(en_events),
         "english_leg_tts": 2,
         "russian_leg_tts": 2,
-        "processing_workers": ai().get("processing_workers"),
+        "processing_workers": ai_status().get("processing_workers"),
         "latency_by_turn": latencies,
         "subscriber_rx_packets": rx,
         "pass": (

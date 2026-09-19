@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reject topology/identity literals outside the canonical env files."""
+
 from __future__ import annotations
 
 import re
@@ -14,7 +15,11 @@ PATTERNS = (
     re.compile(r"\bims\.mnc001\.mcc001\.3gppnetwork\.org\b"),
 )
 SUFFIXES = {".sh", ".py", ".ps1", ".js", ".yaml", ".yml"}
-ALLOWED = {ROOT / "app/config/lab.env", ROOT / "local/secrets" / "ims.env", Path(__file__).resolve()}
+ALLOWED = {
+    ROOT / "app/config/lab.env",
+    ROOT / "local/secrets" / "ims.env",
+    Path(__file__).resolve(),
+}
 
 violations: list[str] = []
 for path in ROOT.rglob("*"):
@@ -34,7 +39,10 @@ for path in ROOT.rglob("*"):
             violations.append(f"{path.relative_to(ROOT)}:{number}: {line}")
 
 if violations:
-    print("ERROR: topology/identity literals must live in app/config/lab.env or local/secrets/ims.env", file=sys.stderr)
+    print(
+        "ERROR: topology/identity literals must live in app/config/lab.env or local/secrets/ims.env",
+        file=sys.stderr,
+    )
     print("\n".join(violations), file=sys.stderr)
     raise SystemExit(1)
 print("PASS: no hardcoded lab topology or subscriber identity in executable configuration")

@@ -25,6 +25,8 @@ milestones; they are not release tags or scientific benchmark results.
 
 ### Changed
 
+- style: count the 300-line module limit by logical lines, allowing whitespace
+  and explanatory comments; separate dense media-processing loops into named stages.
 - refactor: replace handwritten HTTP handlers with Flask and Waitress; share
   HTTPX clients, authentication, JSON validation, and server settings.
 - refactor: separate speech recognition, transcription, reply delivery, and

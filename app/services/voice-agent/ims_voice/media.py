@@ -1,142 +1,294 @@
-"""RTP sending, interruption, receiving, and call expiry."""
+"""Синтезирует речь, отправляет RTP и принимает голос абонента."""
 
 import queue
 import struct
 import time
+from dataclasses import dataclass
 
 from . import runtime
 from .audio import synthesize, ulaw_rms
 
+PCMU_FRAME_BYTES = 160
+PCMU_FRAME_SECONDS = 0.02
+RTP_HEADER_BYTES = 12
+RTP_VERSION = 2
+PCMU_PAYLOAD_TYPE = 0
 
-def send_audio(call_id, text, reason, voice, reply_id=None):
-    """Synthesize and play one item; a per-call worker preserves order."""
+
+@dataclass
+class PlaybackState:
+    """Изменяемые RTP-счётчики одной операции воспроизведения."""
+
+    generation: int
+    sequence: int
+    timestamp: int
+    destination: tuple[str, int]
+    ssrc: int
+    packets_sent: int = 0
+    interrupted: bool = False
+
+
+def elapsed_ms(started_at_ns: int) -> float:
+    return (time.perf_counter_ns() - started_at_ns) / 1_000_000
+
+
+def begin_playback(call_id: str) -> PlaybackState | None:
+    """Зарезервировать новое поколение TTS и скопировать RTP-адрес звонка."""
+    with runtime.lock:
+        call = runtime.calls.get(call_id)
+        if call is None:
+            return None
+
+        call["tts_generation"] += 1
+        call["tts_active"] = True
+
+        return PlaybackState(
+            generation=call["tts_generation"],
+            sequence=call["seq"],
+            timestamp=call["timestamp"],
+            destination=(call["remote_ip"], call["remote_port"]),
+            ssrc=call["ssrc"],
+        )
+
+
+def playback_is_current(call_id: str, generation: int) -> bool:
+    """Поколение меняется при новом ответе, BYE или barge-in абонента."""
+    with runtime.lock:
+        call = runtime.calls.get(call_id)
+        return call is not None and call["tts_generation"] == generation
+
+
+def send_rtp_frames(call_id: str, audio_payload: bytes, playback: PlaybackState) -> None:
+    """Отправить PCMU в реальном времени, проверяя прерывание между кадрами."""
+    for frame_offset in range(0, len(audio_payload), PCMU_FRAME_BYTES):
+        if not playback_is_current(call_id, playback.generation):
+            playback.interrupted = True
+            return
+
+        frame = audio_payload[frame_offset : frame_offset + PCMU_FRAME_BYTES].ljust(
+            PCMU_FRAME_BYTES, b"\xff"
+        )
+        rtp_header = struct.pack(
+            "!BBHII",
+            0x80,
+            PCMU_PAYLOAD_TYPE,
+            playback.sequence,
+            playback.timestamp,
+            playback.ssrc,
+        )
+        runtime.rtp.sendto(rtp_header + frame, playback.destination)
+
+        playback.sequence = (playback.sequence + 1) & 0xFFFF
+        playback.timestamp = (playback.timestamp + PCMU_FRAME_BYTES) & 0xFFFFFFFF
+        playback.packets_sent += 1
+
+        # Без pacing весь WAV попадёт в UDP быстрее, чем его сможет проиграть UE.
+        time.sleep(PCMU_FRAME_SECONDS)
+
+
+def finish_playback(
+    call_id: str,
+    playback: PlaybackState,
+    reason: str,
+    voice: str,
+    reply_id: str | None,
+    synthesis_ms: float,
+    playout_ms: float,
+    total_ms: float,
+) -> None:
+    """Сохранить RTP-счётчики и безопасные метрики без текста ответа."""
+    with runtime.lock:
+        current_call = runtime.calls.get(call_id)
+        if current_call is not None:
+            current_call["seq"] = playback.sequence
+            current_call["timestamp"] = playback.timestamp
+
+            if current_call["tts_generation"] == playback.generation:
+                current_call["tts_active"] = False
+
+        event_name = "tts_interrupted" if playback.interrupted else "tts_sent"
+        runtime.events.append(
+            {
+                "call_id": call_id,
+                "event": event_name,
+                "reason": reason,
+                "backend": runtime.tts_backend,
+                "voice": voice,
+                "packets": playback.packets_sent,
+                "at": time.time(),
+                "reply_id": reply_id,
+                "synthesis_ms": synthesis_ms,
+                "rtp_playout_ms": playout_ms,
+                "tts_total_ms": total_ms,
+            }
+        )
+        del runtime.events[: -runtime.event_retention]
+
+
+def send_audio(
+    call_id: str,
+    text: str,
+    reason: str,
+    voice: str,
+    reply_id: str | None = None,
+) -> None:
+    """Синтезировать и воспроизвести один элемент очереди звонка."""
     if voice not in runtime.allowed_tts_voices:
         return
-    with runtime.lock:
-        call = runtime.calls.get(call_id)
-        if call:
-            call["tts_generation"] += 1
-            generation = call["tts_generation"]
-    if not call:
+
+    total_started_at = time.perf_counter_ns()
+    synthesis_started_at = time.perf_counter_ns()
+    audio_payload = synthesize(text, voice)
+    synthesis_ms = elapsed_ms(synthesis_started_at)
+
+    playback = begin_playback(call_id)
+    if playback is None:
         return
-    total_started = time.perf_counter_ns()
-    synthesis_started = time.perf_counter_ns()
-    payload = synthesize(text, voice)
-    synthesis_ms = (time.perf_counter_ns() - synthesis_started) / 1_000_000
-    interrupted = False
-    with runtime.lock:
-        call = runtime.calls.get(call_id)
-        if not call or call["tts_generation"] != generation:
-            return
-        call["tts_active"] = True
-        seq = call["seq"]
-        timestamp = call["timestamp"]
-        remote = (call["remote_ip"], call["remote_port"])
-        ssrc = call["ssrc"]
-    sent = 0
-    playout_started = time.perf_counter_ns()
-    for offset in range(0, len(payload), 160):
-        with runtime.lock:
-            current = runtime.calls.get(call_id)
-            if not current or current["tts_generation"] != generation:
-                interrupted = True
-                break
-        frame = payload[offset : offset + 160].ljust(160, b"\xff")
-        header = struct.pack("!BBHII", 0x80, 0, seq, timestamp, ssrc)
-        runtime.rtp.sendto(header + frame, remote)
-        seq = (seq + 1) & 0xFFFF
-        timestamp = (timestamp + 160) & 0xFFFFFFFF
-        sent += 1
-        time.sleep(0.02)
-    with runtime.lock:
-        current = runtime.calls.get(call_id)
-        if current:
-            current["seq"] = seq
-            current["timestamp"] = timestamp
-            if current["tts_generation"] == generation:
-                current["tts_active"] = False
-        event = {
-            "call_id": call_id,
-            "event": "tts_interrupted" if interrupted else "tts_sent",
-            "reason": reason,
-            "backend": runtime.tts_backend,
-            "voice": voice,
-            "packets": sent,
-            "at": time.time(),
-            "reply_id": reply_id,
-            "synthesis_ms": synthesis_ms,
-            "rtp_playout_ms": (time.perf_counter_ns() - playout_started) / 1_000_000,
-            "tts_total_ms": (time.perf_counter_ns() - total_started) / 1_000_000,
-        }
-        runtime.events.append(event)
-        del runtime.events[: -runtime.event_retention]
-    state = "interrupted" if interrupted else "sent"
+
+    playout_started_at = time.perf_counter_ns()
+    send_rtp_frames(call_id, audio_payload, playback)
+
+    playout_ms = elapsed_ms(playout_started_at)
+    total_ms = elapsed_ms(total_started_at)
+    finish_playback(
+        call_id,
+        playback,
+        reason,
+        voice,
+        reply_id,
+        synthesis_ms,
+        playout_ms,
+        total_ms,
+    )
+
+    delivery_state = "interrupted" if playback.interrupted else "sent"
     print(
-        f"VOICE tts call_id={call_id} reason={reason} state={state} backend={runtime.tts_backend} "
-        f"voice={voice} packets={sent}",
+        f"VOICE tts call_id={call_id} reason={reason} state={delivery_state} "
+        f"backend={runtime.tts_backend} voice={voice} packets={playback.packets_sent}",
         flush=True,
     )
 
 
-def enqueue_audio(call_id, text, reason, voice, reply_id=None):
-    """Append speech without blocking HTTP or replacing an earlier reply."""
+def enqueue_audio(
+    call_id: str,
+    text: str,
+    reason: str,
+    voice: str,
+    reply_id: str | None = None,
+) -> bool:
+    """Добавить речь без блокировки HTTP и без замены предыдущего ответа."""
     with runtime.lock:
-        reply_queue = runtime.reply_queues.get(call_id)
-    if not reply_queue:
+        playback_queue = runtime.reply_queues.get(call_id)
+
+    if playback_queue is None:
         return False
+
     try:
-        reply_queue.put_nowait((text, reason, voice, reply_id))
+        playback_queue.put_nowait((text, reason, voice, reply_id))
         return True
     except queue.Full:
         return False
 
 
-def play_queued_audio(call_id, reply_queue):
-    """Preserve audible turn order while AI work continues in parallel."""
+def play_queued_audio(call_id: str, playback_queue: queue.Queue) -> None:
+    """Сохранить слышимый порядок ответов одного звонка."""
     while True:
         with runtime.lock:
-            if runtime.reply_queues.get(call_id) is not reply_queue:
-                return
+            call_is_active = runtime.reply_queues.get(call_id) is playback_queue
+
+        if not call_is_active:
+            return
+
         try:
-            item = reply_queue.get(timeout=0.5)
+            playback_item = playback_queue.get(timeout=0.5)
         except queue.Empty:
             continue
+
         try:
-            send_audio(call_id, *item)
-        except Exception as exc:
+            send_audio(call_id, *playback_item)
+        except Exception as error:
             # Ошибка одного синтеза не должна навсегда остановить очередь звонка.
-            print(f"VOICE synthesis_failed type={type(exc).__name__}", flush=True)
+            print(
+                f"VOICE synthesis_failed type={type(error).__name__}",
+                flush=True,
+            )
         finally:
-            reply_queue.task_done()
+            playback_queue.task_done()
 
 
-def receive_audio():
+def extract_pcmu_payload(packet: bytes) -> bytes | None:
+    """Принять только минимальный RTP v2 с payload type 0 (PCMU)."""
+    if len(packet) < RTP_HEADER_BYTES:
+        return None
+
+    rtp_version = packet[0] >> 6
+    payload_type = packet[1] & 0x7F
+    if rtp_version != RTP_VERSION or payload_type != PCMU_PAYLOAD_TYPE:
+        return None
+
+    return packet[RTP_HEADER_BYTES:]
+
+
+def update_call_from_audio(call: dict, audio_rms: float, now: float) -> bool:
+    """Обновить VAD звонка и вернуть True, когда нужен фиксированный ответ."""
+    call["received_packets"] += 1
+
+    if audio_rms >= runtime.vad_rms:
+        # Barge-in немедленно меняет поколение, поэтому текущий sender завершится.
+        if call["tts_active"]:
+            call["tts_generation"] += 1
+            call["tts_active"] = False
+
+        call["speech_seen"] = True
+        call["last_voice"] = now
+        return False
+
+    silence_completed = (
+        call["speech_seen"]
+        and not call["replied"]
+        and now - call["last_voice"] >= runtime.silence_seconds
+    )
+    if not runtime.llm_mode and silence_completed:
+        call["replied"] = True
+        return True
+
+    return False
+
+
+def calls_ready_for_fixed_reply(
+    sender: tuple[str, int],
+    audio_payload: bytes,
+) -> list[str]:
+    """Найти звонок по адресу RTPengine и обработать один входящий кадр."""
+    audio_rms = ulaw_rms(audio_payload)
+    now = time.time()
+    ready_call_ids = []
+
+    with runtime.lock:
+        for call_id, call in runtime.calls.items():
+            expected_sender = (call["remote_ip"], call["remote_port"])
+            if sender != expected_sender:
+                continue
+
+            if update_call_from_audio(call, audio_rms, now):
+                ready_call_ids.append(call_id)
+
+    return ready_call_ids
+
+
+def receive_audio() -> None:
+    """Непрерывно принимать RTP; тяжёлая обработка выполняется вне этого цикла."""
     while True:
-        packet, peer = runtime.rtp.recvfrom(4096)
-        if len(packet) < 12 or packet[0] >> 6 != 2 or packet[1] & 0x7F != 0:
+        packet, sender = runtime.rtp.recvfrom(4096)
+        audio_payload = extract_pcmu_payload(packet)
+        if audio_payload is None:
             continue
-        payload = packet[12:]
-        rms = ulaw_rms(payload)
-        now = time.time()
-        responses = []
-        with runtime.lock:
-            for call_id, call in runtime.calls.items():
-                if peer != (call["remote_ip"], call["remote_port"]):
-                    continue
-                call["received_packets"] += 1
-                if rms >= runtime.vad_rms:
-                    if call["tts_active"]:
-                        call["tts_generation"] += 1
-                        call["tts_active"] = False
-                    call["speech_seen"] = True
-                    call["last_voice"] = now
-                elif (
-                    not runtime.llm_mode
-                    and call["speech_seen"]
-                    and not call["replied"]
-                    and now - call["last_voice"] >= runtime.silence_seconds
-                ):
-                    call["replied"] = True
-                    responses.append(call_id)
-        for call_id in responses:
-            enqueue_audio(call_id, runtime.reply_text, "vad_reply", runtime.tts_voice)
+
+        ready_call_ids = calls_ready_for_fixed_reply(sender, audio_payload)
+        for call_id in ready_call_ids:
+            enqueue_audio(
+                call_id,
+                runtime.reply_text,
+                "vad_reply",
+                runtime.tts_voice,
+            )

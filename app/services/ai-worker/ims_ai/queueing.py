@@ -13,7 +13,7 @@ from .utterances import process_utterance
 class UtteranceTask:
     """Явные поля задания вместо словаря со строковыми ключами."""
 
-    ulaw: bytes
+    pcmu_audio: bytes
     event: dict
     received_at: float
     end_reason: str
@@ -21,16 +21,27 @@ class UtteranceTask:
     call_id: str
 
 
-def enqueue_utterance(ulaw, event, received_at, end_reason):
+def enqueue_utterance(pcmu_audio, event, received_at, end_reason):
+    """Зарегистрировать ожидающую работу до помещения задания в очередь."""
     call_ids = event.get("call_ids") or []
     call_id = call_ids[0] if len(call_ids) == 1 else "unbound"
-    task = UtteranceTask(ulaw, event, received_at, end_reason, time.time(), call_id)
+    task = UtteranceTask(
+        pcmu_audio=pcmu_audio,
+        event=event,
+        received_at=received_at,
+        end_reason=end_reason,
+        queued_at=time.time(),
+        call_id=call_id,
+    )
+
     with runtime.pending_condition:
         runtime.pending_utterances[call_id] = runtime.pending_utterances.get(call_id, 0) + 1
         runtime.call_locks.setdefault(call_id, threading.Lock())
+
     try:
         runtime.utterance_work.put_nowait(task)
     except queue.Full:
+        # Счётчик обязан соответствовать очереди, иначе BYE будет ждать вечно.
         with runtime.pending_condition:
             runtime.pending_utterances[call_id] -= 1
             runtime.pending_condition.notify_all()
@@ -43,28 +54,39 @@ def wait_for_call(call_id):
         runtime.pending_condition.wait_for(lambda: not runtime.pending_utterances.get(call_id, 0))
 
 
+def mark_task_finished(call_id: str) -> None:
+    """Уменьшить счётчик и разбудить ожидающий завершения BYE."""
+    with runtime.pending_condition:
+        remaining_tasks = runtime.pending_utterances.get(call_id, 1) - 1
+
+        if remaining_tasks:
+            runtime.pending_utterances[call_id] = remaining_tasks
+        else:
+            runtime.pending_utterances.pop(call_id, None)
+
+        runtime.pending_condition.notify_all()
+
+
 def process_utterances():
+    """Обрабатывать разные звонки параллельно, а один звонок — последовательно."""
     while True:
         task = runtime.utterance_work.get()
-        call_id = task.call_id
+
         try:
             # Историю одного звонка меняет только один worker в каждый момент.
-            with runtime.call_locks[call_id]:
+            with runtime.call_locks[task.call_id]:
                 process_utterance(
-                    task.ulaw,
+                    task.pcmu_audio,
                     task.event,
                     task.received_at,
                     task.end_reason,
                     task.queued_at,
                 )
-        except Exception as exc:
-            print(f"AI utterance_failed type={type(exc).__name__}", flush=True)
+        except Exception as error:
+            print(
+                f"AI utterance_failed type={type(error).__name__}",
+                flush=True,
+            )
         finally:
-            with runtime.pending_condition:
-                remaining = runtime.pending_utterances.get(call_id, 1) - 1
-                if remaining:
-                    runtime.pending_utterances[call_id] = remaining
-                else:
-                    runtime.pending_utterances.pop(call_id, None)
-                runtime.pending_condition.notify_all()
+            mark_task_finished(task.call_id)
             runtime.utterance_work.task_done()

@@ -1,75 +1,215 @@
 param([switch]$SkipVerify)
+
 $ErrorActionPreference = 'Stop'
+
 $LabRoot = Split-Path -Parent $PSScriptRoot
-$Bash = 'C:\Program Files\Git\bin\bash.exe'
-foreach ($command in @('docker', 'python', 'powershell.exe', 'wsl')) {
-    if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
-        throw "Required command is missing: $command"
+$GitBash = 'C:\Program Files\Git\bin\bash.exe'
+
+
+function Assert-CommandSucceeded {
+    param(
+        [int]$ExitCode,
+        [string]$FailureMessage
+    )
+
+    if ($ExitCode -ne 0) {
+        throw $FailureMessage
     }
 }
-if (-not (Test-Path $Bash)) { throw 'Install Git for Windows with Bash' }
-docker info --format '{{.OSType}}' | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'Start Docker Desktop with Linux containers first' }
-& "$PSScriptRoot\initialize-local.ps1"
-$PublicEnv = @{}
-Get-Content (Join-Path $LabRoot 'app/config/lab.env') | ForEach-Object {
-    if ($_ -match '^([^#=]+)=(.*)$') { $PublicEnv[$matches[1]] = $matches[2] }
+
+
+function Assert-HostRequirements {
+    $requiredCommands = @(
+        'docker',
+        'python',
+        'powershell.exe',
+        'wsl'
+    )
+
+    foreach ($commandName in $requiredCommands) {
+        if (-not (Get-Command $commandName -ErrorAction SilentlyContinue)) {
+            throw "Required command is missing: $commandName"
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $GitBash)) {
+        throw 'Install Git for Windows with Bash'
+    }
+
+    docker info --format '{{.OSType}}' | Out-Null
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'Start Docker Desktop with Linux containers first'
 }
+
+
+function Read-PublicEnvironment {
+    $environment = @{}
+    $environmentPath = Join-Path $LabRoot 'app/config/lab.env'
+
+    Get-Content -LiteralPath $environmentPath | ForEach-Object {
+        if ($_ -match '^([^#=]+)=(.*)$') {
+            $environment[$matches[1]] = $matches[2]
+        }
+    }
+
+    return $environment
+}
+
+
+function New-DialogueFixtures {
+    & powershell.exe `
+        -NoProfile `
+        -File "$PSScriptRoot\generate-bilingual-dialogue.ps1"
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'Dialogue fixture generation failed; check Windows voices'
+
+    $interpreterDesign = Join-Path `
+        $LabRoot `
+        'app/tests/fixtures/interpreter-dialogue-v1.json'
+    $interpreterOutput = Join-Path $LabRoot 'local/private/interpreter'
+
+    & powershell.exe `
+        -NoProfile `
+        -File "$PSScriptRoot\generate-bilingual-dialogue.ps1" `
+        -Design $interpreterDesign `
+        -OutputDirectory $interpreterOutput
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'Interpreter fixture generation failed'
+}
+
+
+function Wait-PyHssApi {
+    param([hashtable]$PublicEnvironment)
+
+    $apiAddress = $PublicEnvironment.PYHSS_API_BIND
+    $apiPort = $PublicEnvironment.PYHSS_API_PORT
+    $subscriberListUrl = "http://${apiAddress}:${apiPort}/ims_subscriber/list?page=0&page_size=1"
+
+    for ($attemptNumber = 1; $attemptNumber -le 36; $attemptNumber++) {
+        try {
+            $response = Invoke-WebRequest `
+                -UseBasicParsing `
+                -TimeoutSec 2 `
+                -Uri $subscriberListUrl
+
+            if ($response.StatusCode -eq 200) {
+                return
+            }
+        }
+        catch {
+            # PyHSS starts three local processes sequentially; readiness is
+            # expected to lag behind the Docker container state.
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    throw 'PyHSS REST API did not become ready'
+}
+
+
+function Initialize-Subscribers {
+    docker cp `
+        "$LabRoot\scripts\subscribers.js" `
+        'lab-mongo:/tmp/subscribers.js'
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'Open5GS subscriber copy failed'
+
+    docker exec lab-mongo mongosh --quiet /tmp/subscribers.js
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'Open5GS subscriber provisioning failed'
+
+    & $GitBash scripts/provision-ims-subscribers.sh --apply
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'IMS subscriber provisioning failed'
+}
+
+
+function Restart-RegistrationChain {
+    # Recreated databases leave long-lived Open5GS connections and the gNB SCTP
+    # association pointing at stale state. Restart dependencies before UEs.
+    docker restart lab-udr lab-udm lab-ausf lab-pcf lab-amf | Out-Null
+    Start-Sleep -Seconds 5
+
+    docker restart lab-gnb | Out-Null
+    Start-Sleep -Seconds 5
+
+    docker restart lab-ue1 lab-ue2 | Out-Null
+    Start-Sleep -Seconds 15
+
+    docker restart lab-sipue1 lab-sipue2 | Out-Null
+    Start-Sleep -Seconds 12
+}
+
+
+function Invoke-LiveGates {
+    $gateFiles = @(
+        'verify.sh',
+        'verify-ims.sh',
+        'verify-ims-registration.sh',
+        'verify-ims-call.sh',
+        'verify-voice-agent.sh',
+        'verify-real-ai-stream.sh',
+        'verify-transcription-recording.sh',
+        'verify-bilingual-dialogue.sh',
+        'verify-security.sh'
+    )
+
+    # Все gates используют один стенд, поэтому намеренно выполняются по очереди.
+    foreach ($gateFile in $gateFiles) {
+        & $GitBash "app/tests/integration/$gateFile"
+        Assert-CommandSucceeded `
+            -ExitCode $LASTEXITCODE `
+            -FailureMessage "$gateFile failed"
+    }
+}
+
+
+Assert-HostRequirements
+& "$PSScriptRoot\initialize-local.ps1"
+$PublicEnvironment = Read-PublicEnvironment
 
 Push-Location $LabRoot
 try {
-    & powershell.exe -NoProfile -File "$PSScriptRoot\generate-bilingual-dialogue.ps1"
-    if ($LASTEXITCODE -ne 0) { throw 'Dialogue fixture generation failed; check Windows voices' }
-    & powershell.exe -NoProfile -File "$PSScriptRoot\generate-bilingual-dialogue.ps1" -Design "$LabRoot\app\tests\fixtures\interpreter-dialogue-v1.json" -OutputDirectory "$LabRoot\local\private\interpreter"
-    if ($LASTEXITCODE -ne 0) { throw 'Interpreter fixture generation failed' }
+    New-DialogueFixtures
 
     & "$PSScriptRoot\prepare-host.ps1"
-    if ($LASTEXITCODE -ne 0) { throw 'SCTP preparation failed' }
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'SCTP preparation failed'
 
     & "$PSScriptRoot\compose.ps1" up -d --build
-    if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed' }
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'docker compose up failed'
 
+    # Инициализатор проверяет digest модели и завершается; рабочий Ollama
+    # запускается отдельно и использует тот же приватный volume.
     docker wait lab-llm-model-init | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'could not wait for pinned LLM initialization' }
-    $LlmInitExit = docker inspect --format '{{.State.ExitCode}}' lab-llm-model-init
-    if ($LASTEXITCODE -ne 0 -or $LlmInitExit -ne '0') { throw 'pinned LLM initialization failed' }
+    Assert-CommandSucceeded `
+        -ExitCode $LASTEXITCODE `
+        -FailureMessage 'Could not wait for pinned LLM initialization'
 
-    docker cp "$LabRoot\scripts\subscribers.js" lab-mongo:/tmp/subscribers.js
-    if ($LASTEXITCODE -ne 0) { throw 'Open5GS subscriber copy failed' }
-    docker exec lab-mongo mongosh --quiet /tmp/subscribers.js
-    if ($LASTEXITCODE -ne 0) { throw 'Open5GS subscriber provisioning failed' }
-
-    $ready = $false
-    for ($attempt = 0; $attempt -lt 36; $attempt++) {
-        try {
-            $api = "http://$($PublicEnv.PYHSS_API_BIND):$($PublicEnv.PYHSS_API_PORT)/ims_subscriber/list?page=0&page_size=1"
-            $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 $api
-            if ($response.StatusCode -eq 200) { $ready = $true; break }
-        } catch { Start-Sleep -Seconds 5 }
+    $modelInitializationExitCode = docker inspect `
+        --format '{{.State.ExitCode}}' `
+        lab-llm-model-init
+    if ($modelInitializationExitCode -ne '0') {
+        throw 'Pinned LLM initialization failed'
     }
-    if (-not $ready) { throw 'PyHSS REST API did not become ready' }
 
-    & $Bash scripts/provision-ims-subscribers.sh --apply
-    if ($LASTEXITCODE -ne 0) { throw 'IMS subscriber provisioning failed' }
-
-    # A recreated Mongo container can leave long-lived Open5GS clients and the
-    # gNB SCTP association pointing at stale state. Restart the dependency
-    # chain before the UEs so a config-only/secret-scope update is reproducible.
-    docker restart lab-udr lab-udm lab-ausf lab-pcf lab-amf | Out-Null
-    Start-Sleep -Seconds 5
-    docker restart lab-gnb | Out-Null
-    Start-Sleep -Seconds 5
-    docker restart lab-ue1 lab-ue2 | Out-Null
-    Start-Sleep -Seconds 15
-    docker restart lab-sipue1 lab-sipue2 | Out-Null
-    Start-Sleep -Seconds 12
+    Wait-PyHssApi -PublicEnvironment $PublicEnvironment
+    Initialize-Subscribers
+    Restart-RegistrationChain
 
     if (-not $SkipVerify) {
-        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-transcription-recording.sh', 'verify-bilingual-dialogue.sh', 'verify-security.sh')) {
-            & $Bash "app/tests/integration/$gate"
-            if ($LASTEXITCODE -ne 0) { throw "$gate failed" }
-        }
+        Invoke-LiveGates
     }
-} finally {
+}
+finally {
     Pop-Location
 }
