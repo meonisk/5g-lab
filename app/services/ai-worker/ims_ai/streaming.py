@@ -21,7 +21,9 @@ def stable_prefix(previous, current, final=False, holdback=1):
         if old != new:
             break
         matching += 1
-    return current_words[: max(0, matching - holdback)]
+    # Hold the end of the CURRENT hypothesis, not the end of an already
+    # confirmed prefix. A changing name must not block a stable greeting.
+    return current_words[: min(matching, max(0, len(current_words) - holdback))]
 
 
 def process_snapshot(task):

@@ -140,8 +140,8 @@ class PhraseBoundaries(unittest.TestCase):
         from ims_ai.streaming import stable_prefix
 
         self.assertEqual(stable_prefix("", "Hello Alex"), [])
-        self.assertEqual(stable_prefix("Hello Alex", "Hello Alex I hear you"), ["Hello"])
-        self.assertEqual(stable_prefix("Hello Alice", "Hello Alex I hear you"), [])
+        self.assertEqual(stable_prefix("Hello Alex", "Hello Alex I hear you"), ["Hello", "Alex"])
+        self.assertEqual(stable_prefix("Hello Alice", "Hello Alex I hear you"), ["Hello"])
         self.assertEqual(stable_prefix("Hello", "Hello Alex", final=True), ["Hello", "Alex"])
 
     def test_partial_snapshot_does_not_cut_audio_or_reset_phrase(self):
