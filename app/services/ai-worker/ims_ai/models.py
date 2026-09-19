@@ -10,6 +10,7 @@ from faster_whisper import WhisperModel
 from lab_common.http import request_json
 
 from . import runtime, settings
+from .interpretation import prompt_for
 
 
 def load_model():
@@ -43,18 +44,28 @@ def warm_llm():
     deadline = time.monotonic() + settings.llm_warmup_timeout
     while time.monotonic() < deadline:
         try:
-            request_json(
-                "POST",
-                settings.llm_url,
-                payload={
-                    "model": settings.llm_model,
-                    "stream": False,
-                    "keep_alive": settings.llm_keep_alive,
-                    "messages": [{"role": "user", "content": "Say OK."}],
-                    "options": {"num_ctx": settings.llm_context_length, "num_predict": 1},
-                },
-                timeout=max(1, deadline - time.monotonic()),
-            )
+            # A one-word empty prompt does not warm GPU prefill shapes used by
+            # the longer bilingual system prompts. Warm both actual directions.
+            for mode, sample in (
+                ("interpret_ru", "Здравствуйте, это проверка локального перевода."),
+                ("interpret_en", "Hello, this is a local translation warmup."),
+            ):
+                for prompt_input in (sample, " ".join([sample] * 8)):
+                    request_json(
+                        "POST",
+                        settings.llm_url,
+                        payload={
+                            "model": settings.llm_model,
+                            "stream": False,
+                            "keep_alive": settings.llm_keep_alive,
+                            "messages": [
+                                {"role": "system", "content": prompt_for(mode)},
+                                {"role": "user", "content": prompt_input},
+                            ],
+                            "options": {"num_ctx": settings.llm_context_length, "num_predict": 1},
+                        },
+                        timeout=max(1, deadline - time.monotonic()),
+                    )
             print(f"AI llm_warm model={settings.llm_model}", flush=True)
             return
         except Exception:
