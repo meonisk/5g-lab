@@ -47,14 +47,16 @@ def delivery_call(source_call_id, service_mode):
 
 def validate_output(text, service_mode, cyrillic_count):
     latin_count = sum(char.isascii() and char.isalpha() for char in text)
+    # A valid streaming acknowledgement can be just "I" or "Да".
+    streaming = settings.streaming_enabled and service_mode in INTERPRETER_MODES
+    minimum_latin = 1 if streaming else settings.translation_min_latin
+    minimum_cyrillic = 1 if streaming else settings.reverse_translation_min_cyrillic
     if service_mode in {"translate", "interpret_ru"} and (
-        latin_count < settings.translation_min_latin
-        or cyrillic_count > settings.translation_max_cyrillic
+        latin_count < minimum_latin or cyrillic_count > settings.translation_max_cyrillic
     ):
         raise ValueError("English translation output language mismatch")
     if service_mode == "interpret_en" and (
-        cyrillic_count < settings.reverse_translation_min_cyrillic
-        or latin_count > settings.reverse_translation_max_latin
+        cyrillic_count < minimum_cyrillic or latin_count > settings.reverse_translation_max_latin
     ):
         raise ValueError("Russian translation output language mismatch")
     return latin_count

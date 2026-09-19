@@ -171,7 +171,12 @@ def translated_events(started, calls, settings):
         if event.get("service_mode") == "interpret_ru"
         and event.get("reply_destination_mode") == "interpret_en"
         and event.get("reply_voice") == settings["TTS_TRANSLATION_VOICE"]
-        and event.get("llm_response_latin_chars", 0) >= int(settings["TRANSLATION_MIN_LATIN_CHARS"])
+        and event.get("llm_response_latin_chars", 0)
+        >= (
+            1
+            if settings["AI_STREAMING_ENABLED"] == "1"
+            else int(settings["TRANSLATION_MIN_LATIN_CHARS"])
+        )
         and event.get("llm_response_cyrillic_chars", 1)
         <= int(settings["TRANSLATION_MAX_CYRILLIC_CHARS"])
     ]
@@ -182,7 +187,11 @@ def translated_events(started, calls, settings):
         and event.get("reply_destination_mode") == "interpret_ru"
         and event.get("reply_voice") == settings["TTS_VOICE"]
         and event.get("llm_response_cyrillic_chars", 0)
-        >= int(settings["REVERSE_TRANSLATION_MIN_CYRILLIC_CHARS"])
+        >= (
+            1
+            if settings["AI_STREAMING_ENABLED"] == "1"
+            else int(settings["REVERSE_TRANSLATION_MIN_CYRILLIC_CHARS"])
+        )
         and event.get("llm_response_latin_chars", 1)
         <= int(settings["REVERSE_TRANSLATION_MAX_LATIN_CHARS"])
     ]
