@@ -21,6 +21,7 @@ milestones; they are not release tags or scientific benchmark results.
   checksums, resident CPU inference, and unchanged PCMU/8000 media transport.
 - fix: generate private dialogue fixtures with pinned containerized Piper
   models and use one Python startup path on Windows and Linux.
+- fix: select Git Bash explicitly on Windows instead of the optional WSL launcher.
 - feat: capture complete phone-side input and received WAV files, all container
   logs, runtime metadata, hashes, latency, and Git provenance for one private
   two-language IMS interpreter experiment.

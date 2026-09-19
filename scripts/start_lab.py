@@ -40,10 +40,10 @@ def public_environment():
 
 
 def bash_command():
-    executable = shutil.which("bash")
     git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
-    if not executable and git_bash.exists():
-        executable = str(git_bash)
+    if sys.platform == "win32" and git_bash.exists():
+        return str(git_bash)
+    executable = shutil.which("bash")
     if not executable:
         raise RuntimeError("Install Git for Windows or bash on Linux")
     return executable
