@@ -11,13 +11,15 @@ This directory starts the complete local stand on Docker Desktop/WSL2:
 - a native IMS TERMINATE Voice Agent reachable at the service number defined
   by `VOICE_AGENT_MSISDN` in `lab.env`.
 
-The media path copies only subscriber-originated PCMU from RTPengine, keeps
-bounded audio windows in memory, transcribes them with a revision-pinned local
-faster-whisper model, sends the transient text to a digest-verified local
-Qwen2.5 0.5B model, and passes the bounded response to the TERMINATE Voice
-Agent. The current lightweight TTS backend is `espeak-ng`; it returns PCMU RTP
-through RTPengine to the IMS subscriber. SIP and RTP remain operational if the
-AI path is unavailable.
+The media path copies only subscriber-originated PCMU from RTPengine, forms
+bounded Russian utterances with VAD in memory, transcribes them with a
+revision-pinned multilingual faster-whisper model, sends the transient text and
+bounded per-call context to a digest-verified local Qwen2.5 0.5B model, and
+passes the bounded response to the TERMINATE Voice Agent. The current
+lightweight Russian TTS backend is `espeak-ng`; it returns PCMU RTP through
+RTPengine to the IMS subscriber. Multiple turns are supported in one call, and
+subscriber speech interrupts current TTS playback. SIP and RTP remain
+operational if the AI path is unavailable.
 
 ## Configuration rule
 
@@ -72,6 +74,8 @@ Research designs, the local/physical-stand validity boundary, metrics, privacy
 rules, and the evidence-capture workflow are documented in
 [`research/README.md`](research/README.md). A passing research-tooling check is
 an instrumentation admission result, not an AI-performance result.
+The interface-preserving migration from UERANSIM to a physical gNB and UE is
+defined in [`docs/physical-5g-stand.md`](docs/physical-5g-stand.md).
 
 The Phase 4C/4D gate proves all of the following from live evidence:
 
@@ -82,10 +86,11 @@ The Phase 4C/4D gate proves all of the following from live evidence:
    the SIP Call-ID.
 5. RTP counters continue increasing while AI Worker is stopped.
 
-The real-stream gate additionally injects a deterministic spoken sentence from
-the UE conference bridge and proves `IMS PCMU -> STT -> local LLM -> espeak-ng
--> RTP`. It records only durations, character counts, backend identifiers, and
-latencies; neither transcript nor generated reply is written to evidence.
+The real-stream gate additionally injects deterministic Russian speech from
+the UE conference bridge and proves at least two turns of `IMS PCMU -> Russian
+STT -> local LLM -> Russian espeak-ng -> RTP` in one IMS dialog. It records only
+durations, language tags, character counts, backend identifiers, and latencies;
+neither transcript nor generated reply is written to evidence.
 
 The Phase 4E gate calls the configured service number from UE1 and proves that
 the caller receives `200 OK`, PCMU is negotiated, the ACK reaches SIP AS, both
@@ -119,7 +124,8 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
 - Voice Agent accepts media only from the env-defined RTPengine address and
   port allocation. Audio is processed in memory and is not recorded; the
   analytics path receives no SIP `From`/`To` subscriber identities.
-- STT audio windows and transcripts are bounded and memory-only. Model files
+- STT utterances, transcripts, and bounded per-call LLM history are memory-only
+  and expire automatically. Model files
   use a separate persistent cache volume; the model revision and Python
   dependencies are pinned. Operational logs record sizes and timings, not
   transcript text.

@@ -13,6 +13,7 @@ check() {
     if "$@"; then printf 'PASS: %s\n' "$label"; else printf 'FAIL: %s\n' "$label"; fail=1; fi
 }
 cleanup() {
+    docker exec lab-sipue1 sh -lc 'printf "cd\n1\n4\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
     docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -70,13 +71,35 @@ while ((SECONDS < deadline)); do
 done
 check 'voice-agent IMS dialog started' test -n "$call_id"
 
-# PJSUA registers the deterministic WAV as conference port 1; the active call
-# is port 4. Connect it only after the IMS dialog is established so the test
-# proves caller-originated RTP rather than reusing the agent greeting.
-docker exec lab-sipue1 sh -lc "printf 'cc\n1\n4\n' > /tmp/pjsua-control"
+# PJSUA registers the deterministic Russian WAV as conference port 1; the
+# active call is port 4. Each turn connects caller audio for one bounded
+# utterance and then disconnects it so the agent can speak without triggering
+# barge-in. Both turns retain the same SIP dialog and Call-ID.
+deadline=$((SECONDS + 15))
+while ((SECONDS < deadline)); do
+    voice_logs=$(docker logs lab-voice-agent --since "$since" 2>&1)
+    grep -q "VOICE tts call_id=$call_id reason=greeting state=sent" <<<"$voice_logs" && break
+    sleep 1
+done
+check 'Russian greeting completed before subscriber speech' \
+    grep -q "VOICE tts call_id=$call_id reason=greeting state=sent.*voice=$TTS_VOICE" <<<"${voice_logs:-}"
 
-printf '===== process live RTP audio =====\n'
-deadline=$((SECONDS + 60))
+printf '===== process two Russian dialogue turns =====\n'
+for turn in $(seq 1 "$AI_MIN_REPLIES_FOR_SMOKE"); do
+    docker exec lab-sipue1 sh -lc "printf 'cc\n1\n4\n' > /tmp/pjsua-control"
+    python -c 'import sys,time; time.sleep(float(sys.argv[1])+0.5)' "$AI_UTTERANCE_MAX_SECONDS"
+    docker exec lab-sipue1 sh -lc "printf 'cd\n1\n4\n' > /tmp/pjsua-control"
+    deadline=$((SECONDS + 30))
+    while ((SECONDS < deadline)); do
+        voice_logs=$(docker logs lab-voice-agent --since "$since" 2>&1)
+        sent=$(grep -c "VOICE tts call_id=$call_id reason=llm_reply state=sent.*voice=$TTS_VOICE" <<<"$voice_logs" || true)
+        [[ "$sent" -ge "$turn" ]] && break
+        sleep 1
+    done
+    check "Russian dialogue turn $turn returned through RTP" test "${sent:-0}" -ge "$turn"
+done
+
+deadline=$((SECONDS + 30))
 summary=''
 while ((SECONDS < deadline)); do
     status=$(query_events 2>/dev/null || true)
@@ -85,12 +108,16 @@ while ((SECONDS < deadline)); do
 import json,sys
 data=json.load(sys.stdin); call_id=sys.argv[1]; since=float(sys.argv[2])
 matches=[e for e in data.get("events",[]) if call_id in e.get("call_ids",[]) and e.get("processed_at",0)>=since and e.get("audio_duration_seconds",0)>0]
-best=max(matches, key=lambda e:(bool(e.get("reply_delivered")),e.get("transcript_chars",0)), default={})
-print(json.dumps({k:best.get(k) for k in ("backend_id","direction","audio_duration_seconds","audio_rms","transcript_chars","processing_ms","llm_model","llm_processing_ms","llm_response_chars","reply_delivered")}, ensure_ascii=False))' \
+delivered=[e for e in matches if e.get("reply_delivered")]
+best=max(delivered or matches, key=lambda e:(e.get("reply_index",0),e.get("transcript_chars",0)), default={})
+out={k:best.get(k) for k in ("backend_id","direction","audio_duration_seconds","audio_rms","transcript_chars","transcript_cyrillic_chars","detected_language","processing_ms","llm_model","llm_processing_ms","llm_response_chars","llm_response_cyrillic_chars","reply_delivered")}
+out["delivered_replies"]=len(delivered)
+print(json.dumps(out, ensure_ascii=False))' \
             "$call_id" "$since_epoch" <<<"$status")
         chars=$(python -c 'import json,sys; print(json.load(sys.stdin).get("transcript_chars") or 0)' <<<"$summary")
         delivered=$(python -c 'import json,sys; print(str(bool(json.load(sys.stdin).get("reply_delivered"))).lower())' <<<"$summary")
-        [[ "$delivered" == true ]] && break
+        delivered_replies=$(python -c 'import json,sys; print(json.load(sys.stdin).get("delivered_replies") or 0)' <<<"$summary")
+        [[ "$delivered" == true && "$delivered_replies" -ge "$AI_MIN_REPLIES_FOR_SMOKE" ]] && break
     fi
     sleep 2
 done
@@ -102,25 +129,34 @@ backend_id=$(python -c 'import json,sys; print(json.load(sys.stdin).get("backend
 processing_ms=$(python -c 'import json,sys; print(json.load(sys.stdin).get("processing_ms") or 0)' <<<"$summary")
 llm_ms=$(python -c 'import json,sys; print(json.load(sys.stdin).get("llm_processing_ms") or 0)' <<<"$summary")
 response_chars=$(python -c 'import json,sys; print(json.load(sys.stdin).get("llm_response_chars") or 0)' <<<"$summary")
+transcript_cyrillic=$(python -c 'import json,sys; print(json.load(sys.stdin).get("transcript_cyrillic_chars") or 0)' <<<"$summary")
+response_cyrillic=$(python -c 'import json,sys; print(json.load(sys.stdin).get("llm_response_cyrillic_chars") or 0)' <<<"$summary")
+detected_language=$(python -c 'import json,sys; print(json.load(sys.stdin).get("detected_language") or "")' <<<"$summary")
+delivered_replies=$(python -c 'import json,sys; print(json.load(sys.stdin).get("delivered_replies") or 0)' <<<"$summary")
 direction=$(python -c 'import json,sys; print(json.load(sys.stdin).get("direction") or "")' <<<"$summary")
 delivered=$(python -c 'import json,sys; print(str(bool(json.load(sys.stdin).get("reply_delivered"))).lower())' <<<"$summary")
 
 check 'real PCMU audio was decoded and processed' python -c 'import sys; raise SystemExit(0 if float(sys.argv[1]) >= 3 else 1)' "$audio_seconds"
 check 'local semantic STT produced text' test "$chars" -gt 0
+check 'Russian STT produced Cyrillic text' test "$transcript_cyrillic" -gt 0
+check 'STT result is identified as Russian' test "$detected_language" = ru
 check 'result identifies the replaceable backend' grep -q '^faster-whisper:' <<<"$backend_id"
 check 'only IMS subscriber audio entered AI' test "$direction" = caller_to_core
 check 'local LLM generated and delivered a bounded reply' test "$delivered" = true
 check 'LLM reply is non-empty' test "$response_chars" -gt 0
+check 'LLM replied in Russian Cyrillic text' test "$response_cyrillic" -gt 0
+check 'multiple dialogue turns were delivered in one IMS call' test "$delivered_replies" -ge "$AI_MIN_REPLIES_FOR_SMOKE"
 deadline=$((SECONDS + 20))
 voice_logs=''
 while ((SECONDS < deadline)); do
     voice_logs=$(docker logs lab-voice-agent --since "$since" 2>&1)
-    grep -q "VOICE tts call_id=$call_id reason=llm_reply" <<<"$voice_logs" && break
+    [[ $(grep -c "VOICE tts call_id=$call_id reason=llm_reply state=sent.*voice=$TTS_VOICE" <<<"$voice_logs" || true) -ge $AI_MIN_REPLIES_FOR_SMOKE ]] && break
     sleep 1
 done
-check 'TTS sent the LLM reply as RTP' grep -q "VOICE tts call_id=$call_id reason=llm_reply" <<<"$voice_logs"
-printf 'INFO: backend=%s audio_seconds=%s stt_ms=%s transcript_chars=%s llm_ms=%s response_chars=%s\n' \
-    "$backend_id" "$audio_seconds" "$processing_ms" "$chars" "$llm_ms" "$response_chars"
+tts_replies=$(grep -c "VOICE tts call_id=$call_id reason=llm_reply state=sent.*voice=$TTS_VOICE" <<<"$voice_logs" || true)
+check 'Russian TTS sent every dialogue reply as RTP' test "$tts_replies" -ge "$AI_MIN_REPLIES_FOR_SMOKE"
+printf 'INFO: backend=%s language=%s turns=%s audio_seconds=%s stt_ms=%s transcript_chars=%s llm_ms=%s response_chars=%s\n' \
+    "$backend_id" "$detected_language" "$delivered_replies" "$audio_seconds" "$processing_ms" "$chars" "$llm_ms" "$response_chars"
 
-printf 'REAL IMS AUDIO -> STT -> LLM -> TTS -> RTP: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
+printf 'RUSSIAN MULTI-TURN IMS AUDIO -> STT -> LLM -> TTS -> RTP: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
 exit "$fail"

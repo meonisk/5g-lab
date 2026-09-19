@@ -17,10 +17,10 @@ Do not change all four in the first campaign. First screen each axis while the
 others are fixed; use the pilot to choose a small factorial design only where
 interactions matter.
 
-The current `ai-worker` processes live PCMU with a revision-pinned local
-faster-whisper `tiny.en` model on CPU. It is now a small semantic STT backend.
-The `voice-agent` reply remains deterministic VAD plus synthesized prompts; the
-transcript does not yet control an LLM or response.
+The current `ai-worker` processes live PCMU with a revision-pinned multilingual
+faster-whisper `base` model on CPU. VAD-bounded Russian utterances control a
+local Qwen2.5 0.5B response, and the `voice-agent` returns Russian espeak-ng
+PCMU. Bounded in-memory dialog history enables multiple turns in one IMS call.
 
 ## 2. Questions that the platform can support
 
@@ -166,9 +166,9 @@ Default rules:
 ### Demo A — available now
 
 Show two registered IMS users, a subscriber call through P/I/S-CSCF and
-RTPengine, the OBSERVE path, a call to the deterministic voice-agent service,
-and call continuity while `ai-worker` is stopped. Label it “IMS service and
-measurement baseline”, not “LLM agent”.
+RTPengine, the OBSERVE path, a two-turn Russian call to the local LLM voice
+agent, and call continuity while `ai-worker` is stopped. Label it an
+integration and measurement baseline, not an AI-quality result.
 
 ### Demo B — after the pilot backend milestone
 

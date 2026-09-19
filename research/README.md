@@ -4,11 +4,11 @@ This directory turns the runnable IMS lab into an experiment-preparation and
 evidence-capture environment. It does **not** turn a successful lab check into
 a scientific result.
 
-The current executable design, `local-conversational-loop-smoke-v1.json`, is an
-instrumentation admission test. The earlier `local-instrumentation-smoke-v1`
-remains immutable for its existing evidence. The current design executes and
-records the 5GS, IMS call, STT/LLM/TTS loop, voice-agent, security/privacy, and
-topology gates; it also records revisions,
+The current executable design, `local-russian-conversation-smoke-v1.json`, is
+an instrumentation admission test. The earlier admission designs remain
+immutable for their existing evidence. The current design executes and records
+the 5GS, IMS call, two-turn Russian STT/LLM/TTS loop, voice-agent,
+security/privacy, and topology gates; it also records revisions,
 immutable input hashes, hardware, container images, bounded resource snapshots,
 and pseudonymized logs. Its result can prove that the measurement path works;
 it cannot support a conclusion about AI quality or scalability.
