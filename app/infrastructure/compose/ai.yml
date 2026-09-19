@@ -81,7 +81,10 @@ services:
     build:
       context: app/services
       dockerfile: ai-worker/Dockerfile
+      args:
+        AI_ENABLE_CUDA: ${AI_ENABLE_CUDA}
     image: lab-ai-worker
+    runtime: ${AI_CONTAINER_RUNTIME}
     container_name: lab-ai-worker
     user: "65532:65532"
     cpus: ${AI_WORKER_CPU_LIMIT}
@@ -89,6 +92,10 @@ services:
     env_file: [app/config/lab.env]
     environment:
       HOME: /tmp
+      AI_DEVICE: ${AI_DEVICE}
+      AI_COMPUTE_TYPE: ${AI_COMPUTE_TYPE}
+      NVIDIA_VISIBLE_DEVICES: ${AI_GPU_DEVICES}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
       HF_HOME: ${AI_MODEL_CACHE}
       HUGGINGFACE_HUB_CACHE: ${AI_MODEL_CACHE}
       XDG_CACHE_HOME: ${AI_MODEL_CACHE}

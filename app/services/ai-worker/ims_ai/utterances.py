@@ -170,10 +170,11 @@ def process_utterance(
     end_reason: str,
     queued_at: float,
     recognition_override: Recognition | None = None,
+    processing_started_at: float | None = None,
 ) -> dict:
     """Обработать одну реплику, не смешивая независимые действия режимов."""
     service_mode = event.get("service_mode", "observe")
-    ai_started_at = time.time()
+    ai_started_at = processing_started_at or time.time()
 
     recognition = recognition_override or recognize(ulaw_audio, service_mode)
     call_id = single_call_id(event)

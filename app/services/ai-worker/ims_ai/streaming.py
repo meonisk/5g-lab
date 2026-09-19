@@ -1,6 +1,7 @@
 """Experimental local-agreement ASR: translate stable prefixes, never cut PCM words."""
 
 import re
+import time
 from dataclasses import replace
 
 from . import runtime, settings
@@ -30,6 +31,7 @@ def process_snapshot(task):
     identity = (task.call_id, task.event["stream_phrase_id"])
     state = runtime.stream_hypotheses.setdefault(identity, {"previous": "", "committed": ""})
     final = task.end_reason != "stream-partial"
+    processing_started_at = time.time()
     recognition = recognize(task.pcmu_audio, task.event["service_mode"])
     current = recognition.transcript
     prefix = stable_prefix(state["previous"], current, final, settings.stream_holdback_words)
@@ -47,6 +49,7 @@ def process_snapshot(task):
             task.end_reason,
             task.queued_at,
             recognition_override=replace(recognition, transcript=" ".join(suffix)),
+            processing_started_at=processing_started_at,
         )
         state["delivery_failed"] = state.get("delivery_failed", False) or not result.get(
             "reply_delivered"
