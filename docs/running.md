@@ -105,7 +105,7 @@ The Phase 4C/4D gate proves all of the following from live evidence:
 
 The real-stream gate additionally injects deterministic Russian speech from
 the UE conference bridge and proves at least two turns of `IMS PCMU -> Russian
-STT -> local LLM translation -> English espeak-ng -> RTP` in one IMS dialog. It records only
+STT -> local LLM translation -> English Piper -> RTP` in one IMS dialog. It records only
 durations, language tags, character counts, backend identifiers, and latencies;
 neither transcript nor generated reply is written to evidence.
 
