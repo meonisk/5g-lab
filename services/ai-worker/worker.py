@@ -46,6 +46,9 @@ llm_max_tokens = int(os.environ["LLM_MAX_TOKENS"])
 llm_temperature = float(os.environ["LLM_TEMPERATURE"])
 llm_system_prompt = os.environ["LLM_SYSTEM_PROMPT"]
 llm_translation_prompt = os.environ["LLM_TRANSLATION_PROMPT"]
+llm_transcription_prompt = os.environ["LLM_TRANSCRIPTION_PROMPT"]
+llm_normalization_max_tokens = int(os.environ["LLM_NORMALIZATION_MAX_TOKENS"])
+normalized_transcript_max_chars = int(os.environ["TRANSCRIPT_NORMALIZED_MAX_CHARS"])
 llm_response_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
 translation_voice = os.environ["TTS_TRANSLATION_VOICE"]
 translation_min_latin = int(os.environ["TRANSLATION_MIN_LATIN_CHARS"])
@@ -145,6 +148,30 @@ def generate_reply(call_id, transcript, service_mode):
     return text, (time.perf_counter_ns() - started) / 1_000_000
 
 
+def normalize_transcript(transcript):
+    request_body = json.dumps({
+        "model": llm_model,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": llm_transcription_prompt},
+            {"role": "user", "content": f"Вход: «{transcript}»\nВыход:"},
+        ],
+        "options": {"temperature": 0, "num_predict": llm_normalization_max_tokens},
+    }).encode()
+    request = urllib.request.Request(llm_url, request_body, {"Content-Type": "application/json"})
+    started = time.perf_counter_ns()
+    response = json.load(urllib.request.urlopen(request, timeout=llm_timeout))
+    normalized = " ".join(response["message"]["content"].split())
+    normalized = normalized.strip().strip('"«»').strip()
+    if not normalized or len(normalized) > normalized_transcript_max_chars:
+        raise ValueError("normalized transcript has invalid length")
+    if cyrillic_chars(transcript) and not cyrillic_chars(normalized):
+        raise ValueError("normalized transcript changed language")
+    if re.match(r"(?i)^(?:нормализованный|исправленный|очищенный)\s+текст\s*:", normalized):
+        raise ValueError("normalized transcript contains a preamble")
+    return normalized, (time.perf_counter_ns() - started) / 1_000_000
+
+
 def remember_turn(call_id, transcript, reply):
     conversation = conversations.setdefault(call_id, {"messages": [], "last_seen": time.time()})
     conversation["messages"].extend((
@@ -200,13 +227,17 @@ def save_recording_turn(call_id, pcm8, transcript, result):
         target.setsampwidth(2)
         target.setframerate(8000)
         target.writeframes(pcm8.astype("<i2", copy=False).tobytes())
-    with (state["path"] / "transcript.txt").open("a", encoding="utf-8") as target:
-        target.write(transcript.strip() + "\n")
+    if transcript:
+        with (state["path"] / "transcript.txt").open("a", encoding="utf-8") as target:
+            target.write(transcript.strip() + "\n")
     private_metadata = {
         "turn": state["turns"], "audio_file": wav_path.name,
         "audio_duration_seconds": result["audio_duration_seconds"],
         "audio_sha256": result["audio_sha256"],
         "transcript_chars": len(transcript),
+        "normalization_applied": result.get("normalization_applied", False),
+        "raw_transcript_chars": result.get("transcript_chars"),
+        "normalization_processing_ms": result.get("normalization_processing_ms"),
         "detected_language": result.get("detected_language"),
         "processing_ms": result.get("processing_ms"),
     }
@@ -351,7 +382,29 @@ def process_utterance(ulaw, event, received_at, end_reason):
                                   if isinstance(event.get("observed_at"), (int, float)) else None),
     })
     if call_id and service_mode == "transcribe":
-        saved = save_recording_turn(call_id, decode_pcm8(ulaw), transcript, result)
+        normalized_transcript = transcript
+        if transcript:
+            try:
+                normalized_transcript, normalization_ms = normalize_transcript(transcript)
+                result.update({
+                    "normalization_applied": True,
+                    "normalization_llm_model": llm_model,
+                    "normalization_processing_ms": normalization_ms,
+                    "normalized_transcript_chars": len(normalized_transcript),
+                    "normalized_transcript_cyrillic_chars": cyrillic_chars(normalized_transcript),
+                })
+                print(f"AI transcript_normalized model={llm_model} input_chars={len(transcript)} "
+                      f"output_chars={len(normalized_transcript)} llm_ms={normalization_ms:.3f} "
+                      f"calls={call_ids}", flush=True)
+            except Exception as exc:
+                # Fail closed for text persistence: keep the WAV so the turn can
+                # be reprocessed, but never label raw STT output as normalized.
+                normalized_transcript = ""
+                result.update({"normalization_applied": False,
+                               "normalization_error_type": type(exc).__name__})
+                print(f"AI transcript_normalization_failed model={llm_model} "
+                      f"type={type(exc).__name__} calls={call_ids}", flush=True)
+        saved = save_recording_turn(call_id, decode_pcm8(ulaw), normalized_transcript, result)
         if saved:
             result.update({"recording_session_id": saved["session_id"],
                            "recording_saved": saved["saved"],

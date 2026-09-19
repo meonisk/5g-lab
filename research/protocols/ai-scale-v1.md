@@ -169,7 +169,8 @@ Default rules:
 
 Show two registered IMS users, a subscriber call through P/I/S-CSCF and
 RTPengine, the OBSERVE path, a two-turn Russian-to-English spoken translation,
-the separate disclosed Russian recording/transcription call, and call
+the separate disclosed Russian recording/transcription call with local-LLM
+disfluency cleanup, and call
 continuity while `ai-worker` is stopped. Label it an
 integration and measurement baseline, not an AI-quality result.
 

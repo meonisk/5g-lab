@@ -29,6 +29,27 @@ print(urllib.request.urlopen(request,timeout=3).read().decode())'
 }
 
 [[ "$RECORDING_ENABLED" == 1 ]] || { echo 'FAIL: recording is not explicitly enabled'; exit 1; }
+
+# Frozen synthetic contract probe: prove that the configured local model and
+# prompt remove common disfluencies while retaining the two factual time words.
+# Only boolean/count metadata leaves the container.
+normalization_probe=$(docker exec lab-ai-worker python -c '
+import json,os,re,urllib.request
+source="А... ну... я, я хотел, хотел сказать, что, э-э, встреча будет в пять часов. Но... а... лучше в шесть."
+body=json.dumps({"model":os.environ["LLM_MODEL"],"stream":False,"messages":[
+ {"role":"system","content":os.environ["LLM_TRANSCRIPTION_PROMPT"]},
+ {"role":"user","content":f"Вход: «{source}»\nВыход:"}],
+ "options":{"temperature":0,"num_predict":int(os.environ["LLM_NORMALIZATION_MAX_TOKENS"])}}).encode()
+reply=json.load(urllib.request.urlopen(urllib.request.Request(os.environ["LLM_URL"],body,
+ {"Content-Type":"application/json"}),timeout=float(os.environ["LLM_TIMEOUT_SECONDS"]))) ["message"]["content"]
+bad=bool(re.search(r"(?iu)а\.\.\.|но\.\.\.|э-э|\bну\b|\bя\s*,\s*я\b|\bхотел\s*,\s*хотел\b",reply))
+meaning=all(word in reply.casefold() for word in ("встреча","пять","шесть"))
+print(json.dumps({"disfluencies_removed":not bad,"meaning_preserved":meaning,"output_chars":len(reply)}))')
+check 'normalization probe removed fillers, repeats, and false starts' python -c \
+    'import json,sys; raise SystemExit(0 if json.load(sys.stdin)["disfluencies_removed"] else 1)' <<<"$normalization_probe"
+check 'normalization probe preserved factual content' python -c \
+    'import json,sys; raise SystemExit(0 if json.load(sys.stdin)["meaning_preserved"] else 1)' <<<"$normalization_probe"
+
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 since_epoch=$(python -c 'import time; print(time.time())')
 docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
@@ -63,7 +84,7 @@ import json,sys
 d=json.load(sys.stdin); cid=sys.argv[1]; since=float(sys.argv[2])
 m=[e for e in d.get("events",[]) if cid in e.get("call_ids",[]) and e.get("processed_at",0)>=since and e.get("service_mode")=="transcribe" and e.get("recording_saved")]
 best=max(m,key=lambda e:e.get("recording_turn",0),default={})
-print(json.dumps({k:best.get(k) for k in ("recording_session_id","recording_saved","recording_turn","audio_duration_seconds","transcript_chars","transcript_cyrillic_chars","detected_language","llm_model")},ensure_ascii=False))' \
+print(json.dumps({k:best.get(k) for k in ("recording_session_id","recording_saved","recording_turn","audio_duration_seconds","transcript_chars","transcript_cyrillic_chars","detected_language","normalization_applied","normalization_llm_model","normalization_processing_ms","normalized_transcript_chars","normalized_transcript_cyrillic_chars")},ensure_ascii=False))' \
             "$call_id" "$since_epoch" <<<"$status")
         session_id=$(python -c 'import json,sys; print(json.load(sys.stdin).get("recording_session_id") or "")' <<<"$summary")
         [[ -n "$session_id" ]] && break
@@ -76,12 +97,17 @@ session_id=$(python -c 'import json,sys; print(json.load(sys.stdin).get("recordi
 transcript_chars=$(python -c 'import json,sys; print(json.load(sys.stdin).get("transcript_chars") or 0)' <<<"$summary")
 cyrillic_chars=$(python -c 'import json,sys; print(json.load(sys.stdin).get("transcript_cyrillic_chars") or 0)' <<<"$summary")
 language=$(python -c 'import json,sys; print(json.load(sys.stdin).get("detected_language") or "")' <<<"$summary")
-llm_model=$(python -c 'import json,sys; print(json.load(sys.stdin).get("llm_model") or "")' <<<"$summary")
+normalization_applied=$(python -c 'import json,sys; print(str(bool(json.load(sys.stdin).get("normalization_applied"))).lower())' <<<"$summary")
+llm_model=$(python -c 'import json,sys; print(json.load(sys.stdin).get("normalization_llm_model") or "")' <<<"$summary")
+normalized_chars=$(python -c 'import json,sys; print(json.load(sys.stdin).get("normalized_transcript_chars") or 0)' <<<"$summary")
+normalized_cyrillic=$(python -c 'import json,sys; print(json.load(sys.stdin).get("normalized_transcript_cyrillic_chars") or 0)' <<<"$summary")
 check 'private recording session was created' test -n "$session_id"
 check 'Russian transcription was produced' test "$transcript_chars" -gt 0
 check 'transcription contains Cyrillic text' test "$cyrillic_chars" -gt 0
 check 'recording language is Russian' test "$language" = ru
-check 'transcription-only mode did not invoke LLM' test -z "$llm_model"
+check 'local LLM normalized the transcription' test "$normalization_applied" = true
+check 'normalization used the pinned local model' test "$llm_model" = "$LLM_MODEL"
+check 'normalized transcript is non-empty Russian text' sh -c "test '$normalized_chars' -gt 0 && test '$normalized_cyrillic' -gt 0"
 
 docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control'
 session_path="$root/private/recordings/$session_id"
@@ -103,7 +129,7 @@ with wave.open(sys.argv[1],"rb") as w:
     ok=w.getnchannels()==1 and w.getsampwidth()==2 and w.getframerate()==8000 and w.getnframes()>=24000
 raise SystemExit(0 if ok else 1)' "$session_path/turn-0001.wav"
 
-printf 'INFO: private_session=%s turns>=%s transcript_chars=%s retention_days=%s\n' \
-    "$session_id" 1 "$transcript_chars" "$RECORDING_RETENTION_DAYS"
-printf 'IMS OPT-IN RECORDING -> RUSSIAN TRANSCRIPTION: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
+printf 'INFO: private_session=%s turns>=%s raw_chars=%s normalized_chars=%s retention_days=%s\n' \
+    "$session_id" 1 "$transcript_chars" "$normalized_chars" "$RECORDING_RETENTION_DAYS"
+printf 'IMS OPT-IN RECORDING -> STT -> LLM NORMALIZATION -> RUSSIAN TRANSCRIPTION: %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
 exit "$fail"

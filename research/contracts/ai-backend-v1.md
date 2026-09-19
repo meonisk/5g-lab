@@ -23,7 +23,11 @@ The implementation has a bounded queue, body limit, authenticated API and two
 explicit persistence modes. Translation/observe audio remains memory-only.
 Only `service_mode=transcribe`, selected by the separate IMS number after an
 audible disclosure, writes private WAV/transcript files outside the evidence
-tree with a per-call byte limit and declared retention deadline. The next
+tree with a per-call byte limit and declared retention deadline. Raw STT text
+is transient; a pinned local LLM removes disfluencies and repairs written-form
+punctuation before persistence while being instructed to preserve meaning,
+facts, names, numbers, and order. Only lengths, latency and success metadata
+enter the event API. The next
 version must add automated retention enforcement plus sequence-aware
 RTP reassembly, an explicit frame-envelope version, end-of-turn events,
 deadlines, cancellation, and error taxonomy. It must not add subscriber

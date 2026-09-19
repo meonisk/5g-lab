@@ -72,7 +72,8 @@ Advance only when every preceding stage is retained as evidence:
 5. **Translation call:** translator-number iFC/ISC trigger, Russian greeting,
    at least two Russian-to-English spoken turns under one Call-ID, and clean BYE.
 6. **Transcription call:** separate recorder-number trigger, audible recording
-   disclosure, private WAV/transcript creation, LLM bypass, and finalization on BYE.
+   disclosure, private WAV creation, local-LLM text normalization without
+   content in operational logs, transcript persistence, and finalization on BYE.
 7. **Failure containment:** ordinary RTP remains usable when AI is stopped;
    terminate-service failure is bounded and visible.
 8. **Privacy:** inspect logs, packet captures, traces, crash dumps and backups;

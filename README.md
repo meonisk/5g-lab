@@ -129,6 +129,10 @@ docker exec lab-sipue1 sh -lc "printf 'm\nsip:${number}@${domain}\n' > /tmp/pjsu
 - Only a call to `VOICE_TRANSCRIBER_MSISDN` enables recording, after an audible
   disclosure. Private WAV and transcript files go to ignored
   `private/recordings/<pseudonymous-session>/`, never to shareable evidence.
+  The raw STT text remains transient: the local LLM fixes punctuation and
+  recognition errors and removes fillers, repetitions, stutters, and false
+  starts before `transcript.txt` is written. It is instructed to preserve
+  names, numbers, facts, meaning, and utterance order rather than summarize.
   `RECORDING_RETENTION_DAYS` declares the review/deletion deadline; deletion is
   currently an operator action, not an automatic claim.
 - STT utterances, transcripts, and bounded per-call LLM history are memory-only

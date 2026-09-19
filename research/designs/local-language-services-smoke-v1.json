@@ -24,7 +24,7 @@
     "english_only_translation_presence",
     "english_tts_rtp_delivery",
     "private_recording_created_and_finalized",
-    "transcription_bypasses_llm"
+    "local_llm_transcript_normalization"
   ],
   "capture": {
     "compose_project": "lab-docker",
