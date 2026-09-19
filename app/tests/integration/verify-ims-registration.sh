@@ -4,7 +4,7 @@
 # through P-CSCF / I-CSCF / S-CSCF with Cx interaction against PyHSS.
 set -uo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 

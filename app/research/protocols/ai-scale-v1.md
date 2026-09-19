@@ -95,8 +95,8 @@ the source of truth.
 All metrics must name their observed endpoints, source artifact, clock,
 derivation method, and confidence. Missing timing remains unavailable; it is
 not reconstructed from log-line order. Diagrams and metrics should eventually
-use the same normalized event model from
-[`ims/tools/sigdiag`](../../../ims/tools/sigdiag/).
+use a shared normalized event model. The earlier external SigDiag prototype
+is historical context and is not required to run this repository.
 
 ## 5. Experimental sequence and blockers
 

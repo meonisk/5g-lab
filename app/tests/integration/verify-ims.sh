@@ -6,7 +6,7 @@
 #   - PyHSS holds both IMS subscribers and listens on Diameter Cx
 set -uo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 

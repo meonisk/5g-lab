@@ -33,7 +33,7 @@ def prepare(root: Path, design_path: Path, requested_id: str | None) -> str:
     run_id = requested_id or f"{stamp}-{design['design_id']}-{uuid.uuid4().hex[:8]}"
     if not RUN_ID_RE.fullmatch(run_id):
         raise ValueError("run id contains unsupported characters")
-    run_dir = root / "evidence" / "runs" / run_id
+    run_dir = root / "local/evidence" / "runs" / run_id
     if run_dir.exists():
         raise FileExistsError(f"run already exists: {run_id}")
     (run_dir / "shareable" / "logs").mkdir(parents=True)
@@ -73,7 +73,7 @@ def prepare(root: Path, design_path: Path, requested_id: str | None) -> str:
     write_json(run_dir / "manifest.json", manifest)
     (run_dir / "README.txt").write_text(
         "This run is labelled instrumentation evidence. Review manifest.json and shareable/; "
-        "never distribute the separate evidence/private pseudonym key.\n",
+        "never distribute the separate local/evidence/private pseudonym key.\n",
         encoding="utf-8",
     )
     print(run_id)
@@ -81,7 +81,7 @@ def prepare(root: Path, design_path: Path, requested_id: str | None) -> str:
 
 
 def collect(root: Path, design_path: Path, run_id: str) -> None:
-    run_dir = root / "evidence" / "runs" / run_id
+    run_dir = root / "local/evidence" / "runs" / run_id
     manifest_path = run_dir / "manifest.json"
     manifest = load_json(manifest_path)
     design = load_json(design_path)
@@ -107,7 +107,7 @@ def collect(root: Path, design_path: Path, run_id: str) -> None:
             encoding="utf-8",
             errors="replace",
             capture_output=True,
-            timeout=float(parse_env(root / "lab.env")["RESEARCH_GATE_TIMEOUT_SECONDS"]),
+            timeout=float(parse_env(root / "app/config/lab.env")["RESEARCH_GATE_TIMEOUT_SECONDS"]),
         )
         output = result.stdout + (("\n" + result.stderr) if result.stderr else "")
         (gate_dir / f"{gate['id']}.log").write_text(redactor.text(output), encoding="utf-8")

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
-Push-Location "$PSScriptRoot\..\app"
+Push-Location "$PSScriptRoot\.."
 try {
-    python tools/quality/check.py
+    python scripts/quality/check.py
     if ($LASTEXITCODE -ne 0) { throw 'Offline checks failed' }
 } finally { Pop-Location }

@@ -1,7 +1,7 @@
 # Local STT model provenance
 
 The local translation profile additionally uses `qwen2.5:1.5b-instruct`
-through the pinned Ollama container. `lab.env` fixes and admission-checks its
+through the pinned Ollama container. `app/config/lab.env` fixes and admission-checks its
 full content digest. The smaller 0.5B profile is not admitted: on the frozen
 Russian translation fixture it answered in Russian instead of translating to
 English.
@@ -15,7 +15,7 @@ English.
   bounded PCMU utterances are resampled from 8 kHz to 16 kHz in memory
 - Storage: Docker volume configured by `AI_MODEL_CACHE`
 
-The revision is fixed in `lab.env` and passed to the model downloader. The
+The revision is fixed in `app/config/lab.env` and passed to the model downloader. The
 complete Python dependency set is fixed in `requirements.txt`. A different
 model revision, compute type, language, device, turn segmentation, or decoder setting
 is a different experimental condition and must receive a new design version.

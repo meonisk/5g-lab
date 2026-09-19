@@ -71,41 +71,41 @@ def host_snapshot(root: Path) -> dict[str, Any]:
 
 
 def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
-    paths = [design_path, root / "lab.env", root / "docker-compose.yml"]
+    paths = [design_path, root / "app/config/lab.env", root / "docker-compose.yml"]
     paths.extend(
         root / p
         for p in (
-            "services/ai-worker/worker.py",
-            "services/media-adapter/adapter.py",
-            "services/sip-as/server.py",
-            "services/voice-agent/agent.py",
-            "services/ai-worker/Dockerfile",
-            "services/ai-worker/requirements.txt",
-            "services/ai-worker/MODEL_PROVENANCE.md",
-            "services/media-adapter/Dockerfile",
-            "tests/integration/verify-real-ai-stream.sh",
-            "tests/integration/verify-transcription-recording.sh",
-            "tests/integration/verify-bilingual-dialogue.sh",
-            "fixtures/bilingual-dialogue-v1.json",
-            "fixtures/interpreter-dialogue-v1.json",
-            "docker-compose.interpreter.yml",
-            "docker-compose.parallel.yml",
-            "tests/integration/check_bidirectional_interpreter.py",
-            "tests/integration/check_parallel_calls.py",
-            "research/tools/research_run.py",
-            "research/schemas/run-manifest.schema.json",
-            "research/schemas/metric-record.schema.json",
+            "app/services/ai-worker/worker.py",
+            "app/services/media-adapter/adapter.py",
+            "app/services/sip-as/server.py",
+            "app/services/voice-agent/agent.py",
+            "app/services/ai-worker/Dockerfile",
+            "app/services/ai-worker/requirements.txt",
+            "app/services/ai-worker/MODEL_PROVENANCE.md",
+            "app/services/media-adapter/Dockerfile",
+            "app/tests/integration/verify-real-ai-stream.sh",
+            "app/tests/integration/verify-transcription-recording.sh",
+            "app/tests/integration/verify-bilingual-dialogue.sh",
+            "app/tests/fixtures/bilingual-dialogue-v1.json",
+            "app/tests/fixtures/interpreter-dialogue-v1.json",
+            "app/tests/fixtures/docker-compose.interpreter.yml",
+            "app/tests/fixtures/docker-compose.parallel.yml",
+            "app/tests/integration/check_bidirectional_interpreter.py",
+            "app/tests/integration/check_parallel_calls.py",
+            "app/research/tools/research_run.py",
+            "app/research/schemas/run-manifest.schema.json",
+            "app/research/schemas/metric-record.schema.json",
         )
     )
     return [
         {"path": str(p.relative_to(root)).replace("\\", "/"), "sha256": sha256_file(p)}
         for p in sorted(
             set(paths)
-            | set((root / "services").rglob("*.py"))
-            | set((root / "research/tools").rglob("*.py"))
-            | set((root / "deploy/compose").glob("*.yml"))
-            | set((root / "tests/integration").glob("*.sh"))
-            | set((root / "tests/integration").glob("*.py"))
+            | set((root / "app/services").rglob("*.py"))
+            | set((root / "app/research/tools").rglob("*.py"))
+            | set((root / "app/infrastructure/compose").glob("*.yml"))
+            | set((root / "app/tests/integration").glob("*.sh"))
+            | set((root / "app/tests/integration").glob("*.py"))
         )
         if p.is_file()
     ]

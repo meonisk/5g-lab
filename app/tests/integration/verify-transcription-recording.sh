@@ -3,12 +3,12 @@
 # The gate prints only metadata and never prints transcript or audio content.
 set -Eeuo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 root=$(cd -- "$script_dir/.." && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 
-base=(docker compose --env-file "$root/lab.env" --env-file "$root/secrets/ims.env" -f "$root/docker-compose.yml")
+base=(docker compose --env-file "$root/app/config/lab.env" --env-file "$root/local/secrets/ims.env" -f "$root/docker-compose.yml")
 fail=0
 check() {
     local label=$1; shift
@@ -120,7 +120,7 @@ check 'normalization used the pinned local model' test "$llm_model" = "$LLM_MODE
 check 'normalized transcript is non-empty Russian text' sh -c "test '$normalized_chars' -gt 0 && test '$normalized_cyrillic' -gt 0"
 
 docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control'
-session_path="$root/private/recordings/$session_id"
+session_path="$root/local/private/recordings/$session_id"
 deadline=$((SECONDS + 15))
 while ((SECONDS < deadline)); do
     [[ -f "$session_path/completed.json" ]] && break

@@ -6,7 +6,8 @@ a scientific result.
 
 The current executable design, `local-language-services-smoke-v2.json`, is
 an instrumentation admission test. The earlier admission designs remain
-immutable for their existing evidence. The current design executes and records
+available in Git history at the revisions recorded in their evidence. Path-only
+updates in this revision follow the new repository layout. The current design executes and records
 the 5GS, IMS call, two-turn Russian-to-English spoken translation, explicit
 opt-in private recording plus local-LLM transcript normalization, voice-agent,
 the four-turn two-subscriber Russian/English WAV dialogue, two-leg interpreted
@@ -16,7 +17,7 @@ immutable input hashes, hardware, container images, bounded resource snapshots,
 and pseudonymized logs. Its result can prove that the measurement path works;
 it cannot support a conclusion about AI quality or scalability.
 
-Opt-in recordings live only under ignored `private/recordings/`; they are not
+Opt-in recordings live only under ignored `local/private/recordings/`; they are not
 research evidence and must be reviewed/deleted under the declared retention
 policy. The shareable capture contract continues to forbid raw audio and text.
 
@@ -43,9 +44,9 @@ From PowerShell:
 ./scripts/research.ps1 verify
 ```
 
-Generated runs live under ignored `evidence/runs/<run-id>/`. Share only the
+Generated runs live under ignored `local/evidence/runs/<run-id>/`. Share only the
 `shareable/` directory and the manifest/checksums after review. The per-run
-pseudonymization key stays under ignored `evidence/private/`; it is never
+pseudonymization key stays under ignored `local/evidence/local/private/`; it is never
 written into a shareable artifact.
 
 The proposed AI-scale campaign, local/real-stand boundary, demonstration

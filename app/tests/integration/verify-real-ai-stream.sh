@@ -3,12 +3,12 @@
 # No audio, transcript, prompt, or generated response is written to evidence.
 set -Eeuo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 root=$(cd -- "$script_dir/.." && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 
-base=(docker compose --env-file "$root/lab.env" --env-file "$root/secrets/ims.env" -f "$root/docker-compose.yml")
+base=(docker compose --env-file "$root/app/config/lab.env" --env-file "$root/local/secrets/ims.env" -f "$root/docker-compose.yml")
 fail=0
 check() {
     local label=$1; shift

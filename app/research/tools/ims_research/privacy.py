@@ -49,13 +49,13 @@ class Pseudonymizer:
 
 
 def private_key_path(root: Path, run_id: str) -> Path:
-    return root / "evidence" / "private" / f"{run_id}.pseudonym.key"
+    return root / "local/evidence" / "private" / f"{run_id}.pseudonym.key"
 
 
 def sensitive_values(root: Path) -> tuple[dict[str, str], list[str]]:
     exact: dict[str, str] = {}
     secrets_for_scan: list[str] = []
-    for path in (root / "lab.env", root / "secrets" / "ims.env"):
+    for path in (root / "app/config/lab.env", root / "local/secrets" / "ims.env"):
         for key, value in parse_env(path).items():
             if IDENTITY_KEY_RE.search(key):
                 exact[key] = value

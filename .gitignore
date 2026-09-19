@@ -1,8 +1,5 @@
-app/secrets/ims.env
-app/evidence/runs/
-app/evidence/private/
-app/hardening/context.local.md
-app/private/
+local/
+docs/hardening/context.local.md
 __pycache__/
 *.py[cod]
 .ruff_cache/

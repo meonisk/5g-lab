@@ -2,7 +2,7 @@
 # Reproduce the asterisk_legacy two-UE evidence against the containerised lab.
 set -uo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 : "${INTERNET_UE_GATEWAY:?INTERNET_UE_GATEWAY is required}"

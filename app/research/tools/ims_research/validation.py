@@ -50,7 +50,7 @@ def validate_design(design: dict[str, Any]) -> None:
 
 
 def validate(root: Path, design_path: Path, run_id: str) -> None:
-    run_dir = root / "evidence" / "runs" / run_id
+    run_dir = root / "local/evidence" / "runs" / run_id
     manifest = load_json(run_dir / "manifest.json")
     design = load_json(design_path)
     validate_design(design)
@@ -119,12 +119,14 @@ def validate(root: Path, design_path: Path, run_id: str) -> None:
 
 
 def verify(root: Path) -> None:
-    smoke = root / "research" / "designs" / "local-instrumentation-smoke-v1.json"
-    conversational = root / "research" / "designs" / "local-conversational-loop-smoke-v1.json"
-    russian = root / "research" / "designs" / "local-russian-conversation-smoke-v1.json"
-    language_services = root / "research" / "designs" / "local-language-services-smoke-v1.json"
-    language_services_v2 = root / "research" / "designs" / "local-language-services-smoke-v2.json"
-    candidate = load_json(root / "research" / "designs" / "ai-scale-study-v1.json")
+    smoke = root / "app/research" / "designs" / "local-instrumentation-smoke-v1.json"
+    conversational = root / "app/research" / "designs" / "local-conversational-loop-smoke-v1.json"
+    russian = root / "app/research" / "designs" / "local-russian-conversation-smoke-v1.json"
+    language_services = root / "app/research" / "designs" / "local-language-services-smoke-v1.json"
+    language_services_v2 = (
+        root / "app/research" / "designs" / "local-language-services-smoke-v2.json"
+    )
+    candidate = load_json(root / "app/research" / "designs" / "ai-scale-study-v1.json")
     design = load_json(smoke)
     validate_design(design)
     validate_design(load_json(conversational))
@@ -134,7 +136,7 @@ def verify(root: Path) -> None:
     if candidate.get("design_status") != "DRAFT_REQUIRES_PILOT_FREEZE":
         raise ValueError("AI scale candidate must remain explicitly unfrozen")
     for schema in ("run-manifest.schema.json", "metric-record.schema.json"):
-        load_json(root / "research" / "schemas" / schema)
+        load_json(root / "app/research" / "schemas" / schema)
     key = b"x" * 32
     raw_identity = "999990000000001"
     raw_secret = "0123456789ABCDEF0123456789ABCDEF"

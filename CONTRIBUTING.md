@@ -1,13 +1,13 @@
 # Командная разработка
 
-Рабочий каталог всех команд ниже — `app/` внутри репозитория.
+Рабочий каталог всех команд ниже — корень репозитория.
 Из корня доступны `scripts/start.ps1`, `scripts/compose.ps1`, `scripts/check.ps1`.
 
 ## Первый запуск
 
 1. Установите Docker Desktop с Linux containers, Git for Windows и Python 3.12+.
-2. Первый запуск создаст `secrets/ims.env` со случайными лабораторными ключами.
-3. Проверьте публичные параметры в `lab.env`.
+2. Первый запуск создаст `local/secrets/ims.env` со случайными лабораторными ключами.
+3. Проверьте публичные параметры в `app/config/lab.env`.
 4. Для генерации диалога установите голоса Windows Microsoft Pavel и Zira Desktop.
 5. Запустите `./scripts/start-lab.ps1` из PowerShell.
 
@@ -17,16 +17,16 @@
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
-python tools/quality/check.py
+python scripts/quality/check.py
 .\scripts\compose.ps1 build ai-worker
 .\scripts\compose.ps1 up -d --no-deps ai-worker
 ```
 
 Для изменения протокола или аудиоконвейера дополнительно выполните подходящие
-проверки из `tests/integration/`. Они создают и завершают звонки на стенде:
+проверки из `app/tests/integration/`. Они создают и завершают звонки на стенде:
 одновременно запускайте только один набор интеграционных проверок.
 Полный контроль — `scripts/research.ps1 prepare`, затем `collect` и `validate`
-с полученным RunId. Результаты остаются в `evidence/runs/`.
+с полученным RunId. Результаты остаются в `local/evidence/runs/`.
 
 ## Правила изменений
 
@@ -35,12 +35,12 @@ python tools/quality/check.py
 - Пишите обычные многострочные условия и обработчики. Не сокращайте код через
   точки с запятой ради лимита. Комментируйте причину, контракт и ограничения.
 - Сначала читайте описание каталога в `docs/project-layout.md`.
-- Меняйте параметры запуска через `lab.env`; секреты — через `secrets/ims.env`.
+- Меняйте параметры запуска через `app/config/lab.env`; секреты — через `local/secrets/ims.env`.
   Значения протокола (PCMU 8 кГц, структура RTP) являются контрактом кода.
 - `settings.py` хранит конфигурацию AI Worker, `runtime.py` — изменяемое состояние.
   Не копируйте изменяемое состояние через `from runtime import model`.
-- Интеграционные проверки находятся только в `tests/integration/`.
-- `vendor/` содержит сторонние исходники с provenance и лицензией. Лимит 300
+- Интеграционные проверки находятся только в `app/tests/integration/`.
+- `app/infrastructure/vendor/` содержит сторонние исходники с provenance и лицензией. Лимит 300
   строк к ним не применяется. Правки upstream оформляйте отдельно и документируйте.
 - WAV, расшифровки, секреты, кэш моделей и экспериментальные результаты в Git
   не добавляются. Используйте синтетические данные в тестах.
@@ -52,7 +52,7 @@ python tools/quality/check.py
 
 ## Проверки перед review
 
-`python tools/quality/check.py` проверяет размер файлов, Python-синтаксис,
+`python scripts/quality/check.py` проверяет размер файлов, Python-синтаксис,
 импорты, форматирование, границы аудиофраз, отсутствие зашитой топологии и
 структуру исследовательских дизайнов. Команда подходит для локального CI,
 не требует доступа к GitLab и не запускает контейнеры.

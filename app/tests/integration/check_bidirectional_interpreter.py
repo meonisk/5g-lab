@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fixture_checks import verify_interpreter_fixture
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 API_CODE = """
 import json,os,sys,urllib.request
 token=open(os.environ['SERVICE_CONTROL_TOKEN_FILE']).read().strip()
@@ -26,7 +26,7 @@ def run(*args, timeout=30):
 
 def config():
     values = {}
-    for line in (ROOT / "lab.env").read_text(encoding="utf-8").splitlines():
+    for line in (ROOT / "app/config/lab.env").read_text(encoding="utf-8").splitlines():
         if line and not line.startswith("#") and "=" in line:
             key, value = line.split("=", 1)
             values[key] = value.strip('"')
@@ -82,13 +82,13 @@ def recreate_dialogue_clients():
         "docker",
         "compose",
         "--env-file",
-        str(ROOT / "lab.env"),
+        str(ROOT / "app/config/lab.env"),
         "--env-file",
-        str(ROOT / "secrets/ims.env"),
+        str(ROOT / "local/secrets/ims.env"),
         "-f",
         str(ROOT / "docker-compose.yml"),
         "-f",
-        str(ROOT / "docker-compose.interpreter.yml"),
+        str(ROOT / "app/tests/fixtures/docker-compose.interpreter.yml"),
     ]
     run(*compose, "up", "-d", "--no-deps", "--force-recreate", "sipue1", "sipue2", timeout=60)
     wait_until(

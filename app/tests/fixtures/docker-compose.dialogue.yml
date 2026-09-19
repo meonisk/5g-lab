@@ -1,0 +1,11 @@
+services:
+  sipue1:
+    environment:
+      SIP_UE_PLAYBACK_FILE: ${BILINGUAL_DIALOGUE_UE1_FILE}
+    volumes:
+      - ./local/private/dialogue:/fixtures:ro
+  sipue2:
+    environment:
+      SIP_UE_PLAYBACK_FILE: ${BILINGUAL_DIALOGUE_UE2_FILE}
+    volumes:
+      - ./local/private/dialogue:/fixtures:ro

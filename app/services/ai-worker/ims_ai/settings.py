@@ -1,4 +1,4 @@
-"""Worker configuration loaded once from lab.env; durations use explicit units."""
+"""Worker configuration loaded once from app/config/lab.env; durations use explicit units."""
 
 import os
 from pathlib import Path

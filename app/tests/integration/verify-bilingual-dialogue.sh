@@ -3,13 +3,13 @@
 # Synthetic speech content stays in the local private fixture/recording trees.
 set -Eeuo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 root=$(cd -- "$script_dir/.." && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 
-base=(docker compose --env-file "$root/lab.env" --env-file "$root/secrets/ims.env" -f "$root/docker-compose.yml")
-dialogue=("${base[@]}" -f "$root/docker-compose.dialogue.yml")
+base=(docker compose --env-file "$root/app/config/lab.env" --env-file "$root/local/secrets/ims.env" -f "$root/docker-compose.yml")
+dialogue=("${base[@]}" -f "$root/app/tests/fixtures/docker-compose.dialogue.yml")
 fail=0
 restored=0
 clear_adapter_sessions() {
@@ -27,8 +27,8 @@ check() {
     if "$@"; then printf 'PASS: %s\n' "$label"; else printf 'FAIL: %s\n' "$label"; fail=1; fi
 }
 restore_clients() {
-    docker logs lab-sipue1 >"$root/private/dialogue/last-ue1.log" 2>&1 || true
-    docker logs lab-sipue2 >"$root/private/dialogue/last-ue2.log" 2>&1 || true
+    docker logs lab-sipue1 >"$root/local/private/dialogue/last-ue1.log" 2>&1 || true
+    docker logs lab-sipue2 >"$root/local/private/dialogue/last-ue2.log" 2>&1 || true
     docker exec lab-sipue1 sh -lc 'printf "cd\n1\n4\nha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
     docker exec lab-sipue2 sh -lc 'printf "cd\n1\n4\nha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
     clear_adapter_sessions
@@ -39,7 +39,7 @@ restore_clients() {
 }
 trap restore_clients EXIT
 
-manifest="$root/private/dialogue/manifest.json"
+manifest="$root/local/private/dialogue/manifest.json"
 check 'bilingual fixture manifest exists' test -s "$manifest"
 fixture_check=$(python -c '
 import hashlib,json,pathlib,sys,wave
@@ -48,7 +48,7 @@ for item in m["tracks"].values():
  p=root/item["file"]
  with wave.open(str(p),"rb") as w: ok &= w.getnchannels()==1 and w.getsampwidth()==2 and w.getframerate()==8000
  ok &= hashlib.sha256(p.read_bytes()).hexdigest()==item["sha256"]
-print("ok" if ok else "bad")' "$root/private/dialogue")
+print("ok" if ok else "bad")' "$root/local/private/dialogue")
 check 'both WAV tracks are hash-verified 8 kHz mono PCM' test "$fixture_check" = ok
 
 "${dialogue[@]}" up -d --no-deps --force-recreate sipue1 sipue2 >/dev/null
@@ -147,7 +147,7 @@ check 'dialogue phrases ended on voice-activity boundaries, not the duration lim
 session_id=$(python -c 'import json,sys; print(json.load(sys.stdin).get("session") or "")' <<<"$summary")
 docker exec lab-sipue1 sh -lc 'printf "cd\n1\n4\nha\n" > /tmp/pjsua-control'
 docker exec lab-sipue2 sh -lc 'printf "cd\n1\n4\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
-session_path="$root/private/recordings/$session_id"
+session_path="$root/local/private/recordings/$session_id"
 deadline=$((SECONDS + 90))
 while ((SECONDS < deadline)); do [[ -f "$session_path/completed.json" ]] && break; sleep 1; done
 check 'bilingual private recording finalized on BYE' test -f "$session_path/completed.json"

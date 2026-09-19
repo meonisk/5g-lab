@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Phase 4E acceptance: a registered IMS UE calls the env-defined service
 # number, the SIP AS terminates the dialog, and the Voice Agent exchanges RTP
-# through RTPengine.  The test uses only lab.env topology and identities.
+# through RTPengine.  The test uses only app/config/lab.env topology and identities.
 set -Eeuo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 

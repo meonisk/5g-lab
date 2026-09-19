@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 API_CODE = """
 import json,os,sys,urllib.request
 token=open(os.environ['SERVICE_CONTROL_TOKEN_FILE']).read().strip()
@@ -75,13 +75,13 @@ def recreate_parallel_clients():
         "docker",
         "compose",
         "--env-file",
-        str(ROOT / "lab.env"),
+        str(ROOT / "app/config/lab.env"),
         "--env-file",
-        str(ROOT / "secrets/ims.env"),
+        str(ROOT / "local/secrets/ims.env"),
         "-f",
         str(ROOT / "docker-compose.yml"),
         "-f",
-        str(ROOT / "docker-compose.parallel.yml"),
+        str(ROOT / "app/tests/fixtures/docker-compose.parallel.yml"),
     ]
     run(*compose, "up", "-d", "--no-deps", "--force-recreate", "sipue1", "sipue2")
     wait_until(
@@ -203,7 +203,7 @@ def main():
     parser.add_argument("--output", type=Path, help="Optional ignored JSON evidence destination")
     args = parser.parse_args()
     config = {}
-    for line in (ROOT / "lab.env").read_text(encoding="utf-8").splitlines():
+    for line in (ROOT / "app/config/lab.env").read_text(encoding="utf-8").splitlines():
         if line and not line.startswith("#") and "=" in line:
             key, value = line.split("=", 1)
             config[key] = value.strip('"')

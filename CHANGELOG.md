@@ -15,6 +15,9 @@ milestones; they are not release tags or scientific benchmark results.
 
 ### Changed
 
+- refactor: simplify app to services, infrastructure, tests, research, and config;
+  move operator scripts and documentation to the root and private state to local.
+
 - refactor: consolidate runtime, deployment, tests, and research under `app/`.
 - build: retain a stable Compose project name after directory migration.
 - build: initialize private credentials and generate both audio fixtures on first start.

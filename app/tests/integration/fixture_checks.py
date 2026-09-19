@@ -6,12 +6,12 @@ import wave
 
 
 def verify_interpreter_fixture(root):
-    fixture = json.loads((root / "fixtures/interpreter-dialogue-v1.json").read_text())
-    manifest = json.loads((root / "private/interpreter/manifest.json").read_text())
+    fixture = json.loads((root / "app/tests/fixtures/interpreter-dialogue-v1.json").read_text())
+    manifest = json.loads((root / "local/private/interpreter/manifest.json").read_text())
     if manifest.get("fixture_id") != fixture.get("fixture_id"):
         raise RuntimeError("Interpreter WAV manifest does not match its source design")
     for track in manifest.get("tracks", {}).values():
-        path = root / "private/interpreter" / track["file"]
+        path = root / "local/private/interpreter" / track["file"]
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if digest != track.get("sha256"):
             raise RuntimeError(f"Interpreter WAV hash mismatch: {path.name}")

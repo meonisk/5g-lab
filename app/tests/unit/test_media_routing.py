@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services/media-adapter"))
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "app/services/media-adapter"))
 
 
 class MediaRouting(unittest.TestCase):
@@ -18,7 +18,7 @@ class MediaRouting(unittest.TestCase):
         token = Path(cls.temp.name) / "token"
         token.write_text("offline-unit-test-token", encoding="ascii")
         env = {}
-        for line in (ROOT / "lab.env").read_text(encoding="utf-8").splitlines():
+        for line in (ROOT / "app/config/lab.env").read_text(encoding="utf-8").splitlines():
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
                 env[key] = value.strip('"')

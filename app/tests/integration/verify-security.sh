@@ -2,7 +2,7 @@
 # Security/privacy regression gate for the custom IMS service path.
 set -Eeuo pipefail
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../scripts" && pwd)
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
 # shellcheck source=load-lab-env.sh
 source "$script_dir/load-lab-env.sh"
 
@@ -89,7 +89,7 @@ check 'custom service logs contain no subscriber IMSI' sh -c \
     "! grep -qE '$UE1_IMSI|$UE2_IMSI'" <<<"$custom_logs"
 check 'AI operational logs contain no prompt, transcript, or response text' sh -c \
     "! grep -qE 'transcript=|prompt=|response='" <<<"$(docker logs lab-ai-worker 2>&1)"
-check 'private recordings are ignored by Git' git check-ignore private/recordings
+check 'private recordings are ignored by Git' git check-ignore local/private/recordings
 check 'recording directory is outside shareable evidence' sh -c \
     "case '$RECORDING_ROOT' in /recordings) exit 0;; *) exit 1;; esac"
 check 'only AI Worker receives the private recording mount' sh -c \
