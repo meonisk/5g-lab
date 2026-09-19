@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "fixture_id": "bilingual-dialogue-v1",
-  "purpose": "A coherent four-turn Russian/English IMS subscriber conversation generated locally with two distinct Windows TTS voices.",
-  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from this script and the installed OS voices.",
+  "purpose": "A coherent four-turn Russian/English IMS subscriber conversation generated locally with pinned Piper voices.",
+  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from the pinned Docker image.",
   "tracks": {
     "ue1": {
       "language": "ru-RU",

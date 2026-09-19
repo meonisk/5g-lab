@@ -7,7 +7,8 @@ Run `python scripts/quality/check.py` before submitting a change for review.
 
 Implementation history: [changelog](../CHANGELOG.md).
 
-This directory starts the complete local stand on Docker Desktop/WSL2:
+This directory starts the complete local stand on Windows Docker Desktop/WSL2
+or a native Linux Docker host:
 
 - Open5GS 5GC, one UERANSIM gNB, and two UEs;
 - `internet` and `ims` PDU sessions for each UE;
@@ -59,13 +60,15 @@ literals outside the two canonical env files.
 
 ## Start everything
 
-Prerequisites: Docker Desktop with Linux containers and Git for Windows.
+Prerequisites: Docker with Linux containers, Python 3.12+ and Bash. Windows
+uses Docker Desktop/WSL2 and Git for Windows; Linux requires an SCTP-capable kernel.
 
 ```powershell
-.\scripts\start-lab.ps1
+.\scripts\start.ps1
 ```
 
-The start script loads SCTP in Docker Desktop, builds/starts the full stack,
+On Linux use `./scripts/start.sh`. The common Python launcher loads or verifies
+SCTP, builds/starts the full stack,
 idempotently provisions Open5GS and PyHSS subscribers, restarts the UE clients,
 and runs all acceptance gates. Use `-SkipVerify` only for development.
 
@@ -141,8 +144,8 @@ because its implementation cannot be identified by commit alone. The directory
 contains complete speech and is intentionally excluded from Git.
 
 The bilingual-dialogue gate generates a coherent four-turn fixture locally
-with the installed Windows voices named by `DIALOGUE_*_WINDOWS_VOICE`, places
-a real UE1-to-UE2 IMS call, and sends both WAV tracks as
+with the pinned local Piper voices, places a real UE1-to-UE2 IMS call, and sends
+both WAV tracks as
 PCMU/8000 through the subscribers' IMS PDU sessions and RTPengine. It proves
 automatic Russian/English recognition, two pseudonymous speaker streams, local
 LLM normalization, and exactly four complete private transcript turns. Long

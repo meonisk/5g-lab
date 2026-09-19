@@ -22,16 +22,24 @@ CONTRIBUTING.md    Development workflow
 
 ## Run
 
-Requires Docker Desktop with Linux containers/WSL2, Git for Windows, Python
-3.12+, and one installed Windows TTS voice per configured language for the
-synthetic dialogue fixtures. Defaults are Irina Desktop and Zira Desktop;
-change `DIALOGUE_*_WINDOWS_VOICE` in `app/config/lab.env` when needed.
+Requires Docker with Linux containers, Python 3.12+, and Bash. Windows uses
+Docker Desktop/WSL2 and Git for Windows; native Linux uses Docker Engine and an
+SCTP-capable kernel. Piper voices are built into the Voice Agent image, so no
+operating-system TTS voices are required.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
 .\scripts\check.ps1
 .\scripts\start.ps1
 .\scripts\compose.ps1 ps
+```
+
+Linux:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+./scripts/start.sh
+./scripts/compose.sh ps
 ```
 
 First start generates valid random laboratory credentials if `local/secrets/ims.env`

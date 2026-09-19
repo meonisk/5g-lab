@@ -64,8 +64,8 @@ ue1_logs=$(docker logs lab-sipue1 2>&1 || true)
 ue2_logs=$(docker logs lab-sipue2 2>&1 || true)
 check 'UE1 dialogue client registered through IMS' grep -q 'Response msg 200/REGISTER' <<<"$ue1_logs"
 check 'UE2 dialogue client registered through IMS' grep -q 'Response msg 200/REGISTER' <<<"$ue2_logs"
-check 'UE1 loaded the Russian Pavel fixture' grep -q "$BILINGUAL_DIALOGUE_UE1_FILE" <<<"$ue1_logs"
-check 'UE2 loaded the English Zira fixture' grep -q "$BILINGUAL_DIALOGUE_UE2_FILE" <<<"$ue2_logs"
+check 'UE1 loaded the Russian Piper fixture' grep -q "$BILINGUAL_DIALOGUE_UE1_FILE" <<<"$ue1_logs"
+check 'UE2 loaded the English Piper fixture' grep -q "$BILINGUAL_DIALOGUE_UE2_FILE" <<<"$ue2_logs"
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 clear_adapter_sessions

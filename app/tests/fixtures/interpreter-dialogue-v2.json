@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "fixture_id": "interpreter-dialogue-v2",
   "purpose": "A naturally paced four-turn Russian/English call for local near-real-time interpreter measurements.",
-  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from the script and installed OS voices.",
+  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from the pinned Docker image.",
   "tracks": {
     "ue1": {
       "language": "ru-RU",

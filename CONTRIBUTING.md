@@ -8,8 +8,8 @@
 1. Установите Docker Desktop с Linux containers, Git for Windows и Python 3.12+.
 2. Первый запуск создаст `local/secrets/ims.env` со случайными лабораторными ключами.
 3. Проверьте публичные параметры в `app/config/lab.env`.
-4. Для генерации диалога нужны два Windows TTS-голоса. Имена задаются через
-   `DIALOGUE_*_WINDOWS_VOICE` в `app/config/lab.env`.
+4. Тестовые WAV генерируются закреплёнными Piper-моделями внутри Docker;
+   системные голоса Windows или Linux не нужны.
 5. Запустите `./scripts/start-lab.ps1` из PowerShell.
 
 ## Ежедневный цикл

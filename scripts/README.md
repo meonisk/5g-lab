@@ -4,6 +4,7 @@
 
 ```powershell
 ./scripts/start.ps1       # Полный запуск, подготовка данных и live-проверки
+./scripts/start.sh        # Тот же полный запуск на Linux
 ./scripts/check.ps1       # Быстрые проверки кода, без перезапуска стенда
 ./scripts/compose.ps1 ps  # Состояние Docker-сервисов
 ```
@@ -12,20 +13,22 @@
 
 | Файл | Зачем нужен |
 | --- | --- |
-| `start.ps1` | Короткая совместимая точка входа в `start-lab.ps1` |
-| `start-lab.ps1` | Полный сценарий запуска и последовательных live-проверок |
+| `start.ps1`, `start.sh` | Windows/Linux точки входа в общий launcher |
+| `start_lab.py` | Общий запуск, provisioning и последовательные live-проверки |
+| `start-lab.ps1` | Обратная совместимость со старой командой Windows |
 | `compose.ps1`, `compose.sh` | Compose с публичным ENV и локальными секретами |
 | `check.ps1` | Запуск `quality/check.py` из правильного каталога |
 | `research.ps1` | Подготовка, сбор и проверка исследовательских запусков |
-| `generate-bilingual-dialogue.ps1` | Генерация синтетических WAV по JSON-сценарию |
+| `generate-bilingual-dialogue.ps1`, `generate_dialogue.py` | Генерация приватных Piper WAV по JSON-сценарию |
 | `run-interpreter-experiment.ps1` | Полный приватный эксперимент: входные и принятые WAV, логи, метаданные и задержки |
 
 ## Вызываются другими командами или контейнерами
 
 | Файл | Кто использует |
 | --- | --- |
-| `initialize-local.ps1` | `start-lab.ps1`: создать/проверить локальные ключи |
+| `initialize-local.ps1`, `initialize_local.py` | Создать/проверить локальные ключи без вывода значений |
 | `prepare-host.ps1` | `start-lab.ps1`: загрузить SCTP в Docker Desktop |
+| `app/tests/fixtures/render_dialogue.py` | Контейнерный рендер Piper WAV для Windows/Linux |
 | `subscribers.js` | `start-lab.ps1`: заполнить абонентов Open5GS |
 | `provision-ims-subscribers.sh` | `start-lab.ps1`: заполнить абонентов PyHSS |
 | `load-lab-env.sh` | Shell-команды и live-тесты: чтение ENV, сетевые помощники |
