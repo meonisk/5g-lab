@@ -67,7 +67,7 @@ function New-DialogueFixtures {
 
     $interpreterDesign = Join-Path `
         $LabRoot `
-        'app/tests/fixtures/interpreter-dialogue-v1.json'
+        'app/tests/fixtures/interpreter-dialogue-v2.json'
     $interpreterOutput = Join-Path $LabRoot 'local/private/interpreter'
 
     & powershell.exe `

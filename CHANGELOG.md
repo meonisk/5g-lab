@@ -28,6 +28,8 @@ milestones; they are not release tags or scientific benchmark results.
 
 ### Changed
 
+- perf: replace the 145-second interpreter fixture with a naturally paced
+  70-second dialogue and reduce dialogue endpointing silence to 700 ms.
 - style: count the 300-line module limit by logical lines, allowing whitespace
   and explanatory comments; separate dense media-processing loops into named stages.
 - refactor: replace handwritten HTTP handlers with Flask and Waitress; share

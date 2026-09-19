@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "interpreter-dialogue-v2",
+  "purpose": "A naturally paced four-turn Russian/English call for local near-real-time interpreter measurements.",
+  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from the script and installed OS voices.",
+  "tracks": {
+    "ue1": {
+      "language": "ru-RU",
+      "voice": "Microsoft Pavel",
+      "rate": 0,
+      "leading_silence_ms": 2000,
+      "between_turns_ms": 28000,
+      "trailing_silence_ms": 25000,
+      "turns": [
+        "Здравствуйте, Эмили, я слышу вас через переводчик, как проходит проверка?",
+        "Перевод звучит понятно, задержка заметна, но разговор можно продолжать."
+      ]
+    },
+    "ue2": {
+      "language": "en-US",
+      "voice": "Microsoft Zira Desktop",
+      "rate": 0,
+      "leading_silence_ms": 17000,
+      "between_turns_ms": 29000,
+      "trailing_silence_ms": 10000,
+      "turns": [
+        "Hello, Alex, I hear the translation clearly, shall we continue the test?",
+        "Yes, the conversation is clear, let us record the final result."
+      ]
+    }
+  },
+  "playback_seconds": 70,
+  "audio_format": {"sample_rate_hz": 8000, "bits_per_sample": 16, "channels": 1}
+}

@@ -90,7 +90,7 @@ def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
             "app/tests/integration/verify-transcription-recording.sh",
             "app/tests/integration/verify-bilingual-dialogue.sh",
             "app/tests/fixtures/bilingual-dialogue-v1.json",
-            "app/tests/fixtures/interpreter-dialogue-v1.json",
+            "app/tests/fixtures/interpreter-dialogue-v2.json",
             "app/tests/fixtures/docker-compose.interpreter.yml",
             "app/tests/fixtures/docker-compose.parallel.yml",
             "app/tests/integration/check_bidirectional_interpreter.py",

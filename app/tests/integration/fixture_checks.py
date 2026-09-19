@@ -6,7 +6,7 @@ import wave
 
 
 def verify_interpreter_fixture(root):
-    fixture = json.loads((root / "app/tests/fixtures/interpreter-dialogue-v1.json").read_text())
+    fixture = json.loads((root / "app/tests/fixtures/interpreter-dialogue-v2.json").read_text())
     manifest = json.loads((root / "local/private/interpreter/manifest.json").read_text())
     if manifest.get("fixture_id") != fixture.get("fixture_id"):
         raise RuntimeError("Interpreter WAV manifest does not match its source design")
