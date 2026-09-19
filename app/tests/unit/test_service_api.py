@@ -73,6 +73,14 @@ class ServiceApi(unittest.TestCase):
                 self.assertEqual(call["tts_generation"], expected_generation)
                 self.assertTrue(call["speech_seen"])
 
+    def test_both_neural_voices_and_explicit_rollback(self):
+        audio = importlib.import_module("ims_voice.audio")
+        with patch.object(audio.runtime, "tts_backend", "piper"):
+            self.assertEqual(audio.backend_for(audio.runtime.tts_voice), "piper")
+            self.assertEqual(audio.backend_for(audio.runtime.tts_translation_voice), "piper")
+        with patch.object(audio.runtime, "tts_backend", "espeak-ng"):
+            self.assertEqual(audio.backend_for(audio.runtime.tts_voice), "espeak-ng")
+
     def test_json_rejects_arrays_malformed_and_oversized_bodies(self):
         app = create_api("test-json", "token", max_body=32)
 

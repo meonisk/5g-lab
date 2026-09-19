@@ -11,6 +11,11 @@ from .media import receive_audio
 
 
 def main():
+    if runtime.tts_backend == "piper":
+        from .neural_voice import load_voice
+
+        for voice in runtime.piper_voices:
+            load_voice(voice)
     threading.Thread(target=receive_audio, daemon=True).start()
     threading.Thread(target=expire_calls, daemon=True).start()
     print(

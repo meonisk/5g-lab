@@ -162,6 +162,16 @@ services:
     build:
       context: app/services
       dockerfile: voice-agent/Dockerfile
+      args:
+        PIPER_VERSION: ${PIPER_VERSION}
+        PIPER_MODEL_URL: ${PIPER_MODEL_URL}
+        PIPER_MODEL_SHA256: ${PIPER_MODEL_SHA256}
+        PIPER_CONFIG_SHA256: ${PIPER_CONFIG_SHA256}
+        PIPER_MODEL_PATH: ${PIPER_MODEL_PATH}
+        PIPER_EN_MODEL_URL: ${PIPER_EN_MODEL_URL}
+        PIPER_EN_MODEL_SHA256: ${PIPER_EN_MODEL_SHA256}
+        PIPER_EN_CONFIG_SHA256: ${PIPER_EN_CONFIG_SHA256}
+        PIPER_EN_MODEL_PATH: ${PIPER_EN_MODEL_PATH}
     image: lab-voice-agent
     container_name: lab-voice-agent
     user: "65532:65532"

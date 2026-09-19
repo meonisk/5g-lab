@@ -9,6 +9,12 @@ import tempfile
 from . import runtime
 
 
+def backend_for(voice):
+    if runtime.tts_backend == "piper" and voice in runtime.piper_voices:
+        return "piper"
+    return "espeak-ng"
+
+
 def ulaw_sample(value):
     value = (~value) & 0xFF
     sign = value & 0x80
@@ -26,24 +32,23 @@ def ulaw_rms(payload):
 
 
 def synthesize(text, voice):
-    key = hashlib.sha256(f"{voice}\0{runtime.tts_rate}\0{text}".encode()).hexdigest()[:16]
+    identity = (
+        backend_for(voice),
+        voice,
+        runtime.tts_rate,
+        runtime.piper_voices.get(voice),
+        text,
+    )
+    key = hashlib.sha256(repr(identity).encode()).hexdigest()[:16]
     raw_path = f"/tmp/{key}.ulaw"
     if not os.path.exists(raw_path):
         with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
-            subprocess.run(
-                [
-                    "espeak-ng",
-                    "-v",
-                    voice,
-                    "-s",
-                    str(runtime.tts_rate),
-                    "-w",
-                    wav.name,
-                    text,
-                ],
-                check=True,
-                timeout=30,
-            )
+            if backend_for(voice) == "piper":
+                from .neural_voice import synthesize_neural
+
+                synthesize_neural(text, voice, wav.name)
+            else:
+                synthesize_espeak(text, voice, wav.name)
             subprocess.run(
                 [
                     "ffmpeg",
@@ -65,3 +70,20 @@ def synthesize(text, voice):
             )
     with open(raw_path, "rb") as source:
         return source.read()
+
+
+def synthesize_espeak(text, voice, destination):
+    subprocess.run(
+        [
+            "espeak-ng",
+            "-v",
+            voice,
+            "-s",
+            str(runtime.tts_rate),
+            "-w",
+            destination,
+            text,
+        ],
+        check=True,
+        timeout=30,
+    )

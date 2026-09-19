@@ -28,9 +28,11 @@ bounded Russian utterances with VAD in memory, transcribes them with a
 revision-pinned multilingual faster-whisper model, sends the transient text and
 bounded per-call context to a digest-verified local Qwen2.5 1.5B model, and
 passes the bounded response to the TERMINATE Voice Agent. The current
-lightweight Russian TTS backend is `espeak-ng`; it returns PCMU RTP through
+lightweight TTS backend is local Piper (Russian Denis and English LJ Speech);
+it returns PCMU RTP through
 RTPengine to the IMS subscriber. Multiple turns are supported in one call, and
-subscriber speech interrupts current TTS playback. SIP and RTP remain
+subscriber speech interrupts assistant playback, but not interpreter replies.
+SIP and RTP remain
 operational if the AI path is unavailable.
 
 ## Configuration rule

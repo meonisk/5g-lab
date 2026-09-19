@@ -16,7 +16,7 @@
 | Очереди и параллельность | `AI_QUEUE_MAX`, `AI_UTTERANCE_QUEUE_MAX`, `AI_PROCESSING_WORKERS`, `VOICE_AGENT_REPLY_QUEUE_MAX`, `LLM_NUM_PARALLEL`, `SERVICE_HTTP_THREADS` |
 | Защита полноты транскрипта | `LLM_NORMALIZATION_MIN_LENGTH_RATIO`, `TRANSCRIPT_NORMALIZED_MAX_CHARS` |
 | LLM | `LLM_MODEL`, `LLM_MODEL_DIGEST`, `LLM_*PROMPT`, `LLM_TIMEOUT_SECONDS`, `LLM_KEEP_ALIVE`, `LLM_NUM_PARALLEL` |
-| Синтез речи | `TTS_BACKEND`, `TTS_VOICE`, `TTS_TRANSLATION_VOICE`, `TTS_RATE` |
+| Синтез речи | `TTS_BACKEND`, `TTS_VOICE`, `TTS_TRANSLATION_VOICE`, `TTS_RATE`, `PIPER_*` |
 | Приватные записи | `RECORDING_*` |
 | Нагрузка | `*_CPU_LIMIT`, `*_MEMORY_LIMIT`, `AI_QUEUE_MAX`, `CUSTOM_SERVICE_*` |
 | HTTP AI Worker | `AI_WORKER_BIND`, `AI_WORKER_PORT`, `AI_REPLY_HTTP_TIMEOUT_SECONDS` |
@@ -25,6 +25,46 @@
 
 Пароли и ключи абонентов находятся в `local/secrets/ims.env`. Токен внутренних API
 создаётся в приватном Docker-томе; в публичный env он не попадает.
+
+### Локальные голоса
+
+`TTS_BACKEND=piper` использует русскую модель Denis medium и английскую
+LJ Speech medium. Обе загружаются при сборке образа с проверкой SHA-256,
+а затем работают без внешнего TTS API. Модели остаются в памяти процесса;
+`PIPER_THREADS` ограничивает CPU-потоки синтеза. Инференс сериализован,
+поэтому при нагрузке возможна очередь, а не гарантированный real-time.
+
+`PIPER_LENGTH_SCALE` и `PIPER_EN_LENGTH_SCALE` задают длительность речи:
+1.0 — штатная скорость, больше — медленнее. `TTS_RATE` относится только к espeak.
+Пути, URL и контрольные суммы русской модели задаются через `PIPER_MODEL_*`,
+английской — через `PIPER_EN_MODEL_*`; JSON имеет отдельный `*_CONFIG_SHA256`.
+После смены модели выполните `scripts/compose.ps1 build voice-agent`, затем
+`scripts/compose.ps1 up -d --no-deps --force-recreate voice-agent`.
+Для сравнения со старым голосом установите `TTS_BACKEND=espeak-ng` и пересоздайте сервис.
+
+Движок [Piper](https://github.com/OHF-Voice/piper1-gpl) распространяется по GPL-3.0.
+Карточки моделей указывают CC0 для датасета
+[Denis](https://huggingface.co/rhasspy/piper-voices/blob/c10ece1aade47bb51c153c893d14e5bf8e5b7117/ru/ru_RU/denis/medium/MODEL_CARD)
+и public domain для датасета
+[LJ Speech](https://huggingface.co/rhasspy/piper-voices/blob/c10ece1aade47bb51c153c893d14e5bf8e5b7117/en/en_US/ljspeech/medium/MODEL_CARD).
+Это сведения о происхождении, а не замена проверки лицензий при распространении образов.
+Исходный синтез — 22050 Гц; телефонный тракт пока PCMU/8000 и ограничивает полосу речи.
+
+Сравнение одинаковых фраз старым и новым голосом (PowerShell из корня):
+
+```powershell
+New-Item -ItemType Directory -Force local/private/tts-comparison | Out-Null
+docker run --rm --network none --cpus 1 --memory 512m `
+  --env-file app/config/lab.env -e VOICE_AGENT_IP=0.0.0.0 -e VOICE_AGENT_RTP_PORT=0 `
+  -e SERVICE_CONTROL_TOKEN_FILE=/dev/null -e PYTHONPATH=/app `
+  -v "${PWD}/app/tests/integration/compare_tts.py:/compare_tts.py:ro" `
+  -v "${PWD}/local/private/tts-comparison:/comparison" `
+  --entrypoint python lab-voice-agent /compare_tts.py --output /comparison
+```
+
+Результат: восемь WAV (два языка × два движка × исходный/телефонный звук)
+и `comparison.json` с временем синтеза без загрузки модели. Это не измерение
+задержки всего звонка и не автоматическая оценка естественности голоса.
 
 Текст, голоса и расписание синтетического разговора описаны в
 `app/tests/fixtures/bilingual-dialogue-v1.json`. Это входные данные теста. После изменения

@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 from . import runtime
-from .audio import synthesize, ulaw_rms
+from .audio import backend_for, synthesize, ulaw_rms
 
 PCMU_FRAME_BYTES = 160
 PCMU_FRAME_SECONDS = 0.02
@@ -112,7 +112,7 @@ def finish_playback(
                 "call_id": call_id,
                 "event": event_name,
                 "reason": reason,
-                "backend": runtime.tts_backend,
+                "backend": backend_for(voice),
                 "voice": voice,
                 "packets": playback.packets_sent,
                 "at": time.time(),
@@ -164,7 +164,7 @@ def send_audio(
     delivery_state = "interrupted" if playback.interrupted else "sent"
     print(
         f"VOICE tts call_id={call_id} reason={reason} state={delivery_state} "
-        f"backend={runtime.tts_backend} voice={voice} packets={playback.packets_sent}",
+        f"backend={backend_for(voice)} voice={voice} packets={playback.packets_sent}",
         flush=True,
     )
 

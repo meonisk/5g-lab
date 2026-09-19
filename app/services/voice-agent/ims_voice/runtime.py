@@ -15,10 +15,22 @@ interpreter_ru_greeting = os.environ["VOICE_INTERPRETER_RU_GREETING"]
 interpreter_en_greeting = os.environ["VOICE_INTERPRETER_EN_GREETING"]
 reply_text = os.environ["VOICE_AGENT_REPLY"]
 tts_backend = os.environ["TTS_BACKEND"]
-if tts_backend != "espeak-ng":
+if tts_backend not in {"espeak-ng", "piper"}:
     raise ValueError(f"unsupported lightweight TTS backend: {tts_backend}")
+
+piper_threads = int(os.environ["PIPER_THREADS"])
 tts_voice = os.environ["TTS_VOICE"]
 tts_translation_voice = os.environ["TTS_TRANSLATION_VOICE"]
+
+# Voice names stay stable at the HTTP boundary; model selection is configuration.
+piper_voices = {
+    voice: {
+        "path": os.environ[f"{prefix}_MODEL_PATH"],
+        "sha256": os.environ[f"{prefix}_MODEL_SHA256"],
+        "length_scale": float(os.environ[f"{prefix}_LENGTH_SCALE"]),
+    }
+    for voice, prefix in ((tts_voice, "PIPER"), (tts_translation_voice, "PIPER_EN"))
+}
 tts_rate = int(os.environ["TTS_RATE"])
 allowed_tts_voices = {tts_voice, tts_translation_voice}
 allowed_service_modes = {
