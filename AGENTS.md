@@ -1,6 +1,8 @@
 # Development rules
 
-- Read `CONTRIBUTING.md` and `docs/project-layout.md` before structural changes.
+Runtime paths below are relative to `app/`; run checks from that directory.
+
+- Read `CONTRIBUTING.md` and `app/docs/project-layout.md` before structural changes.
 - Keep owned source/config files at most 300 physical lines, including comments.
   Split by responsibility; do not compress statements to satisfy the limit.
 - Keep operator configuration in `lab.env`, credentials in ignored `secrets/ims.env`.

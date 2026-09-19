@@ -1,4 +1,5 @@
 # Entry point: domain-specific service definitions live under deploy/compose.
+name: lab-docker
 include:
   - path: deploy/compose/core.yml
     project_directory: .

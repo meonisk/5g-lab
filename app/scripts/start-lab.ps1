@@ -2,6 +2,15 @@ param([switch]$SkipVerify)
 $ErrorActionPreference = 'Stop'
 $LabRoot = Split-Path -Parent $PSScriptRoot
 $Bash = 'C:\Program Files\Git\bin\bash.exe'
+foreach ($command in @('docker', 'python', 'powershell.exe', 'wsl')) {
+    if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
+        throw "Required command is missing: $command"
+    }
+}
+if (-not (Test-Path $Bash)) { throw 'Install Git for Windows with Bash' }
+docker info --format '{{.OSType}}' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Start Docker Desktop with Linux containers first' }
+& "$PSScriptRoot\initialize-local.ps1"
 $PublicEnv = @{}
 Get-Content (Join-Path $LabRoot 'lab.env') | ForEach-Object {
     if ($_ -match '^([^#=]+)=(.*)$') { $PublicEnv[$matches[1]] = $matches[2] }
@@ -9,7 +18,10 @@ Get-Content (Join-Path $LabRoot 'lab.env') | ForEach-Object {
 
 Push-Location $LabRoot
 try {
-    & "$PSScriptRoot\generate-bilingual-dialogue.ps1"
+    & powershell.exe -NoProfile -File "$PSScriptRoot\generate-bilingual-dialogue.ps1"
+    if ($LASTEXITCODE -ne 0) { throw 'Dialogue fixture generation failed; check Windows voices' }
+    & powershell.exe -NoProfile -File "$PSScriptRoot\generate-bilingual-dialogue.ps1" -Design "$LabRoot\fixtures\interpreter-dialogue-v1.json" -OutputDirectory "$LabRoot\private\interpreter"
+    if ($LASTEXITCODE -ne 0) { throw 'Interpreter fixture generation failed' }
 
     & "$PSScriptRoot\prepare-host.ps1"
     if ($LASTEXITCODE -ne 0) { throw 'SCTP preparation failed' }
@@ -54,7 +66,7 @@ try {
 
     if (-not $SkipVerify) {
         foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-transcription-recording.sh', 'verify-bilingual-dialogue.sh', 'verify-security.sh')) {
-            & $Bash "scripts/$gate"
+            & $Bash "tests/integration/$gate"
             if ($LASTEXITCODE -ne 0) { throw "$gate failed" }
         }
     }

@@ -29,7 +29,7 @@ pretend the local implementation is a production cluster.
 Under the current local-lab constraints, I recommend the hardened Compose
 boundary because it removes ambient control authority without introducing a
 database or cluster into the working call path. That option has now been
-implemented and covered by `scripts/verify-security.sh`.
+implemented and covered by `tests/integration/verify-security.sh`.
 
 For production scale, Option 2 is the target: stateless SIP AS workers behind
 dialog-affine routing, a durable call-state/control service, an RTPengine pool,

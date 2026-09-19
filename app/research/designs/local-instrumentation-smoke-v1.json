@@ -29,13 +29,13 @@
     ],
     "log_tail_lines": 1000,
     "gates": [
-      {"id": "5gs-connectivity", "command": ["bash", "scripts/verify.sh"]},
-      {"id": "ims-connectivity", "command": ["bash", "scripts/verify-ims.sh"]},
-      {"id": "ims-registration", "command": ["bash", "scripts/verify-ims-registration.sh"]},
-      {"id": "ims-call-and-observe", "command": ["bash", "scripts/verify-ims-call.sh"]},
-      {"id": "voice-agent", "command": ["bash", "scripts/verify-voice-agent.sh"]},
-      {"id": "real-ai-stream", "command": ["bash", "scripts/verify-real-ai-stream.sh"]},
-      {"id": "security-privacy", "command": ["bash", "scripts/verify-security.sh"]},
+      {"id": "5gs-connectivity", "command": ["bash", "tests/integration/verify.sh"]},
+      {"id": "ims-connectivity", "command": ["bash", "tests/integration/verify-ims.sh"]},
+      {"id": "ims-registration", "command": ["bash", "tests/integration/verify-ims-registration.sh"]},
+      {"id": "ims-call-and-observe", "command": ["bash", "tests/integration/verify-ims-call.sh"]},
+      {"id": "voice-agent", "command": ["bash", "tests/integration/verify-voice-agent.sh"]},
+      {"id": "real-ai-stream", "command": ["bash", "tests/integration/verify-real-ai-stream.sh"]},
+      {"id": "security-privacy", "command": ["bash", "tests/integration/verify-security.sh"]},
       {"id": "topology-literals", "command": ["python", "scripts/check-no-hardcoded-topology.py"]}
     ]
   },
