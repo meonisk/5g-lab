@@ -2,10 +2,12 @@ services:
   sipue1:
     environment:
       SIP_UE_PLAYBACK_FILE: ${BILINGUAL_DIALOGUE_UE1_FILE}
+      SIP_UE_AUTO_CONFERENCE: 0
     volumes:
       - ./local/private/dialogue:/fixtures:ro
   sipue2:
     environment:
       SIP_UE_PLAYBACK_FILE: ${BILINGUAL_DIALOGUE_UE1_FILE}
+      SIP_UE_AUTO_CONFERENCE: 0
     volumes:
       - ./local/private/dialogue:/fixtures:ro

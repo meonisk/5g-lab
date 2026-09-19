@@ -3,6 +3,7 @@ services:
     environment:
       SIP_UE_PLAYBACK_FILE: /experiment/input/russian-user-speaks.wav
       SIP_UE_RECORD_FILE: /experiment/output/russian-user-hears.wav
+      SIP_UE_AUTO_CONFERENCE: 0
     volumes:
       - ${EXPERIMENT_DIRECTORY}:/experiment
 
@@ -10,5 +11,6 @@ services:
     environment:
       SIP_UE_PLAYBACK_FILE: /experiment/input/english-user-speaks.wav
       SIP_UE_RECORD_FILE: /experiment/output/english-user-hears.wav
+      SIP_UE_AUTO_CONFERENCE: 0
     volumes:
       - ${EXPERIMENT_DIRECTORY}:/experiment

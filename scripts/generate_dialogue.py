@@ -1,6 +1,7 @@
 """Generate private bilingual call tracks with the pinned Piper image."""
 
 import argparse
+import os
 import subprocess
 from pathlib import Path
 
@@ -37,6 +38,11 @@ def main():
         "1",
         "--memory",
         "512m",
+    ]
+    # Native Linux bind mounts otherwise receive root-owned generated files.
+    if os.name != "nt":
+        command += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    command += [
         "--env-file",
         str(PUBLIC_ENV),
         "--mount",

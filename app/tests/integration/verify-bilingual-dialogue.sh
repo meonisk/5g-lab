@@ -166,7 +166,7 @@ raise SystemExit(0 if "[speaker_1/" in t and "[speaker_2/" in t else 1)' "$sessi
 check 'private transcript contains complete semantics from all four turns' python -c '
 import pathlib,sys
 t=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").lower()
-groups=(("здравствуйте","эмили"),("звук","транскрип"),("hello","alex"),("russian","english","transcript"))
+groups=(("звонок","слыш"),("звук","транскрип","русск","английск"),("hello","hear","call"),("russian","english","transcript"))
 lines=[line for line in t.splitlines() if line.strip()]
 raise SystemExit(0 if len(lines)==4 and all(all(token in t for token in group) for group in groups) else 1)' "$session_path/transcript.txt"
 

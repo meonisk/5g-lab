@@ -24,6 +24,11 @@ milestones; they are not release tags or scientific benchmark results.
 - fix: select Git Bash explicitly on Windows instead of the optional WSL launcher.
 - test: query the Debian-based Voice Agent with its Python runtime instead of
   assuming the Alpine-only `wget` utility is installed.
+- fix: keep natural Piper pauses inside a research utterance while preserving
+  the lower-latency 700 ms threshold for ordinary calls.
+- fix: connect synthetic WAV players to their own call explicitly, preventing
+  remote speech from being mixed back as a fifth echo turn.
+- fix: preserve the invoking Linux user's ownership on generated private WAV files.
 - feat: capture complete phone-side input and received WAV files, all container
   logs, runtime metadata, hashes, latency, and Git provenance for one private
   two-language IMS interpreter experiment.

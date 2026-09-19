@@ -11,6 +11,7 @@ set -Eeuo pipefail
 : "${IMS_UE_GATEWAY:?IMS_UE_GATEWAY is required}"
 : "${IMS_UE_CIDR:?IMS_UE_CIDR is required}"
 : "${SIP_UE_AUTO_ANSWER:?SIP_UE_AUTO_ANSWER is required}"
+: "${SIP_UE_AUTO_CONFERENCE:?SIP_UE_AUTO_CONFERENCE is required}"
 : "${SIP_UE_TEST_UTTERANCE:?SIP_UE_TEST_UTTERANCE is required}"
 : "${SIP_UE_PLAYBACK_FILE:=}"
 : "${SIP_UE_RECORD_FILE:=}"
@@ -82,10 +83,15 @@ if [[ -n "$SIP_UE_RECORD_FILE" ]]; then
     printf 'Recording received call audio: %s\n' "$SIP_UE_RECORD_FILE"
 fi
 
+conference_arguments=()
+if [[ "$SIP_UE_AUTO_CONFERENCE" == 1 ]]; then
+    conference_arguments=(--auto-conf)
+fi
+
 exec pjsua \
     --log-level=4 --app-log-level=4 --null-audio --no-tcp --use-compact-form \
     --dis-codec='*' --add-codec="$SIP_UE_CODEC" \
-    --play-file="$playback" --auto-conf \
+    --play-file="$playback" "${conference_arguments[@]}" \
     "${recording_arguments[@]}" \
     --auto-answer="$SIP_UE_AUTO_ANSWER" \
     --id "sip:${IMSI}@${IMS_DOMAIN}" \
