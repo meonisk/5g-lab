@@ -1,6 +1,7 @@
 """Prove two isolated IMS legs exchange only translated synthetic speech."""
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -84,6 +85,33 @@ def send_commands_in_parallel(commands):
         list(pool.map(lambda item: send_control_command(*item), commands))
 
 
+def conference_audio_ports(client):
+    """Discover the mounted WAV player and active SIP call conference ports."""
+    send_control_command(client, "cl\n")
+
+    def find_ports():
+        logs = run("docker", "logs", client)
+        port_rows = re.findall(
+            r"Port #(\d+)\[[^\r\n]*\]\s+(.+?)\s+transmitting to:",
+            logs,
+        )
+        playback_ports = [
+            number for number, label in port_rows if ".wav" in label and "/output/" not in label
+        ]
+        call_ports = [number for number, label in port_rows if label.startswith("sip:")]
+
+        if not playback_ports or not call_ports:
+            return None
+        return playback_ports[-1], call_ports[-1]
+
+    return wait_until(find_ports, 10, f"Conference ports were not visible for {client}")
+
+
+def connect_playback_to_call(client):
+    playback_port, call_port = conference_audio_ports(client)
+    send_control_command(client, f"cc\n{playback_port}\n{call_port}\n")
+
+
 def wait_until(check, timeout, message):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -107,6 +135,17 @@ def recreate_dialogue_clients():
         "-f",
         str(ROOT / "app/tests/fixtures/docker-compose.interpreter.yml"),
     ]
+
+    # An experiment run adds host-mounted phone-side recorders. Ordinary gates
+    # omit this override and continue to keep all speech transient.
+    if os.environ.get("EXPERIMENT_DIRECTORY"):
+        compose.extend(
+            [
+                "-f",
+                str(ROOT / "app/tests/fixtures/docker-compose.experiment.yml"),
+            ]
+        )
+
     run(*compose, "up", "-d", "--no-deps", "--force-recreate", "sipue1", "sipue2", timeout=60)
     wait_until(
         lambda: all(
@@ -257,7 +296,8 @@ def main():
             30,
             "Interpreter greetings did not complete",
         )
-        send_commands_in_parallel([("lab-sipue1", "cc\n1\n4\n"), ("lab-sipue2", "cc\n1\n4\n")])
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(connect_playback_to_call, ("lab-sipue1", "lab-sipue2")))
 
         def translated():
             ru_events, en_events = translated_events(started, calls, settings)

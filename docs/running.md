@@ -121,6 +121,23 @@ queue wait, STT, LLM, dispatch, TTS synthesis, and RTP playout latency.
 Each call also has a bounded FIFO TTS queue, so a newly completed translation
 does not truncate a reply that the subscriber is already hearing.
 
+### Full phone-side experiment capture
+
+Use the private experiment runner when the research question requires the
+complete sound injected into and received from both subscriber endpoints:
+
+```powershell
+./scripts/run-interpreter-experiment.ps1
+```
+
+Each run creates `local/experiments/<UTC-run-id>/` with four complete WAV files,
+timestamped logs for every Compose container, container/image metadata, measured
+stage latency, hashes, audio format, duration, Git revision, and a PASS/FAIL
+manifest. The received WAV is recorded by `pjsua` on the subscriber call leg;
+it is not reconstructed from AI events. A dirty Git worktree makes the run FAIL
+because its implementation cannot be identified by commit alone. The directory
+contains complete speech and is intentionally excluded from Git.
+
 The bilingual-dialogue gate generates a coherent four-turn fixture locally
 with the installed Windows `Microsoft Pavel` and `Microsoft Zira Desktop`
 voices, places a real UE1-to-UE2 IMS call, and sends both WAV tracks as

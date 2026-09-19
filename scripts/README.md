@@ -18,6 +18,7 @@
 | `check.ps1` | Запуск `quality/check.py` из правильного каталога |
 | `research.ps1` | Подготовка, сбор и проверка исследовательских запусков |
 | `generate-bilingual-dialogue.ps1` | Генерация синтетических WAV по JSON-сценарию |
+| `run-interpreter-experiment.ps1` | Полный приватный эксперимент: входные и принятые WAV, логи, метаданные и задержки |
 
 ## Вызываются другими командами или контейнерами
 
@@ -37,6 +38,7 @@
 | `quality/check.py` | Единый offline-набор проверок |
 | `quality/check_layout.py` | Лимит 300 логических строк и синтаксис Python |
 | `check-no-hardcoded-topology.py` | Проверка отсутствия зашитой топологии |
+| `build-experiment-manifest.py` | Проверка WAV и формирование манифеста эксперимента |
 
 Это не каталог временных экспериментов. Live-тесты находятся в
 `app/tests/integration/`, unit-тесты — в `app/tests/unit/`, текстовые сценарии —

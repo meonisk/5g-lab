@@ -17,6 +17,9 @@ milestones; they are not release tags or scientific benchmark results.
 
 ### Added
 
+- feat: capture complete phone-side input and received WAV files, all container
+  logs, runtime metadata, hashes, latency, and Git provenance for one private
+  two-language IMS interpreter experiment.
 - docs: script inventory distinguishing public commands from runtime helpers.
 - test: HTTP authentication, input bounds, queue overload, duplicate call startup,
   and playback worker shutdown regression tests.
