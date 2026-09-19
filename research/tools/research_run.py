@@ -160,6 +160,7 @@ def input_hashes(root: Path, design_path: Path) -> list[dict[str, str]]:
         "services/ai-worker/MODEL_PROVENANCE.md",
         "services/media-adapter/Dockerfile", "scripts/verify-real-ai-stream.sh",
         "scripts/verify-transcription-recording.sh",
+        "scripts/verify-bilingual-dialogue.sh", "fixtures/bilingual-dialogue-v1.json",
         "research/tools/research_run.py", "research/schemas/run-manifest.schema.json",
         "research/schemas/metric-record.schema.json"))
     return [{"path": str(p.relative_to(root)).replace("\\", "/"), "sha256": sha256_file(p)}

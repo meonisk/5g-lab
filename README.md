@@ -67,6 +67,7 @@ and runs all acceptance gates. Use `-SkipVerify` only for development.
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-voice-agent.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-real-ai-stream.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-transcription-recording.sh
+& 'C:\Program Files\Git\bin\bash.exe' scripts/verify-bilingual-dialogue.sh
 & 'C:\Program Files\Git\bin\bash.exe' scripts/verify-security.sh
 python scripts/check-no-hardcoded-topology.py
 python research/tools/research_run.py verify --root .
@@ -93,6 +94,24 @@ the UE conference bridge and proves at least two turns of `IMS PCMU -> Russian
 STT -> local LLM translation -> English espeak-ng -> RTP` in one IMS dialog. It records only
 durations, language tags, character counts, backend identifiers, and latencies;
 neither transcript nor generated reply is written to evidence.
+
+The bilingual-dialogue gate generates a coherent four-turn fixture locally
+with the installed Windows `Microsoft Pavel` and `Microsoft Zira Desktop`
+voices, places a real UE1-to-UE2 IMS call, and sends both WAV tracks as
+PCMU/8000 through the subscribers' IMS PDU sessions and RTPengine. It proves
+automatic Russian/English recognition, two pseudonymous speaker streams, local
+LLM normalization, and exactly four complete private transcript turns. Long
+research phrases use separate env-configured VAD, duration, and RTP-gap limits;
+ordinary low-latency voice-agent turns retain their shorter limits. The source
+fixture is [`fixtures/bilingual-dialogue-v1.json`](fixtures/bilingual-dialogue-v1.json),
+generated WAVs stay under ignored `private/dialogue/`, and recordings stay
+under ignored `private/recordings/`.
+
+Regenerate the two local tracks without starting the stack:
+
+```powershell
+.\scripts\generate-bilingual-dialogue.ps1
+```
 
 The Phase 4E gate calls the configured service number from UE1 and proves that
 the caller receives `200 OK`, PCMU is negotiated, the ACK reaches SIP AS, both

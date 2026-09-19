@@ -27,7 +27,7 @@ ims_ue_network = ipaddress.ip_network(os.environ["IMS_UE_CIDR"])
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 call_id_pattern = re.compile(r"^[A-Za-z0-9_.+~-]{1,128}$")
-allowed_service_modes = {"observe", "translate", "transcribe", "assistant"}
+allowed_service_modes = {"observe", "translate", "transcribe", "assistant", "bilingual_test"}
 sessions = {}
 counters = defaultdict(lambda: {"packets": 0, "payload_bytes": 0, "audio": bytearray()})
 lock = threading.Lock()
@@ -173,6 +173,7 @@ def publish():
             event = {"event": "normalized_audio_activity", "mode": "OBSERVE",
                      "call_ids": active_call_ids, "service_mode": service_mode,
                      "ssrc": ssrc, "payload_type": payload_type, "packets": value["packets"],
+                     "source_stream_id": hashlib.sha256(f"{src}:{ssrc}".encode()).hexdigest()[:16],
                      "direction": direction,
                      "payload_bytes": value["payload_bytes"], "window_seconds": interval,
                      "observed_at": time.time()}

@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "bilingual-dialogue-v1",
+  "purpose": "A coherent four-turn Russian/English IMS subscriber conversation generated locally with two distinct Windows TTS voices.",
+  "redistribution": "Generated WAV files are local-only and excluded from Git; regenerate them from this script and the installed OS voices.",
+  "tracks": {
+    "ue1": {
+      "language": "ru-RU",
+      "voice": "Microsoft Pavel",
+      "rate": 0,
+      "leading_silence_ms": 2000,
+      "between_turns_ms": 11000,
+      "trailing_silence_ms": 15000,
+      "turns": [
+        "Здравствуйте, Эмили. Проверяем двусторонний звонок через локальную сеть ай эм эс. Как вы меня слышите?",
+        "Да, звук чистый. После звонка сравним запись и транскрипцию на двух языках."
+      ]
+    },
+    "ue2": {
+      "language": "en-US",
+      "voice": "Microsoft Zira Desktop",
+      "rate": 0,
+      "leading_silence_ms": 11000,
+      "between_turns_ms": 13000,
+      "trailing_silence_ms": 5000,
+      "turns": [
+        "Hello, Alex. I hear you clearly. The I M S call is working. Can you hear me?",
+        "Great. Let us end the call and review the Russian and English transcript."
+      ]
+    }
+  },
+  "playback_seconds": 40,
+  "audio_format": {"sample_rate_hz": 8000, "bits_per_sample": 16, "channels": 1}
+}

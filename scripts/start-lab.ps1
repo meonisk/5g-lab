@@ -9,6 +9,8 @@ Get-Content (Join-Path $LabRoot 'lab.env') | ForEach-Object {
 
 Push-Location $LabRoot
 try {
+    & "$PSScriptRoot\generate-bilingual-dialogue.ps1"
+
     & "$PSScriptRoot\prepare-host.ps1"
     if ($LASTEXITCODE -ne 0) { throw 'SCTP preparation failed' }
 
@@ -51,7 +53,7 @@ try {
     Start-Sleep -Seconds 12
 
     if (-not $SkipVerify) {
-        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-transcription-recording.sh', 'verify-security.sh')) {
+        foreach ($gate in @('verify.sh', 'verify-ims.sh', 'verify-ims-registration.sh', 'verify-ims-call.sh', 'verify-voice-agent.sh', 'verify-real-ai-stream.sh', 'verify-transcription-recording.sh', 'verify-bilingual-dialogue.sh', 'verify-security.sh')) {
             & $Bash "scripts/$gate"
             if ($LASTEXITCODE -ne 0) { throw "$gate failed" }
         }

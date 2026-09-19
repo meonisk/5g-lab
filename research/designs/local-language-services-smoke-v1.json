@@ -9,7 +9,7 @@
   "scenario": "local-ims-language-services",
   "repetitions": 1,
   "factors": {
-    "stt_backend": ["faster-whisper-base-ru-cpu-int8"],
+    "stt_backend": ["faster-whisper-small-multilingual-cpu-int8"],
     "llm_backend": ["qwen2.5-1.5b-instruct-ollama"],
     "translation_tts_backend": ["espeak-ng-en-us"],
     "translation_turns": [2],
@@ -24,7 +24,8 @@
     "english_only_translation_presence",
     "english_tts_rtp_delivery",
     "private_recording_created_and_finalized",
-    "local_llm_transcript_normalization"
+    "local_llm_transcript_normalization",
+    "two_phone_bilingual_dialogue"
   ],
   "capture": {
     "compose_project": "lab-docker",
@@ -38,6 +39,7 @@
       {"id": "voice-agent", "command": ["bash", "scripts/verify-voice-agent.sh"]},
       {"id": "russian-to-english", "command": ["bash", "scripts/verify-real-ai-stream.sh"]},
       {"id": "private-transcription", "command": ["bash", "scripts/verify-transcription-recording.sh"]},
+      {"id": "two-phone-bilingual-dialogue", "command": ["bash", "scripts/verify-bilingual-dialogue.sh"]},
       {"id": "security-privacy", "command": ["bash", "scripts/verify-security.sh"]},
       {"id": "topology-literals", "command": ["python", "scripts/check-no-hardcoded-topology.py"]}
     ]

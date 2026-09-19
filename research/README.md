@@ -9,7 +9,8 @@ an instrumentation admission test. The earlier admission designs remain
 immutable for their existing evidence. The current design executes and records
 the 5GS, IMS call, two-turn Russian-to-English spoken translation, explicit
 opt-in private recording plus local-LLM transcript normalization, voice-agent,
-security/privacy, and topology gates; it also records revisions,
+the four-turn two-subscriber Russian/English WAV dialogue, security/privacy,
+and topology gates; it also records revisions,
 immutable input hashes, hardware, container images, bounded resource snapshots,
 and pseudonymized logs. Its result can prove that the measurement path works;
 it cannot support a conclusion about AI quality or scalability.

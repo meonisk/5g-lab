@@ -7,11 +7,12 @@ Russian translation fixture it answered in Russian instead of translating to
 English.
 
 - Backend package: `faster-whisper==1.2.1`
-- Model repository: `Systran/faster-whisper-base`
-- Model revision: `ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66`
+- Model repository: `Systran/faster-whisper-small`
+- Model revision: `536b0662742c02347bc0e980a01041f333bce120`
 - Repository-declared license: MIT
-- Runtime profile: CPU, int8, Russian, VAD-bounded PCMU utterances resampled
-  from 8 kHz to 16 kHz in memory
+- Runtime profile: CPU, int8, Russian-forced service calls or automatic
+  Russian/English detection for the bilingual research fixture; VAD/RTP-gap
+  bounded PCMU utterances are resampled from 8 kHz to 16 kHz in memory
 - Storage: Docker volume configured by `AI_MODEL_CACHE`
 
 The revision is fixed in `lab.env` and passed to the model downloader. The

@@ -32,6 +32,11 @@ vad_rms = int(os.environ["AI_VAD_RMS"])
 min_utterance_bytes = int(float(os.environ["AI_UTTERANCE_MIN_SECONDS"]) * 8000)
 silence_bytes_required = int(float(os.environ["AI_UTTERANCE_SILENCE_MS"]) / 1000 * 8000)
 max_utterance_bytes = int(float(os.environ["AI_UTTERANCE_MAX_SECONDS"]) * 8000)
+dialogue_silence_bytes_required = int(
+    float(os.environ["AI_DIALOGUE_UTTERANCE_SILENCE_MS"]) / 1000 * 8000)
+dialogue_max_utterance_bytes = int(
+    float(os.environ["AI_DIALOGUE_UTTERANCE_MAX_SECONDS"]) * 8000)
+dialogue_event_gap_seconds = float(os.environ["AI_DIALOGUE_EVENT_GAP_MS"]) / 1000
 preroll_bytes = int(float(os.environ["AI_AUDIO_PREROLL_MS"]) / 1000 * 8000)
 backend = os.environ["AI_BACKEND"]
 model_size = os.environ["AI_MODEL_SIZE"]
@@ -47,6 +52,7 @@ llm_temperature = float(os.environ["LLM_TEMPERATURE"])
 llm_system_prompt = os.environ["LLM_SYSTEM_PROMPT"]
 llm_translation_prompt = os.environ["LLM_TRANSLATION_PROMPT"]
 llm_transcription_prompt = os.environ["LLM_TRANSCRIPTION_PROMPT"]
+llm_english_transcription_prompt = os.environ["LLM_ENGLISH_TRANSCRIPTION_PROMPT"]
 llm_normalization_max_tokens = int(os.environ["LLM_NORMALIZATION_MAX_TOKENS"])
 normalized_transcript_max_chars = int(os.environ["TRANSCRIPT_NORMALIZED_MAX_CHARS"])
 llm_response_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
@@ -148,13 +154,17 @@ def generate_reply(call_id, transcript, service_mode):
     return text, (time.perf_counter_ns() - started) / 1_000_000
 
 
-def normalize_transcript(transcript):
+def normalize_transcript(transcript, detected_language):
+    prompt = (llm_english_transcription_prompt
+              if detected_language == "en" else llm_transcription_prompt)
+    wrapper = (f"Input: «{transcript}»\nOutput:"
+               if detected_language == "en" else f"Вход: «{transcript}»\nВыход:")
     request_body = json.dumps({
         "model": llm_model,
         "stream": False,
         "messages": [
-            {"role": "system", "content": llm_transcription_prompt},
-            {"role": "user", "content": f"Вход: «{transcript}»\nВыход:"},
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": wrapper},
         ],
         "options": {"temperature": 0, "num_predict": llm_normalization_max_tokens},
     }).encode()
@@ -167,7 +177,9 @@ def normalize_transcript(transcript):
         raise ValueError("normalized transcript has invalid length")
     if cyrillic_chars(transcript) and not cyrillic_chars(normalized):
         raise ValueError("normalized transcript changed language")
-    if re.match(r"(?i)^(?:нормализованный|исправленный|очищенный)\s+текст\s*:", normalized):
+    if detected_language == "en" and not any(char.isascii() and char.isalpha() for char in normalized):
+        raise ValueError("normalized English transcript changed language")
+    if re.match(r"(?i)^(?:(?:нормализованный|исправленный|очищенный)\s+текст|выход(?:ит)?|output)\s*:", normalized):
         raise ValueError("normalized transcript contains a preamble")
     return normalized, (time.perf_counter_ns() - started) / 1_000_000
 
@@ -200,7 +212,7 @@ def recording_session(call_id):
     path = recording_root / session_id
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     state = {"session_id": session_id, "path": path, "turns": 0, "audio_bytes": 0,
-             "started_at": time.time(), "transcript_chars": 0}
+             "started_at": time.time(), "transcript_chars": 0, "speakers": {}}
     recordings[call_id] = state
     notice = ("PRIVATE LOCAL RECORDING\n"
               "Created only by an explicit call to the transcription service.\n"
@@ -210,7 +222,7 @@ def recording_session(call_id):
     return state
 
 
-def save_recording_turn(call_id, pcm8, transcript, result):
+def save_recording_turn(call_id, pcm8, transcript, result, speaker):
     if not recording_enabled:
         return None
     state = recording_session(call_id)
@@ -229,7 +241,7 @@ def save_recording_turn(call_id, pcm8, transcript, result):
         target.writeframes(pcm8.astype("<i2", copy=False).tobytes())
     if transcript:
         with (state["path"] / "transcript.txt").open("a", encoding="utf-8") as target:
-            target.write(transcript.strip() + "\n")
+            target.write(f"[{speaker}/{result.get('detected_language') or 'und'}] {transcript.strip()}\n")
     private_metadata = {
         "turn": state["turns"], "audio_file": wav_path.name,
         "audio_duration_seconds": result["audio_duration_seconds"],
@@ -239,6 +251,7 @@ def save_recording_turn(call_id, pcm8, transcript, result):
         "raw_transcript_chars": result.get("transcript_chars"),
         "normalization_processing_ms": result.get("normalization_processing_ms"),
         "detected_language": result.get("detected_language"),
+        "speaker": speaker,
         "processing_ms": result.get("processing_ms"),
     }
     with (state["path"] / "manifest.jsonl").open("a", encoding="utf-8") as target:
@@ -248,6 +261,15 @@ def save_recording_turn(call_id, pcm8, transcript, result):
 
 
 def finalize_call(call_id):
+    # SIP endpoints commonly suppress RTP during silence. Flush the last
+    # transcription turn on BYE because no trailing silent frames may arrive.
+    for key in [key for key in buffers if key.startswith(call_id + ":")]:
+        buffered = buffers.pop(key)
+        buffered_event = buffered.get("event") or {}
+        if (buffered["in_speech"] and buffered["speech_bytes"] >= min_utterance_bytes
+                and buffered_event.get("service_mode") in {"transcribe", "bilingual_test"}):
+            process_utterance(bytes(buffered["utterance"]), buffered_event,
+                              buffered.get("received_at", time.time()), "call-ended")
     state = recordings.pop(call_id, None)
     if state:
         completed = {"completed_at": time.time(), "turns": state["turns"],
@@ -261,8 +283,6 @@ def finalize_call(call_id):
     conversations.pop(call_id, None)
     reply_counts.pop(call_id, None)
     turn_counts.pop(call_id, None)
-    for key in [key for key in buffers if key.startswith(call_id + ":")]:
-        buffers.pop(key, None)
 
 
 def process_events():
@@ -280,7 +300,14 @@ def process_events():
 
 
 def process_event(event):
-    if event.get("direction") != "caller_to_core":
+    service_mode = event.get("service_mode", "observe")
+    current_silence_bytes_required = (dialogue_silence_bytes_required
+                                      if service_mode == "bilingual_test"
+                                      else silence_bytes_required)
+    current_max_utterance_bytes = (dialogue_max_utterance_bytes
+                                   if service_mode == "bilingual_test"
+                                   else max_utterance_bytes)
+    if event.get("direction") != "caller_to_core" and service_mode != "bilingual_test":
         return
     received_at = event.get("received_at", time.time())
     encoded = event.get("audio_ulaw_b64", "")
@@ -306,7 +333,25 @@ def process_event(event):
     state = buffers.setdefault(stream_key, {"utterance": bytearray(), "preroll": bytearray(),
                                              "speech_bytes": 0, "silence_bytes": 0,
                                              "in_speech": False, "last_seen": now})
+    observed_at = event.get("observed_at")
+    previous_observed_at = state.get("observed_at")
+    if (service_mode == "bilingual_test" and state["in_speech"]
+            and state["speech_bytes"] >= min_utterance_bytes
+            and isinstance(observed_at, (int, float))
+            and isinstance(previous_observed_at, (int, float))
+            and observed_at - previous_observed_at >= dialogue_event_gap_seconds):
+        # Silence-suppressing SIP clients send no RTP frames from which the VAD
+        # could count silence. A gap between two batches is the media-level
+        # equivalent and must close the previous phrase before the new one.
+        process_utterance(bytes(state["utterance"]), state.get("event", event),
+                          state.get("received_at", received_at), "stream-gap")
+        state.update({"utterance": bytearray(), "preroll": bytearray(),
+                      "speech_bytes": 0, "silence_bytes": 0, "in_speech": False})
     state["last_seen"] = now
+    state["observed_at"] = observed_at
+    state["received_at"] = received_at
+    state["event"] = {key: value for key, value in event.items()
+                      if key != "audio_ulaw_b64"}
     for offset in range(0, len(chunk), 160):
         frame = chunk[offset:offset + 160]
         if len(frame) < 160:
@@ -329,9 +374,10 @@ def process_event(event):
 
         end_reason = None
         if (state["in_speech"] and state["speech_bytes"] >= min_utterance_bytes
-                and state["silence_bytes"] >= silence_bytes_required):
+                and state["silence_bytes"] >= current_silence_bytes_required):
             end_reason = "silence"
-        elif state["in_speech"] and len(state["utterance"]) >= max_utterance_bytes:
+        elif (state["in_speech"]
+              and len(state["utterance"]) >= current_max_utterance_bytes):
             end_reason = "maximum-duration"
         if end_reason:
             ulaw = bytes(state["utterance"])
@@ -341,6 +387,7 @@ def process_event(event):
 
 
 def process_utterance(ulaw, event, received_at, end_reason):
+    service_mode = event.get("service_mode", "observe")
     audio = decode_audio(ulaw)
     rms = float(np.sqrt(np.mean(np.square(audio)))) if len(audio) else 0.0
     started = time.perf_counter_ns()
@@ -348,7 +395,8 @@ def process_utterance(ulaw, event, received_at, end_reason):
     detected_language = None
     language_probability = None
     if model is not None and rms > 0.005:
-        segments, info = model.transcribe(audio, language=language or None, task="transcribe",
+        requested_language = None if service_mode == "bilingual_test" else (language or None)
+        segments, info = model.transcribe(audio, language=requested_language, task="transcribe",
                                           beam_size=1, vad_filter=True,
                                           condition_on_previous_text=False)
         transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
@@ -359,7 +407,6 @@ def process_utterance(ulaw, event, received_at, end_reason):
               if key not in {"audio_sha256", "audio_ulaw_b64", "received_at"}}
     call_ids = event.get("call_ids") or []
     call_id = call_ids[0] if len(call_ids) == 1 else None
-    service_mode = event.get("service_mode", "observe")
     if call_id:
         turn_counts[call_id] = turn_counts.get(call_id, 0) + 1
     result.update({
@@ -381,11 +428,19 @@ def process_utterance(ulaw, event, received_at, end_reason):
         "adapter_to_worker_ms": ((received_at - event["observed_at"]) * 1000
                                   if isinstance(event.get("observed_at"), (int, float)) else None),
     })
-    if call_id and service_mode == "transcribe":
+    if call_id and service_mode in {"transcribe", "bilingual_test"}:
         normalized_transcript = transcript
+        if service_mode == "bilingual_test":
+            recording = recording_session(call_id)
+            source_key = event.get("source_stream_id") or str(event.get("ssrc"))
+            speaker = recording["speakers"].setdefault(
+                source_key, f"speaker_{len(recording['speakers']) + 1}")
+        else:
+            speaker = "caller"
         if transcript:
             try:
-                normalized_transcript, normalization_ms = normalize_transcript(transcript)
+                normalized_transcript, normalization_ms = normalize_transcript(
+                    transcript, detected_language)
                 result.update({
                     "normalization_applied": True,
                     "normalization_llm_model": llm_model,
@@ -404,7 +459,8 @@ def process_utterance(ulaw, event, received_at, end_reason):
                                "normalization_error_type": type(exc).__name__})
                 print(f"AI transcript_normalization_failed model={llm_model} "
                       f"type={type(exc).__name__} calls={call_ids}", flush=True)
-        saved = save_recording_turn(call_id, decode_pcm8(ulaw), normalized_transcript, result)
+        saved = save_recording_turn(call_id, decode_pcm8(ulaw), normalized_transcript,
+                                    result, speaker)
         if saved:
             result.update({"recording_session_id": saved["session_id"],
                            "recording_saved": saved["saved"],
