@@ -16,6 +16,16 @@ not a newly certified runtime or a scientific result.
 | Physical 5G | Integration contract exists | RF, native UE/ISIM, handover and real speaker timing remain unverified |
 | Production | Single-host lab only | Durable call state, multi-tenant isolation and capacity acceptance remain design work |
 
+## Publication checks performed
+
+On 2026-09-21 a clean Git clone passed the full offline suite on Windows with
+Python 3.14, including 28 unit tests and 64 local link targets in 23 documents.
+Fresh local credential generation and `docker compose ... config --quiet` also
+passed. Configuration parsing does not start containers or prove a working call.
+The original repository's reachable history was checked against its local
+credentials after sanitization. Guard probes rejected an audio file in the index,
+a broken document link and a credential literal without printing its value.
+
 ## Interpreting test output
 
 `python scripts/quality/check.py` is the offline development check.
