@@ -48,9 +48,17 @@ From PowerShell:
 ./scripts/research.ps1 verify
 ```
 
+Linux uses the same CLI directly:
+
+```bash
+python app/research/tools/research_run.py prepare --root .
+python app/research/tools/research_run.py collect --root . --run-id <run-id>
+python app/research/tools/research_run.py validate --root . --run-id <run-id>
+```
+
 Generated runs live under ignored `local/evidence/runs/<run-id>/`. Share only the
 `shareable/` directory and the manifest/checksums after review. The per-run
-pseudonymization key stays under ignored `local/evidence/local/private/`; it is never
+pseudonymization key stays under ignored `local/evidence/private/`; it is never
 written into a shareable artifact.
 
 The proposed AI-scale campaign, local/real-stand boundary, demonstration

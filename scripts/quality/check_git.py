@@ -31,12 +31,15 @@ def git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT)
 
 
-def private_path(name):
+def private_path(name, *, historical=False):
     path = PurePosixPath(name)
+    public_envs = {"app/config/lab.env"}
+    if historical:
+        public_envs.add("lab.env")  # Public configuration before the layout migration.
     return (
         bool(PRIVATE_PARTS.intersection(path.parts))
         or path.suffix.lower() in PRIVATE_SUFFIXES
-        or (path.name.endswith(".env") and name != "app/config/lab.env")
+        or (path.name.endswith(".env") and name not in public_envs)
         or path.name.startswith(".env.")
         and not path.name.endswith(".example")
         or name == "docs/hardening/context.local.md"
@@ -79,7 +82,7 @@ def main():
             oid, separator, name = record.partition(" ")
             if separator:
                 objects.setdefault(oid, name)
-                if private_path(name):
+                if private_path(name, historical=True):
                     errors.append(f"{name}: private/generated path in history")
 
     credentials = local_credentials()

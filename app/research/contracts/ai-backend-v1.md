@@ -5,12 +5,17 @@ comparison remains blocked on the fixed-corpus pilot.
 
 The IMS and media layers do not depend on a model vendor. The current
 `POST /observe` path carries bounded PCMU audio to the first replaceable local
-backend. An event has:
+backend. The input envelope and output metadata are distinct:
+
+The authenticated `POST /observe` input contains:
 
 - opaque `call_ids` used only for within-run correlation;
 - `observed_at`, the adapter wall-clock timestamp;
 - RTP-window counts, codec metadata, an audio hash, and a base64 in-memory audio
   window, but no subscriber SIP identity;
+
+The authenticated `GET /events` response contains processing metadata:
+
 - `backend_id`, immutable model revisions, audio duration/RMS, character counts,
   STT/LLM processing times, delivery status, and adapter timing. Raw transcript,
   prompt, and generated reply are deliberately absent from the event API.
@@ -34,3 +39,8 @@ deadlines, cancellation, and error taxonomy. It must not add subscriber
 identities. Model artifact ID, quantization, decoding parameters, warm/cold
 state and device placement belong in run metadata and metric provenance, not
 in IMS routing configuration.
+
+Current models and compute defaults are documented in
+[model provenance](../../services/ai-worker/MODEL_PROVENANCE.md).
+See [validation status](../../../docs/status.md) for the unclosed latency and
+quality acceptance work.

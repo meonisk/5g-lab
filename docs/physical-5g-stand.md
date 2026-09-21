@@ -1,5 +1,8 @@
 # Physical 5G stand integration contract
 
+Current implementation limits: [status.md](status.md). This is a migration
+contract; it is not a report of completed physical-stand acceptance.
+
 ## Scope
 
 The Docker profile is the executable integration baseline. A physical stand
@@ -13,8 +16,8 @@ is not evidence of RF, mobility, QoS, or physical-device behavior.
 ```text
 physical UE/USIM -> NR-Uu -> physical gNB -> N2/N3 -> Open5GS/UPF
   -> IMS DNN -> P-CSCF -> I-CSCF -> S-CSCF -> iFC/ISC -> SIP AS
-  -> RTPengine -> Voice Agent / Media Adapter -> sentence VAD -> STT
-  -> bounded inference queue -> translation LLM -> language-specific TTS
+  -> RTPengine -> Voice Agent / Media Adapter -> sentence VAD
+  -> bounded inference queue -> STT -> translation LLM -> language-specific TTS
   -> RTPengine -> IMS DNN -> Russian or English physical UE
 ```
 
