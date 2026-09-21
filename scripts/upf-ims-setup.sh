@@ -1,5 +1,5 @@
 #!/bin/bash
-# lab-docker UPF entrypoint wrapper: create the second tunnel device for the
+# 5g-lab UPF entrypoint wrapper: create the second tunnel device for the
 # env-defined ims DNN on ogstun2 before delegating to the gradiant entrypoint,
 # which handles the internet DNN, forwarding and its NAT rule.
 # The ims pool deliberately has NO NAT and no Internet path.

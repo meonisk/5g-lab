@@ -9,6 +9,10 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- docs: use the canonical 5g-lab repository name and GitLab URL in setup,
+  publication and source archive instructions; document the stable internal
+  Compose identifier separately.
+
 - chore: prepare Git publication, preserve a private history backup, remove
   credential literals from reachable history, and set shell executable modes.
 - build: add Git hygiene and local Markdown link checks to offline validation.

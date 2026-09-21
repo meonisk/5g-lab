@@ -1,4 +1,6 @@
-# Local 5G SA + IMS voice lab
+# 5g-lab — Local 5G SA + IMS voice lab
+
+Repository: [2508/5g-lab](https://git.miem.hse.ru/2508/5g-lab).
 
 A local Open5GS/UERANSIM stand with IMS calls, Russian/English speech
 translation, and opt-in recording/transcription. Speech processing runs locally:
@@ -23,7 +25,14 @@ and live acceptance are separate; see [validation status](docs/status.md).
 
 ## Start from a clone
 
-Clone this repository and change to its root. No sibling repositories, private
+Clone the repository and change to its root (PowerShell or Bash):
+
+```bash
+git clone https://git.miem.hse.ru/2508/5g-lab.git
+cd 5g-lab
+```
+
+No sibling repositories, private
 WAV files, pre-existing model cache or operating-system TTS voices are required.
 
 Windows PowerShell:

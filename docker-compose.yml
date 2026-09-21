@@ -1,4 +1,6 @@
 # Entry point: domain-specific service definitions live under app/infrastructure/compose.
+# Keep this deployment identifier stable: existing named volumes use this prefix.
+# Repository name: 5g-lab; see docs/running.md for the distinction.
 name: lab-docker
 include:
   - path: app/infrastructure/compose/core.yml

@@ -1,8 +1,9 @@
 # Preparing and publishing the Git repository
 
-The publication unit is this `lab-docker` repository. Sibling `ims`,
+The publication unit is [5g-lab](https://git.miem.hse.ru/2508/5g-lab). Sibling `ims`,
 `asterisk_legacy` and `5g-arseny` repositories are not required by its startup.
-No hosting provider or remote URL is assumed.
+The Git remote is `https://git.miem.hse.ru/2508/5g-lab.git`; the published
+branch is `master`.
 
 ## Before a push
 
@@ -23,9 +24,14 @@ clone still checks prohibited paths, executable modes and selected signatures.
 Neither check is a comprehensive secret scanner or a runtime acceptance test.
 
 Commit the reviewed changes. Publish the intended branch explicitly rather than
-using `--mirror` or `--all`. Configure the destination only after the repository
-URL and visibility are chosen; credentials belong in a credential manager,
-not in a remote URL, source file or documentation.
+using `--mirror` or `--all`. For a clone of the canonical repository:
+
+```bash
+git push -u origin master
+```
+
+Credentials belong in a credential manager, not in a remote URL, source file
+or documentation.
 
 ## Distribution contents
 
@@ -38,7 +44,7 @@ captures, credentials, model caches and Git backup bundles.
 For a source-only archive, after committing:
 
 ```bash
-git archive --format=zip --prefix=lab-docker/ --output=../lab-docker-source.zip HEAD
+git archive --format=zip --prefix=5g-lab/ --output=../5g-lab-source.zip HEAD
 ```
 
 This exports the committed tree, with executable modes stored by Git. It omits

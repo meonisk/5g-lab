@@ -1,5 +1,5 @@
 #!/bin/sh
-# lab-docker dns entrypoint: route back to the UE ims pool via the UPF
+# 5g-lab dns entrypoint: route back to the UE ims pool via the UPF
 # (the ims DNN has no NAT), render the env-backed zone, then serve it.
 set -eu
 for name in IMS_UE_CIDR UPF_IP DNS_IP IMS_DOMAIN PCSCF_IP ICSCF_IP SCSCF_IP PYHSS_IP SIP_AS_IP RTPENGINE_IP VOICE_AGENT_IP ICSCF_SIP_PORT SCSCF_SIP_PORT LOOPBACK_IP DNS_UPSTREAM_PRIMARY DNS_UPSTREAM_SECONDARY; do

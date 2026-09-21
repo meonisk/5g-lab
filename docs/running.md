@@ -1,6 +1,12 @@
-# Local 5G SA + IMS + voice-agent lab
+# 5g-lab: running the local 5G SA + IMS voice lab
 
-Run the commands below from the repository root.
+Repository: [2508/5g-lab](https://git.miem.hse.ru/2508/5g-lab).
+Run the commands below from the cloned `5g-lab` repository root.
+
+The Docker Compose project identifier remains `lab-docker` for compatibility
+with existing named volumes and research designs. It is an internal deployment
+identifier, not the repository name. Renaming the clone directory does not
+change it; changing the Compose identifier requires a separate volume migration.
 Team development: [CONTRIBUTING.md](../CONTRIBUTING.md),
 [project map](project-layout.md), [configuration](configuration.md).
 Run `python scripts/quality/check.py` before submitting a change for review.
