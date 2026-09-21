@@ -15,6 +15,11 @@
 7. `voice-agent/ims_voice/media.py` последовательно озвучивает ответы звонка
    и отправляет PCMU обратно через RTPengine.
 
+Экспериментальный путь находится в `ai-worker/ims_ai/interpretation.py` и
+`streaming.py`; `AI_STREAMING_ENABLED=0` оставляет пофразовую обработку.
+Полнота текста и задержка streaming одновременно ещё не приняты.
+См. [статус](../../docs/status.md) и [streaming](../../docs/streaming.md).
+
 ## Где используются библиотеки
 
 - Flask: маршрутизация HTTP, разбор JSON, стандартные ошибки.
@@ -22,7 +27,7 @@
 - HTTPX: межсервисные запросы и обращения к локальной LLM.
 - `queue.Queue`, `threading.Condition`, `dataclasses`: задания и координация потоков.
 - faster-whisper: локальное распознавание; Ollama: локальная LLM;
-  существующий TTS backend выбирается через ENV.
+  Piper — основной TTS, espeak-ng — явный запасной профиль через ENV.
 
 Общие правила HTTP собраны в `lab_common/http.py`. Здесь нет отдельного сервиса:
 этот пакет копируется в четыре Docker-образа. Поэтому их контекст сборки —

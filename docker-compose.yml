@@ -1,4 +1,4 @@
-# Entry point: domain-specific service definitions live under deploy/compose.
+# Entry point: domain-specific service definitions live under app/infrastructure/compose.
 name: lab-docker
 include:
   - path: app/infrastructure/compose/core.yml

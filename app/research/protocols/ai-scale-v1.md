@@ -18,9 +18,9 @@ others are fixed; use the pilot to choose a small factorial design only where
 interactions matter.
 
 The current `ai-worker` processes live PCMU with a revision-pinned multilingual
-faster-whisper `base` model on CPU. VAD-bounded Russian utterances control a
-local Qwen2.5 0.5B response, and the `voice-agent` returns Russian espeak-ng
-PCMU. Bounded in-memory dialog history enables multiple turns in one IMS call.
+faster-whisper `small` model on CPU by default. VAD-bounded Russian/English
+utterances pass through local Unsloth Qwen3 4B Q4_K_M, and the `voice-agent`
+returns language-specific Piper speech as PCMU. Bounded in-memory dialog history enables multiple turns in one IMS call.
 
 ## 2. Questions that the platform can support
 
@@ -63,9 +63,9 @@ transcripts, prompts, and model-provider metadata cross each trust boundary?
 | Multi-VM lab | placement, clock synchronization, VM-SERVICE separation, controlled load, edge-vs-core transport | RF/handover unless a real RAN is present |
 | Physical 5G stand | SDR/gNB/UE radio effects, mobility/handover, real microphones/speakers, QoS/QFI behavior, edge placement | Internet-scale or production multi-tenant capacity without representative infrastructure |
 
-The present PC has a 6-core/12-thread CPU, 32 GB RAM, and an RTX 4060 Ti with
-8 GB VRAM. It is suitable for small/medium local inference and bounded
-end-to-end trials. Models that do not fit in 8 GB must be quantized/offloaded
+The original local pilot host was recorded as having a 6-core/12-thread CPU, 32 GB RAM, and an RTX 4060 Ti with
+8 GB VRAM. This describes the historical host, not a minimum requirement or an
+assumption about the machine running this clone. Models that do not fit in 8 GB must be quantized/offloaded
 with that fact treated as a different execution condition, or run on a
 separate host. Hardware is captured again for every run; this paragraph is not
 the source of truth.
@@ -100,9 +100,9 @@ is historical context and is not required to run this repository.
 
 ## 5. Experimental sequence and blockers
 
-### A. Admission (implemented now)
+### A. Admission (implemented checks; required per run)
 
-- all existing IMS/voice/security gates pass;
+- require all applicable IMS/voice/security gates to pass;
 - run manifest records design hash, Git state, hardware and image IDs;
 - bounded Docker state/stats/log collection works;
 - identifiers are consistently pseudonymized and secrets are absent;
@@ -138,8 +138,9 @@ energy/network measurement, pilot-derived repetitions, and frozen analysis.
 
 Data classes:
 
-1. **Public synthetic**: generated audio, artificial identities, configs and
-   derived metrics; preferred for reproducible publication.
+1. **Public synthetic**: artificial identities, text fixtures, configs and
+   reviewed derived metrics. Generated audio stays local by repository policy;
+   sharing it separately requires an explicit artifact review.
 2. **Pseudonymized research**: consented audio/transcripts with direct
    identifiers removed; restricted access and a documented retention date.
 3. **Directly identifying/sensitive**: voice recordings, phone identities,

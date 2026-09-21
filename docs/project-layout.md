@@ -32,6 +32,9 @@
 | `local/private/` | Локальные WAV и записи, исключённые из Git |
 | `local/evidence/` | Локальные результаты admission/research, исключённые из Git |
 
+Публикация и границы проверки описаны в [publication.md](publication.md)
+и [status.md](status.md).
+
 ## Где менять поведение
 
 AI Worker: `app/services/ai-worker/ims_ai/`.
@@ -42,6 +45,8 @@ AI Worker: `app/services/ai-worker/ims_ai/`.
 - `segmentation.py`: границы реплик по тишине и промежуткам RTP.
 - `models.py`: загрузка фиксированной версии Whisper.
 - `utterances.py`: распознавание STT и сбор метрик обработки.
+- `interpretation.py`: выбор пофразового или экспериментального потокового перевода.
+- `streaming.py`: согласование ASR-префиксов; режим по умолчанию выключен.
 - `transcription.py`: нормализация текста и приватная запись.
 - `replies.py`: перевод/ответ и доставка в нужный языковой канал.
 - `queueing.py`: типизированное задание реплики и ограниченная очередь.

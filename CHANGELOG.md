@@ -9,6 +9,13 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- chore: prepare Git publication, preserve a private history backup, remove
+  credential literals from reachable history, and set shell executable modes.
+- build: add Git hygiene and local Markdown link checks to offline validation.
+- docs: align README, operations, model provenance, research and configuration
+  with the Qwen3/Piper CPU baseline; document separate live gates and open limits.
+
+
 - feat: experimental cumulative-audio streaming with two-hypothesis prefix
   agreement, bounded pending snapshots, explicit revision/coverage failures,
   and a speech-start-to-audible-RTP acceptance metric (not handset playback).

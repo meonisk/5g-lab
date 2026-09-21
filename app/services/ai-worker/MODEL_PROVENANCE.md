@@ -1,10 +1,10 @@
 # Local STT model provenance
 
-The local translation profile additionally uses `qwen2.5:1.5b-instruct`
-through the pinned Ollama container. `app/config/lab.env` fixes and admission-checks its
-full content digest. The smaller 0.5B profile is not admitted: on the frozen
-Russian translation fixture it answered in Russian instead of translating to
-English.
+The current translation profile uses Unsloth Qwen3-4B-Instruct-2507 Q4_K_M
+through Ollama. `app/config/lab.env` pins the GGUF URL/revision and full SHA-256;
+the model initializer verifies the file before importing the configured tag.
+See [local models](../../../docs/local-models.md) for GPU and alternatives.
+Older Qwen2.5 experiments are historical and do not define the default profile.
 
 - Backend package: `faster-whisper==1.2.1`
 - Model repository: `Systran/faster-whisper-small`
@@ -13,7 +13,9 @@ English.
 - Runtime profile: CPU, int8, Russian-forced service calls or automatic
   Russian/English detection for the bilingual research fixture; VAD/RTP-gap
   bounded PCMU utterances are resampled from 8 kHz to 16 kHz in memory
-- Storage: Docker volume configured by `AI_MODEL_CACHE`
+- Storage: `ai-model-cache` Docker volume mounted at `AI_MODEL_CACHE`
+- Optional CUDA STT is a separate execution profile; see
+  [streaming configuration](../../../docs/streaming.md)
 
 The revision is fixed in `app/config/lab.env` and passed to the model downloader. The
 complete Python dependency set is fixed in `requirements.txt`. A different

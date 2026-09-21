@@ -6,7 +6,7 @@ a scientific result.
 
 The current executable design, `local-language-services-smoke-v2.json`, is
 an instrumentation admission test. The earlier admission designs remain
-available in Git history at the revisions recorded in their evidence. Path-only
+in `designs/` for provenance; they are not the default campaign. Path-only
 updates in this revision follow the new repository layout. The current design executes and records
 the 5GS, IMS call, two-turn Russian-to-English spoken translation, explicit
 opt-in private recording plus local-LLM transcript normalization, voice-agent,
@@ -32,6 +32,10 @@ policy. The shareable capture contract continues to forbid raw audio and text.
 
 Only stages 4 and 5 may produce primary study evidence. Admission and pilot
 artifacts must retain their stage labels.
+
+Historical local results and source hashes identify their original run, not
+the current publication revision. Private artifacts are excluded. See the
+[current validation boundary](../../docs/status.md).
 
 ## Commands
 

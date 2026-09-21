@@ -1,5 +1,11 @@
 # Hardening evidence context
 
+> Historical design record from 2026-09-18. Evidence IDs, hashes and source
+> revisions describe that assessment, not a fresh audit of the publication.
+> Paths may have been mapped to the current layout. Credential sanitization
+> can change Git commit IDs; retain original IDs as historical provenance.
+> Current scope and validation limits: [status.md](../status.md).
+
 Analysis date: 2026-09-18. Source repository revision before implementation:
 `3f9853e052befc8200815ab1074ce9a472d03433`. The implementation was performed
 in the working tree, so source drift is intentionally recorded as present.

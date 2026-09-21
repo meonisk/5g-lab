@@ -10,3 +10,21 @@ __pycache__/
 *.pcap
 *.pcapng
 dist/
+
+# Private captures, credentials and local distribution artifacts.
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.pem
+*.key
+*.p12
+*.pfx
+*.bundle
+*.zip
+.env.*
+!.env.example
+ims.env
+.pytest_cache/
+.coverage
+htmlcov/

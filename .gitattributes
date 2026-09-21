@@ -6,3 +6,7 @@
 *.yaml text eol=lf
 *.env text eol=lf
 *.wav binary
+*.md text eol=lf
+*.json text eol=lf
+*.example text eol=lf
+.gitignore text eol=lf

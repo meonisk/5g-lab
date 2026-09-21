@@ -27,10 +27,10 @@
 | Файл | Кто использует |
 | --- | --- |
 | `initialize-local.ps1`, `initialize_local.py` | Создать/проверить локальные ключи без вывода значений |
-| `prepare-host.ps1` | `start-lab.ps1`: загрузить SCTP в Docker Desktop |
+| `prepare-host.ps1` | `start_lab.py`: загрузить SCTP в Docker Desktop |
 | `app/tests/fixtures/render_dialogue.py` | Контейнерный рендер Piper WAV для Windows/Linux |
-| `subscribers.js` | `start-lab.ps1`: заполнить абонентов Open5GS |
-| `provision-ims-subscribers.sh` | `start-lab.ps1`: заполнить абонентов PyHSS |
+| `subscribers.js` | `start_lab.py`: заполнить абонентов Open5GS |
+| `provision-ims-subscribers.sh` | `start_lab.py`: заполнить абонентов PyHSS |
 | `load-lab-env.sh` | Shell-команды и live-тесты: чтение ENV, сетевые помощники |
 | `sip-register.sh` | Тест IMS-регистрации: перезапуск клиента и проверка ответа |
 | `sip-ue-run.sh` | Контейнеры SIP UE: транспорт через IMS PDU и запуск PJSUA |
@@ -39,6 +39,8 @@
 | `open5gs-config-run.sh` | SMF: рендеринг конфигурации перед entrypoint |
 | `upf-ims-setup.sh` | UPF: конфигурация, TUN и маршруты IMS |
 | `quality/check.py` | Единый offline-набор проверок |
+| `quality/check_git.py` | Индекс Git, права shell-файлов, приватные файлы; `--history` проверяет все refs |
+| `quality/check_docs.py` | Локальные цели Markdown-ссылок |
 | `quality/check_layout.py` | Лимит 300 логических строк и синтаксис Python |
 | `check-no-hardcoded-topology.py` | Проверка отсутствия зашитой топологии |
 | `build-experiment-manifest.py` | Проверка WAV и формирование манифеста эксперимента |

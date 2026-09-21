@@ -10,7 +10,7 @@
 3. Проверьте публичные параметры в `app/config/lab.env`.
 4. Тестовые WAV генерируются закреплёнными Piper-моделями внутри Docker;
    системные голоса Windows или Linux не нужны.
-5. Запустите `./scripts/start-lab.ps1` из PowerShell.
+5. Запустите `./scripts/start.ps1` из PowerShell.
 
 ## Ежедневный цикл
 
@@ -62,3 +62,12 @@ python scripts/quality/check.py
 
 Сервисные библиотеки устанавливаются в Docker-образах. На хосте для offline
 проверок нужны только зависимости из `requirements-dev.txt`.
+
+## Подготовка публикации
+
+Перед коммитом добавьте в индекс только изменения исходников и документации.
+`quality/check.py` также проверяет индекс Git, исполняемость shell-файлов и
+локальные Markdown-ссылки. Для проверки всех веток выполните
+`python scripts/quality/check_git.py --history`. Полный порядок и состав
+выгрузки — [publication.md](docs/publication.md), границы готовности —
+[status.md](docs/status.md). Приватные Git-бэкапы остаются внутри `local/`.

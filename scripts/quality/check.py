@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def main():
     commands = [
+        [sys.executable, "scripts/quality/check_git.py"],
+        [sys.executable, "scripts/quality/check_docs.py"],
         [sys.executable, "scripts/quality/check_layout.py"],
         [
             sys.executable,

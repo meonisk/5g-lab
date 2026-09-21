@@ -11,9 +11,18 @@ ROOT = Path(__file__).resolve().parents[1]
 PATTERNS = (
     re.compile(r"\b(?:172\.22|10\.45|10\.46)\.\d{1,3}(?:\.\d{1,3})?(?:/\d+)?\b"),
     re.compile(r"\b00101000000000[12]\b"),
-    re.compile(r"\b(?:REMOVED_LAB_CREDENTIAL|REMOVED_LAB_CREDENTIAL)\b"),
     re.compile(r"\bims\.mnc001\.mcc001\.3gppnetwork\.org\b"),
 )
+# Validate private values without ever embedding them in source or diagnostics.
+secret_path = ROOT / "local/secrets/ims.env"
+if secret_path.exists():
+    private_values = [
+        line.split("=", 1)[1].strip()
+        for line in secret_path.read_text(encoding="utf-8").splitlines()
+        if "=" in line and not line.startswith("#")
+    ]
+    PATTERNS += tuple(re.compile(re.escape(value)) for value in private_values if len(value) >= 16)
+
 SUFFIXES = {".sh", ".py", ".ps1", ".js", ".yaml", ".yml"}
 ALLOWED = {
     ROOT / "app/config/lab.env",
@@ -36,7 +45,9 @@ for path in ROOT.rglob("*"):
         if not line or line.startswith(("#", "//")):
             continue
         if any(pattern.search(line) for pattern in PATTERNS):
-            violations.append(f"{path.relative_to(ROOT)}:{number}: {line}")
+            violations.append(
+                f"{path.relative_to(ROOT)}:{number}: forbidden literal (value redacted)"
+            )
 
 if violations:
     print(

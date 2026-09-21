@@ -1,5 +1,11 @@
 # Implementation Plan: Hardened Compose Boundary
 
+> Historical design record from 2026-09-18. Evidence IDs, hashes and source
+> revisions describe that assessment, not a fresh audit of the publication.
+> Paths may have been mapped to the current layout. Credential sanitization
+> can change Git commit IDs; retain original IDs as historical provenance.
+> Current scope and validation limits: [status.md](../../status.md).
+
 ## Selected Design And Constraints
 
 Option 1 preserves the local Docker topology while removing unnecessary
