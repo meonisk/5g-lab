@@ -9,6 +9,7 @@ services:
   dns:
     build: app/infrastructure/images/dnsmasq
     container_name: lab-dns
+    restart: unless-stopped
     cap_add: [NET_ADMIN]
     # Route back to the UE ims pool through the UPF (ims DNN has no NAT).
     entrypoint: ["/lab/dns-ims-run.sh"]
@@ -26,6 +27,8 @@ services:
     image: ${MYSQL_IMAGE}
     container_name: lab-mysql
     restart: unless-stopped
+    volumes:
+      - mysql-data:/var/lib/mysql
     networks:
       lab5g:
         ipv4_address: ${MYSQL_IP}
@@ -81,7 +84,10 @@ services:
     logging: *bounded-logging
 
   scscf:
-    image: ${KAMAILIO_IMAGE}
+    image: ${SCSCF_IMAGE}
+    build:
+      context: .
+      dockerfile: app/infrastructure/images/kamailio-scscf/Dockerfile
     container_name: lab-scscf
     restart: unless-stopped
     env_file:

@@ -9,6 +9,75 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- fix: recover nr-cli discovery after reused UE PIDs by quarantining only stale
+  registry records verified against the current process and its UDP socket.
+- test: add real IMS PDU release/address-change recovery with TUN/source-route,
+  SIP restart and unaffected-peer checks; validate exact IMS Contact inventories.
+
+- fix: reject an exhausted S-CSCF contact scan instead of routing to the last
+  expired Contact; package the minimal registrar patch in a pinned derived image.
+
+- feat: add deregistered/expired AKA callee scenarios and strict rejected-call
+  checks, with per-UE challenge binding and restoration of the no-AS profile.
+
+- fix: bind SIPp authentication URI to the IMS REGISTER domain and reject
+  mismatched Digest realm, URI or algorithm in AKA registration evidence.
+
+- feat: add AKA registration refresh/deregistration scenarios, strict lifecycle
+  trace checks, read-only registrar snapshots and multi-challenge Cx binding.
+
+- feat: add one-process AKA registration/call scenarios and a serial two-UE gate
+  with Cx binding, SIP dialog checks, negotiated RTP routes, receiver PCMU audio
+  and restoration of the normal subscriber profile.
+- test: add UDP receiver filtering, distinct-SSRC exchange and SIP dialog tests.
+
+- feat: add explicit SIPp OPc support while preserving OP, with Milenage test-set
+  vectors and rejection of ambiguous OP/OPc inputs; no subscriber key adaptation.
+- feat: add an isolated two-UE AKA registration probe, bad-response scenario,
+  transaction-bound SIP trace checks and bounded private Cx packet capture.
+
+- feat: add a pinned source-built SIPp AKA client image, binary-parameter selftest
+  and vendor provenance; continuous AKA registration/call acceptance remains open.
+- fix: validate redacted PyHSS API credentials against read-only local SQL rows;
+  reject shared AuC ownership and changed SQN during explicit key migration.
+  Repeated provisioning also supports an existing UE with its peer not yet created.
+
+- feat: add a serial plain Digest call gate with temporary no-AS iFC, fresh Cx
+  readiness, opposite-source receiver audio, call-specific relay and cleanup checks.
+- fix: keep PJSUA conference clocks at PCMU's 8000 Hz and flush live SIP diagnostics;
+  reject CRLF in owned shell scripts before deployment.
+- feat: generate separate UE/domain credentials and add an explicit backed-up,
+  SQN-preserving legacy-key migration with rollback; live rotation is pending.
+- fix: reduce shareable protocol-heavy logs to metadata-only removal markers.
+
+- fix: restart SIP clients on IMS TUN/address/owned-route changes; preserve FIFO
+  control and stop their media process before re-registration.
+- feat: persist MySQL in a named volume with a cold-copy migration, local rollback
+  image and guarded recreation; wait for HSS Cx before restarting IMS.
+
+- fix: verify current IMS TUN/source routes and propagate NAT inspection errors;
+  bind registration diagnostics to the new client start and registration epoch.
+- feat: add base-only startup without AI warmup and preserve existing subscriber
+  records and PyHSS authentication state during repeated provisioning.
+- feat: define a separate virtual base connectivity admission design.
+
+- fix: fail connectivity checks on missing TUN/log events and failed commands;
+  reject missing, substituted, duplicate or malformed research gate results.
+- feat: serialize evidence collectors with an OS lock, persist per-gate journal
+  and atomic snapshots, preserve failed attempts and reject recollection;
+  record pre/post container identities and bounded logs including stderr.
+  Protocol cleanup, crash reconciliation and standards acceptance remain pending.
+
+- docs: detail virtual core, IMS authentication/dialogs, media/policy and
+  evidence-runner contracts; consolidate dependencies into twelve delivery
+  packages with separate base, AKA and protected-policy acceptance milestones.
+
+- docs: define a virtual 5GS/IMS candidate profile, 40 traceable requirements
+  and 12 acceptance scenarios; separate emulator limits, engineering gates,
+  standards applicability and deferred physical-device work.
+- docs: record recovery/acceptance gaps and clarify that physical migration
+  requires discovery, access-security, policy and codec verification.
+
 - docs: use the canonical 5g-lab repository name and GitLab URL in setup,
   publication and source archive instructions; document the stable internal
   Compose identifier separately.

@@ -31,22 +31,40 @@ check() {
 
 echo "===== UE PDU sessions (internet + ims) ====="
 for ue in lab-ue1 lab-ue2; do
-    n=$(docker logs "$ue" 2>&1 | grep -c "PDU Session establishment is successful")
-    check "$ue: two PDU sessions established" test "$n" -ge 2
-    docker logs "$ue" 2>&1 | grep "TUN interface" | tail -2
+    # Current interface addresses prove live PDU sessions; logs may contain stale successes.
+    if ! addresses=$(docker exec "$ue" ip -o -4 addr show); then
+        printf 'FAIL: %s: cannot read current interfaces\n' "$ue"
+        fail=1
+        continue
+    fi
     ims_tun=''
-    for candidate in uesimtun0 uesimtun1; do
-        candidate_ip=$(docker exec "$ue" sh -c "ip -o -4 addr show '$candidate' 2>/dev/null | awk '{print \$4}' | cut -d/ -f1" || true)
-        if [[ -n "$candidate_ip" ]] && ipv4_in_cidr "$candidate_ip" "$IMS_UE_CIDR"; then
+    ims_ip=''
+    internet_tun=''
+    while read -r index candidate family cidr rest; do
+        [[ $candidate == uesimtun* && $family == inet ]] || continue
+        candidate_ip=${cidr%%/*}
+        if ipv4_in_cidr "$candidate_ip" "$IMS_UE_CIDR"; then
             ims_tun=$candidate
-            break
+            ims_ip=$candidate_ip
+        elif ipv4_in_cidr "$candidate_ip" "$INTERNET_UE_CIDR"; then
+            internet_tun=$candidate
         fi
-    done
-    if [ -n "$ims_tun" ]; then
+    done <<< "$addresses"
+    if [[ -n $ims_tun && -n $internet_tun && $ims_tun != "$internet_tun" ]]; then
+        printf 'PASS: %s: live internet and ims TUN addresses\n' "$ue"
         check "$ue: ping $IMS_UE_GATEWAY via $ims_tun" \
             docker exec "$ue" ping -I "$ims_tun" -c 3 -W 2 "$IMS_UE_GATEWAY"
+        for target in "$PCSCF_IP" "$RTPENGINE_IP"; do
+            if route=$(docker exec "$ue" ip -4 route get "$target") && \
+                [[ " $route " == *" dev $ims_tun "* && " $route " == *" src $ims_ip "* ]]; then
+                printf 'PASS: %s: route to %s uses %s from %s\n' "$ue" "$target" "$ims_tun" "$ims_ip"
+            else
+                printf 'FAIL: %s: route to %s bypasses ims TUN/source\n' "$ue" "$target"
+                fail=1
+            fi
+        done
     else
-        printf 'FAIL: %s: no ims TUN device found in logs\n' "$ue"
+        printf 'FAIL: %s: live internet/ims TUN pair missing\n' "$ue"
         fail=1
     fi
 done
@@ -56,8 +74,17 @@ check "ogstun2 carries $IMS_UE_GATEWAY_CIDR" \
     docker exec lab-upf sh -c "ip -4 addr show ogstun2 | grep -Fq 'inet $IMS_UE_GATEWAY_CIDR'"
 check "kernel route $IMS_UE_CIDR dev ogstun2" \
     docker exec lab-upf sh -c "ip route show '$IMS_UE_CIDR' | grep -q 'dev ogstun2'"
-check "no MASQUERADE for the ims pool" \
-    sh -c "! docker exec lab-upf iptables -t nat -S | grep -Fq '$IMS_UE_CIDR'"
+if nat_rules=$(docker exec lab-upf iptables -t nat -S); then
+    if grep -Fq "$IMS_UE_CIDR" <<< "$nat_rules"; then
+        printf 'FAIL: no MASQUERADE for the ims pool\n'
+        fail=1
+    else
+        printf 'PASS: no MASQUERADE for the ims pool\n'
+    fi
+else
+    printf 'FAIL: cannot read UPF NAT rules\n'
+    fail=1
+fi
 check "internet pool NAT intact" \
     docker exec lab-upf sh -c "iptables -t nat -S | grep -Fq '$INTERNET_UE_CIDR'"
 

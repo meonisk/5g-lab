@@ -23,18 +23,19 @@ uaa_success() {
     grep -q 'uaa_return' <<<"$icscf_logs" && ! grep -q 'UAR failure' <<<"$icscf_logs"
 }
 
+capture_since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "===== REGISTER lab-sipue1 ====="
-out1=$("$script_dir/sip-register.sh" lab-sipue1 2>&1)
+out1=$("$script_dir/sip-register.sh" lab-sipue1 2>&1) || fail=1
 printf '%s\n' "$out1" | grep -E "registering|OK|Unauthorized|Forbidden|error|Error" | head -8
 check "lab-sipue1 REGISTER 200 OK" grep -q 'Response msg 200/REGISTER' <<<"$out1"
 
 echo "===== REGISTER lab-sipue2 ====="
-out2=$("$script_dir/sip-register.sh" lab-sipue2 2>&1)
+out2=$("$script_dir/sip-register.sh" lab-sipue2 2>&1) || fail=1
 printf '%s\n' "$out2" | grep -E "registering|OK|Unauthorized|Forbidden|error|Error" | head -8
 check "lab-sipue2 REGISTER 200 OK" grep -q 'Response msg 200/REGISTER' <<<"$out2"
 
 echo "===== S-CSCF registrar state and IMS source path ====="
-scscf_logs=$(docker logs --since 10m lab-scscf 2>&1)
+scscf_logs=$(docker logs --since "$capture_since" lab-scscf 2>&1)
 for tuple in "lab-ue1 $UE1_IMSI" "lab-ue2 $UE2_IMSI"; do
     read -r ue imsi <<<"$tuple"
     route_line=$(docker exec "$ue" ip route get "$PCSCF_IP" 2>/dev/null || true)
@@ -45,7 +46,7 @@ for tuple in "lab-ue1 $UE1_IMSI" "lab-ue2 $UE2_IMSI"; do
 done
 
 echo "===== Cx interaction evidence ====="
-icscf_logs=$(docker logs --since 10m lab-icscf 2>&1)
+icscf_logs=$(docker logs --since "$capture_since" lab-icscf 2>&1)
 check "I-CSCF received UAA and forwarded registration" uaa_success
 check "S-CSCF received successful MAA" grep -q 'maa_return code is 1' <<<"$scscf_logs"
 check "S-CSCF received successful SAA" grep -q 'saa_return code is 1' <<<"$scscf_logs"

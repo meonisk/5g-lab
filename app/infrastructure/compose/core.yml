@@ -18,9 +18,12 @@ services:
     restart: unless-stopped
     env_file: [app/config/lab.env]
     environment:
-      SUBSCRIBER_K: ${SUBSCRIBER_K}
-      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
-      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
+      UE1_5GS_K: ${UE1_5GS_K:-${SUBSCRIBER_K:-}}
+      UE1_5GS_OPC: ${UE1_5GS_OPC:-${SUBSCRIBER_OPC:-}}
+      UE1_5GS_AMF: ${UE1_5GS_AMF:-${SUBSCRIBER_AMF:-}}
+      UE2_5GS_K: ${UE2_5GS_K:-${SUBSCRIBER_K:-}}
+      UE2_5GS_OPC: ${UE2_5GS_OPC:-${SUBSCRIBER_OPC:-}}
+      UE2_5GS_AMF: ${UE2_5GS_AMF:-${SUBSCRIBER_AMF:-}}
     networks: [lab5g]
     volumes:
       - mongo-data:/data/db

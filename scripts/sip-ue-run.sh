@@ -18,6 +18,8 @@ set -Eeuo pipefail
 : "${SIP_UE_CODEC:?SIP_UE_CODEC is required}"
 : "${TTS_VOICE:?TTS_VOICE is required}"
 : "${TTS_RATE:?TTS_RATE is required}"
+net_class_dir=${SIP_UE_NET_CLASS_DIR:-/sys/class/net}
+watch_interval=${SIP_UE_WATCH_INTERVAL:-2}
 
 ipv4_to_int() {
     local a b c d
@@ -35,11 +37,11 @@ ipv4_in_cidr() {
 
 for _ in $(seq 1 60); do
     ims_tun=''
-    for candidate in /sys/class/net/uesimtun*; do
+    for candidate in "$net_class_dir"/uesimtun*; do
         [[ -e "$candidate" ]] || continue
         device=${candidate##*/}
         candidate_ip=$(ip -o -4 addr show "$device" | awk '{print $4}' | cut -d/ -f1)
-        if ipv4_in_cidr "$candidate_ip" "$IMS_UE_CIDR"; then
+        if [[ -n "$candidate_ip" ]] && ipv4_in_cidr "$candidate_ip" "$IMS_UE_CIDR"; then
             ims_tun=$device
             break
         fi
@@ -56,7 +58,26 @@ ip route replace "$PCSCF_IP/32" dev "$ims_tun"
 ip route replace "$RTPENGINE_IP/32" dev "$ims_tun"
 printf 'IMS transport: dev=%s source=%s gateway=%s\n' "$ims_tun" "$ue_ip" "$IMS_UE_GATEWAY"
 
-control=/tmp/pjsua-control
+# Include ifindex so a recreated TUN with the same name and IP still forces
+# a new SIP registration and media socket bind.
+ims_ifindex=$(cat "$net_class_dir/$ims_tun/ifindex")
+network_matches() {
+    local current_ip route target
+    [[ -e "$net_class_dir/$ims_tun/ifindex" ]] || return 1
+    [[ $(cat "$net_class_dir/$ims_tun/ifindex") == "$ims_ifindex" ]] || return 1
+    current_ip=$(ip -o -4 addr show "$ims_tun" 2>/dev/null | awk '{print $4}' | cut -d/ -f1) || return 1
+    [[ "$current_ip" == "$ue_ip" ]] || return 1
+    # Only the two /32 routes installed above are owned by this process.
+    # The gateway may resolve through Docker's bridge without an explicit
+    # interface-bound lookup, even while both SIP and media routes are valid.
+    for target in "$PCSCF_IP" "$RTPENGINE_IP"; do
+        route=$(ip -4 route get "$target" 2>/dev/null) || return 1
+        [[ " $route " == *" dev $ims_tun "* && " $route " == *" src $ue_ip "* ]] || return 1
+    done
+}
+network_matches || { echo 'ERROR: IMS transport route is invalid' >&2; exit 1; }
+
+control=${SIP_UE_CONTROL_PATH:-/tmp/pjsua-control}
 playback=/tmp/ims-agent-test.wav
 if [[ -n "$SIP_UE_PLAYBACK_FILE" ]]; then
     [[ "$SIP_UE_PLAYBACK_FILE" == /* ]] || SIP_UE_PLAYBACK_FILE="/$SIP_UE_PLAYBACK_FILE"
@@ -88,8 +109,11 @@ if [[ "$SIP_UE_AUTO_CONFERENCE" == 1 ]]; then
     conference_arguments=(--auto-conf)
 fi
 
-exec pjsua \
+# Flush SIP events while the dialog is live, not only when the stdio buffer fills.
+# Otherwise receiver/BYE evidence can appear only after the client exits.
+stdbuf -oL -eL pjsua \
     --log-level=4 --app-log-level=4 --null-audio --no-tcp --use-compact-form \
+    --clock-rate=8000 --snd-clock-rate=8000 \
     --dis-codec='*' --add-codec="$SIP_UE_CODEC" \
     --play-file="$playback" "${conference_arguments[@]}" \
     "${recording_arguments[@]}" \
@@ -102,4 +126,27 @@ exec pjsua \
     --password "$IMS_DIGEST_PASSWORD" \
     --reg-timeout=3600 \
     --ip-addr="$ue_ip" \
-    <&3
+    <&3 &
+pjsua_pid=$!
+
+cleanup() {
+    if [[ -n ${pjsua_pid:-} ]]; then
+        kill "$pjsua_pid" 2>/dev/null || true
+        wait "$pjsua_pid" 2>/dev/null || true
+    fi
+    exec 3>&-
+    rm -f "$control"
+}
+trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+while kill -0 "$pjsua_pid" 2>/dev/null; do
+    sleep "$watch_interval" &
+    wait "$!" || true
+    if ! network_matches; then
+        echo 'ERROR: IMS TUN, address, or route changed; restarting SIP UE' >&2
+        exit 1
+    fi
+done
+wait "$pjsua_pid"

@@ -31,6 +31,14 @@ def logical_lines(path: Path, text: str) -> int:
     return text_logical_lines(text)
 
 
+def shell_line_ending_error(relative: str, data: bytes) -> str | None:
+    # Bind-mounted Linux scripts execute the working-tree bytes, not Git's index.
+    # A CR in the shebang becomes an interpreter name such as /usr/bin/env bash\r.
+    if relative.endswith(".sh") and b"\r" in data:
+        return f"{relative}: shell script has CR line endings; use LF in the working tree"
+    return None
+
+
 def main():
     # Git's inventory excludes private recordings, secrets, evidence, and caches.
     result = subprocess.run(
@@ -47,7 +55,11 @@ def main():
             continue
         if path.suffix not in SOURCE_SUFFIXES:
             continue
-        text = path.read_text(encoding="utf-8-sig")
+        data = path.read_bytes()
+        error = shell_line_ending_error(relative, data)
+        if error:
+            errors.append(error)
+        text = data.decode("utf-8-sig")
         checked += 1
         line_count = logical_lines(path, text)
         if line_count > MAX_LOGICAL_LINES:

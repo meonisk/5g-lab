@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Provision the two env-defined IMS subscribers.
-# into lab-pyhss via its REST API. Lab counterpart of the ims repo
-# deploy/provision-ims-subscribers.sh; key material is the stand's public
-# local secrets are loaded from the ignored local/secrets/ims.env file.
+# Provision the two env-defined IMS subscribers through the PyHSS REST API.
+# Key material comes from the ignored local/secrets/ims.env file.
 set -Eeuo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -26,9 +24,6 @@ while (($#)); do
     esac
 done
 
-: "${SUBSCRIBER_K:?SUBSCRIBER_K is required}"
-: "${SUBSCRIBER_OPC:?SUBSCRIBER_OPC is required}"
-: "${SUBSCRIBER_AMF:?SUBSCRIBER_AMF is required}"
 : "${UE1_IMSI:?UE1_IMSI is required}"
 : "${UE2_IMSI:?UE2_IMSI is required}"
 : "${UE1_MSISDN:?UE1_MSISDN is required}"
@@ -38,14 +33,39 @@ done
 : "${IMS_DNN:?IMS_DNN is required}"
 
 profiles=(
-    "$UE1_IMSI $UE1_MSISDN"
-    "$UE2_IMSI $UE2_MSISDN"
+    "1 $UE1_IMSI $UE1_MSISDN"
+    "2 $UE2_IMSI $UE2_MSISDN"
 )
+
+resolve_ims_keys() {
+    local ue=$1 k_name opc_name amf_name
+    k_name="UE${ue}_IMS_K"
+    opc_name="UE${ue}_IMS_OPC"
+    amf_name="UE${ue}_IMS_AMF"
+    if [[ -n ${!k_name:-} || -n ${!opc_name:-} || -n ${!amf_name:-} ]]; then
+        ims_k=${!k_name:-}
+        ims_opc=${!opc_name:-}
+        ims_amf=${!amf_name:-}
+    else
+        ims_k=${SUBSCRIBER_K:-}
+        ims_opc=${SUBSCRIBER_OPC:-}
+        ims_amf=${SUBSCRIBER_AMF:-}
+    fi
+    [[ "$ims_k" =~ ^[0-9a-fA-F]{32}$ && "$ims_opc" =~ ^[0-9a-fA-F]{32}$ && "$ims_amf" =~ ^[0-9a-fA-F]{4}$ ]] || {
+        printf 'ERROR: incomplete IMS AKA credential set for UE%s\n' "$ue" >&2
+        return 2
+    }
+}
+
+for entry in "${profiles[@]}"; do
+    read -r ue _ <<< "$entry"
+    resolve_ims_keys "$ue"
+done
 
 if [[ "$action" == '--dry-run' ]]; then
     printf 'Validated IMS subscriber plan (no API calls):\n'
     for entry in "${profiles[@]}"; do
-        read -r imsi msisdn <<< "$entry"
+        read -r _ imsi msisdn <<< "$entry"
         printf '  IMSI %s -> IMPI %s@%s, IMPU sip:%s@..., MSISDN %s\n' \
             "$imsi" "$imsi" "$IMS_DOMAIN" "$msisdn" "$msisdn"
     done
@@ -74,16 +94,13 @@ print(next(row["apn_id"] for row in rows if row.get("apn")==sys.argv[1]))' "$IMS
 fi
 
 for entry in "${profiles[@]}"; do
-    read -r imsi msisdn <<< "$entry"
+    read -r ue imsi msisdn <<< "$entry"
+    resolve_ims_keys "$ue"
 
     auc_payload=$(mktemp /tmp/auc.XXXXXX.json)
     ims_payload=$(mktemp /tmp/ims.XXXXXX.json)
     response=$(mktemp /tmp/resp.XXXXXX.json)
     trap 'rm -f "$auc_payload" "$ims_payload" "$response"' EXIT
-
-    cat > "$auc_payload" <<EOF
-{"ki": "$SUBSCRIBER_K", "opc": "$SUBSCRIBER_OPC", "amf": "$SUBSCRIBER_AMF", "sqn": 96, "imsi": "$imsi"}
-EOF
 
     cat > "$ims_payload" <<EOF
 {
@@ -100,13 +117,32 @@ EOF
 EOF
 
     code=$(curl -sS -o "$response" -w '%{http_code}' "$api_base/auc/imsi/$imsi")
+    if [[ "$code" != '200' ]]; then
+        printf 'ERROR: AuC lookup for IMSI %s returned HTTP %s\n' "$imsi" "$code" >&2
+        exit 1
+    fi
     # PyHSS answers 200 with a JSON null body for a missing record.
-    if [[ "$code" == '200' && "$(cat "$response")" != 'null' ]]; then
-        auc_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["auc_id"])' < "$response")
-        curl -fsS -X PATCH -H 'Content-Type: application/json' \
-            -d @"$auc_payload" "$api_base/auc/$auc_id" > /dev/null
-        printf 'Updated AuC entry %s for IMSI %s\n' "$auc_id" "$imsi"
+    auc_id=$(python3 -c 'import json,sys
+record=json.load(sys.stdin)
+print("" if record is None else record["auc_id"])' < "$response")
+    if [[ -n "$auc_id" ]]; then
+        # PyHSS may omit ki/opc from REST. The validator falls back to a
+        # read-only database query and binds keys to this AuC ID and IMSI.
+        peer_imsi=$UE1_IMSI
+        [[ "$imsi" == "$UE1_IMSI" ]] && peer_imsi=$UE2_IMSI
+        EXPECTED_IMS_K="$ims_k" EXPECTED_IMS_OPC="$ims_opc" EXPECTED_IMS_AMF="$ims_amf" \
+            python3 "$script_dir/validate_ims_auc.py" --record "$response" \
+                --imsi "$imsi" --auc-id "$auc_id" --peer-imsi "$peer_imsi" || {
+            printf 'ERROR: IMS AKA mismatch for IMSI %s; explicit migration required\n' "$imsi" >&2
+            exit 1
+        }
+        # Never PATCH an existing AuC: its SQN advances during authentication,
+        # and overwriting its key material would invalidate the active UE.
+        printf 'Preserved AuC entry %s for IMSI %s\n' "$auc_id" "$imsi"
     else
+        cat > "$auc_payload" <<EOF
+{"ki": "$ims_k", "opc": "$ims_opc", "amf": "$ims_amf", "sqn": 96, "imsi": "$imsi"}
+EOF
         curl -fsS -X PUT -H 'Content-Type: application/json' \
             -d @"$auc_payload" "$api_base/auc/" > /dev/null
         auc_id=$(curl -fsS "$api_base/auc/imsi/$imsi" \

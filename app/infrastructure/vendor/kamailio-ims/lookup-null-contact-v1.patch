@@ -1,0 +1,11 @@
+--- a/src/modules/ims_registrar_scscf/lookup.c
++++ b/src/modules/ims_registrar_scscf/lookup.c
+@@ -149,7 +149,7 @@
+ 	}
+ 
+ 	/* look first for an un-expired and supported contact */
+-	if(ptr == 0) {
++	if(impucontact == 0 || ptr == 0) {
+ 		LM_INFO("No contacts founds for IMPU <%.*s>\n", aor.len, aor.s);
+ 		/* nothing found */
+ 		goto done;

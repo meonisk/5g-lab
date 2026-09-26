@@ -25,6 +25,7 @@ networks:
 
 volumes:
   mongo-data:
+  mysql-data:
   service-control-secret:
   ai-model-cache:
   llm-model-cache:

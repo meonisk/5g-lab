@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,7 +41,17 @@ def sha256_file(path: Path) -> str:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Replace only after the complete snapshot is durable; readers never see partial JSON.
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -82,6 +94,9 @@ def parse_env(path: Path) -> dict[str, str]:
 def checksum_tree(run_dir: Path) -> None:
     rows = []
     for path in sorted(run_dir.rglob("*")):
-        if path.is_file() and path.name != "checksums.sha256":
+        if path.is_file() and path.relative_to(run_dir).as_posix() not in {
+            "checksums.sha256",
+            "validation.json",
+        }:
             rows.append(f"{sha256_file(path)}  {path.relative_to(run_dir).as_posix()}")
     (run_dir / "checksums.sha256").write_text("\n".join(rows) + "\n", encoding="utf-8")

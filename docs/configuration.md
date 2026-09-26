@@ -33,6 +33,14 @@ CPU — публичный профиль по умолчанию. Локаль�
 Пароли и ключи абонентов находятся в `local/secrets/ims.env`. Токен внутренних API
 создаётся в приватном Docker-томе; в публичный env он не попадает.
 
+Новые профили имеют отдельные `UE1/2_5GS_K/OPC/AMF` и `UE1/2_IMS_K/OPC/AMF`.
+Существующие БД не перезаписываются при provisioning: несовпадение ключей требует
+явной миграции с backup через `scripts/migrate_subscriber_keys.py`.
+В закреплённом PyHSS Digest использует AuC `ki` как пароль. Поэтому Compose
+передаёт каждому PJSUA его `UE*_IMS_K` в качестве `IMS_DIGEST_PASSWORD` внутри
+контейнера. Общий `IMS_DIGEST_PASSWORD` из файла остаётся fallback для legacy
+профиля. Это ограничение лабораторной Digest-регрессии, не IMS AKA.
+
 ### Локальные голоса
 
 `TTS_BACKEND=piper` использует русскую модель Denis medium и английскую

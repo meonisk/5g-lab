@@ -19,6 +19,7 @@ case "$container" in
 esac
 
 docker restart "$container" >/dev/null
+started_at=$(docker inspect --format '{{.State.StartedAt}}' "$container")
 deadline=$((SECONDS + 25))
 route_src=''
 while (( SECONDS < deadline )); do
@@ -36,7 +37,7 @@ if [[ -z "$ue_ip" || "$route_line" != *" dev uesimtun"* ]]; then
 fi
 
 while (( SECONDS < deadline )); do
-    logs=$(docker logs --since 30s "$container" 2>&1)
+    logs=$(docker logs --since "$started_at" "$container" 2>&1)
     if grep -q 'Response msg 200/REGISTER' <<<"$logs"; then
         printf '%s\n' "$logs" | grep -E 'IMS transport|SIP UDP socket|TX .*REGISTER|RX .*401/REGISTER|RX .*200/REGISTER|registration success' | tail -10
         exit 0
@@ -47,6 +48,6 @@ while (( SECONDS < deadline )); do
     fi
     sleep 1
 done
-docker logs --since 30s "$container" 2>&1 | tail -40 >&2
+docker logs --since "$started_at" "$container" 2>&1 | tail -40 >&2
 printf 'ERROR: registration did not complete in 25 seconds\n' >&2
 exit 1

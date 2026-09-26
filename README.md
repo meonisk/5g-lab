@@ -87,6 +87,8 @@ under ignored `local/` and are not part of the source distribution.
 | --- | --- |
 | Run, verify, stop and troubleshoot | [Running](docs/running.md) |
 | Current capabilities and unverified work | [Status](docs/status.md) |
+| Virtual 5GS/IMS requirements and acceptance design | [Profile](docs/3gpp-profile.md), [requirements](docs/3gpp-requirements.md), [scenarios](docs/3gpp-acceptance.md) |
+| Virtual stand implementation details and delivery order | [Implementation plan](docs/virtual-stand-plan.md) |
 | Settings, voices and fixtures | [Configuration](docs/configuration.md) |
 | Model pins, CPU/GPU and latency | [Local models](docs/local-models.md) |
 | Experimental streaming and failed trials | [Streaming](docs/streaming.md) |

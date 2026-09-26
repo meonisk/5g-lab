@@ -119,7 +119,7 @@ def docker_records(root: Path, project: str) -> tuple[list[dict[str, Any]], list
         [
             "docker",
             "ps",
-            "-q",
+            "-aq",
             "--filter",
             f"label=com.docker.compose.project={project}",
         ],
@@ -132,6 +132,7 @@ def docker_records(root: Path, project: str) -> tuple[list[dict[str, Any]], list
             labels = item.get("Config", {}).get("Labels", {}) or {}
             containers.append(
                 {
+                    "container_id": item.get("Id"),
                     "name": item.get("Name", "").lstrip("/"),
                     "service": labels.get("com.docker.compose.service"),
                     "image_reference": item.get("Config", {}).get("Image"),
@@ -141,6 +142,8 @@ def docker_records(root: Path, project: str) -> tuple[list[dict[str, Any]], list
                 }
             )
     stats: list[dict[str, Any]] = []
+    if not containers:
+        return containers, stats
     raw_stats = command(
         [
             "docker",

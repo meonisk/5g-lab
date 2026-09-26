@@ -10,3 +10,9 @@
 *.json text eol=lf
 *.example text eol=lf
 .gitignore text eol=lf
+# Preserve bytes of hash-pinned build inputs on Windows checkouts.
+app/infrastructure/vendor/sipp-aka/** -text whitespace=cr-at-eol
+app/infrastructure/vendor/kamailio-ims/** -text whitespace=cr-at-eol
+app/infrastructure/images/**/Dockerfile text eol=lf
+# Unified patches contain significant context prefixes and upstream whitespace.
+app/infrastructure/vendor/**/*.patch -whitespace

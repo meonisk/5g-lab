@@ -14,7 +14,9 @@
 | Файл | Зачем нужен |
 | --- | --- |
 | `start.ps1`, `start.sh` | Windows/Linux точки входа в общий launcher |
-| `start_lab.py` | Общий запуск, provisioning и последовательные live-проверки |
+| `start_lab.py` | Общий запуск; `--base-only` запускает сеть/IMS без AI и обязательно проверяет связность/регистрацию |
+| `migrate_mysql_storage.py` | Холодная миграция legacy MySQL в постоянный том, приватный backup и rollback image; требует остановленного MySQL и нового `--backup-dir` под `local/private` |
+| `migrate_subscriber_keys.py` | Dry-run по умолчанию; явная ротация отдельных ключей UE/домена через `--apply --backup-dir local/private/<new-dir>`, с остановленными UE/SIP, backup, сохранением SQN и rollback |
 | `start-lab.ps1` | Обратная совместимость со старой командой Windows |
 | `compose.ps1`, `compose.sh` | Compose с публичным ENV и локальными секретами |
 | `check.ps1` | Запуск `quality/check.py` из правильного каталога |
@@ -34,6 +36,7 @@
 | `load-lab-env.sh` | Shell-команды и live-тесты: чтение ENV, сетевые помощники |
 | `sip-register.sh` | Тест IMS-регистрации: перезапуск клиента и проверка ответа |
 | `sip-ue-run.sh` | Контейнеры SIP UE: транспорт через IMS PDU и запуск PJSUA |
+| `ims_readiness.py` | Проверка установленного Cx peer HSS у I/S-CSCF перед новой регистрацией |
 | `dns-ims-run.sh` | Контейнер DNS: маршруты и шаблон зоны |
 | `render-open5gs-config.sh` | SMF/UPF: подстановка ENV в конфигурации |
 | `open5gs-config-run.sh` | SMF: рендеринг конфигурации перед entrypoint |

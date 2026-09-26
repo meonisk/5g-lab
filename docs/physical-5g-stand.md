@@ -3,10 +3,15 @@
 Current implementation limits: [status.md](status.md). This is a migration
 contract; it is not a report of completed physical-stand acceptance.
 
+Physical work is deferred. The current scope is the virtual
+[5GS/IMS profile](3gpp-profile.md); equipment choices do not block that work.
+
 ## Scope
 
 The Docker profile is the executable integration baseline. A physical stand
-replaces only UERANSIM gNB/UE and host-specific transport. Open5GS, IMS DNS,
+replaces UERANSIM gNB/UE and host-specific transport, and also requires verified
+discovery, authentication, access security, policy and codec interoperability.
+This is not just a container replacement. Open5GS, IMS DNS,
 PyHSS, P/I/S-CSCF, SIP AS, RTPengine, Media Adapter, STT, LLM, and Voice Agent
 retain the same service contracts. Passing the Docker gates is necessary but
 is not evidence of RF, mobility, QoS, or physical-device behavior.
@@ -71,8 +76,10 @@ Advance only when every preceding stage is retained as evidence:
    and no unintended IMS NAT.
 3. **IMS:** `REGISTER -> challenge -> authenticated REGISTER -> 200 OK`, Cx
    success and a current registrar contact sourced from the IMS PDU address.
-4. **Subscriber call:** INVITE/200/ACK/BYE through P/I/S-CSCF, RTPengine streams
-   tied to physical UE addresses, audible bidirectional PCMU.
+4. **Subscriber call:** applicable originating/terminating IMS routing,
+   INVITE/SDP/200/ACK/BYE, RTP streams tied to physical UE addresses and audible
+   bidirectional media using the accepted UE codec profile. PCMU/8000 remains
+   the current internal AI contract; required media interworking is separate.
 5. **Translation call:** translator-number iFC/ISC trigger, Russian greeting,
    at least two Russian-to-English spoken turns under one Call-ID, and clean BYE.
 6. **Interpreted call:** separate Russian and English service legs, no raw-media

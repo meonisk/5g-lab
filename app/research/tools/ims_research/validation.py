@@ -15,10 +15,14 @@ from .common import (
     utc_now,
     write_json,
 )
+from .gate_contract import captured_gate_errors, captured_log_errors, expected_gate_ids
+from .integrity import artifact_errors
 from .privacy import Pseudonymizer, sensitive_values
 
 
 def validate_design(design: dict[str, Any]) -> None:
+    if not isinstance(design, dict):
+        raise ValueError("design must be an object")
     required = {
         "schema_version",
         "design_id",
@@ -44,7 +48,10 @@ def validate_design(design: dict[str, Any]) -> None:
             raise ValueError("MAIN requires design_status=FROZEN_FOR_MAIN")
         if int(design.get("repetitions", 0)) < 2:
             raise ValueError("MAIN requires a frozen repetition count greater than one")
+    expected_gate_ids(design["capture"])
     privacy = design["privacy"]
+    if not isinstance(privacy, dict):
+        raise ValueError("design privacy must be an object")
     if privacy.get("raw_audio") != "FORBIDDEN" or privacy.get("raw_payloads") != "FORBIDDEN":
         raise ValueError("the v1 harness only permits designs that forbid raw audio and payloads")
 
@@ -71,24 +78,15 @@ def validate(root: Path, design_path: Path, run_id: str) -> None:
             errors.append(f"manifest missing {field}")
     if manifest.get("collection_status") != "COLLECTED":
         errors.append("run has not been collected")
-    gates = manifest.get("capture", {}).get("gates", [])
-    expected_gates = design.get("capture", {}).get("gates", [])
-    if len(gates) != len(expected_gates):
-        errors.append("required admission gates were not all captured")
-    for gate in gates:
-        if gate.get("returncode") != 0:
-            errors.append(f"admission gate failed: {gate.get('id')}")
+    capture = manifest.get("capture")
+    if not isinstance(capture, dict):
+        errors.append("manifest capture must be an object")
+        capture = {}
+    errors.extend(captured_gate_errors(capture.get("gates"), expected_gate_ids(design["capture"])))
+    errors.extend(captured_log_errors(capture.get("logs"), design["capture"].get("containers")))
     if manifest.get("design", {}).get("sha256") != sha256_file(design_path):
         errors.append("design hash mismatch")
-    checksum_path = run_dir / "checksums.sha256"
-    if not checksum_path.exists():
-        errors.append("checksums missing")
-    else:
-        for line in checksum_path.read_text(encoding="utf-8").splitlines():
-            expected, relative = line.split("  ", 1)
-            path = run_dir / Path(relative)
-            if not path.is_file() or sha256_file(path) != expected:
-                errors.append(f"checksum mismatch: {relative}")
+    errors.extend(artifact_errors(run_dir, design, capture))
     _, secret_values = sensitive_values(root)
     shareable_files = [p for p in (run_dir / "shareable").rglob("*") if p.is_file()]
     shareable_files.append(run_dir / "manifest.json")

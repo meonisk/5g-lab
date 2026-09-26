@@ -1,21 +1,38 @@
-// Two-UE subscriber profile, identical identity parameters to asterisk_legacy.
-// IMSI 001010000000001 / 001010000000002, shared K/OPc, DNN internet, SST 1.
+// Two-UE subscriber profile. New stands have independent 5GS AKA credentials;
+// existing stands may use the complete legacy SUBSCRIBER_* credential set.
 const required = (name) => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable ${name}`);
   return value;
 };
-const K = required("SUBSCRIBER_K");
-const OPC = required("SUBSCRIBER_OPC");
-const AMF = "8000";
+const credential = (ue) => {
+  const names = [`UE${ue}_5GS_K`, `UE${ue}_5GS_OPC`, `UE${ue}_5GS_AMF`];
+  const selected = names.some((name) => process.env[name])
+    ? names : ["SUBSCRIBER_K", "SUBSCRIBER_OPC", "SUBSCRIBER_AMF"];
+  return selected.map(required);
+};
 
-const imsis = [required("UE1_IMSI"), required("UE2_IMSI")];
+const profiles = [1, 2].map((ue) => ({
+  imsi: required(`UE${ue}_IMSI`),
+  keys: credential(ue)
+}));
 
 db = db.getSiblingDB("open5gs");
 
-for (const imsi of imsis) {
-  db.subscribers.deleteMany({ imsi: imsi });
-  db.subscribers.insertOne({
+for (const { imsi, keys } of profiles) {
+  const [K, OPC, AMF] = keys;
+  const existing = db.subscribers.findOne({ imsi: imsi });
+  if (existing) {
+    const security = existing.security || {};
+    // This image's mongosh transpiler loses the receiver in optional method calls.
+    const same = ["k", "opc", "amf"].every((field, index) =>
+      typeof security[field] === "string"
+      && security[field].toLowerCase() === keys[index].toLowerCase());
+    if (!same) throw new Error(`5GS AKA mismatch for IMSI ${imsi}; explicit migration required`);
+  }
+  // Insert the initial profile once. Existing Open5GS records may contain
+  // authentication state and operator edits that provisioning must preserve.
+  db.subscribers.updateOne({ imsi: imsi }, { $setOnInsert: {
     imsi: imsi,
     security: { k: K, amf: AMF, opc: OPC, op: null },
     subscriber_status: 0,
@@ -68,8 +85,8 @@ for (const imsi of imsis) {
         ]
       }
     ]
-  });
-  print("added subscriber " + imsi);
+  } }, { upsert: true });
+  print("ensured subscriber " + imsi);
 }
 
 printjson(db.subscribers.find({}, { imsi: 1, _id: 0 }).toArray());

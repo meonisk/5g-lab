@@ -36,9 +36,9 @@ services:
     environment:
       GNB_HOSTNAME: gnb
       IMSI: ${UE1_IMSI}
-      SUBSCRIBER_K: ${SUBSCRIBER_K}
-      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
-      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
+      SUBSCRIBER_K: ${UE1_5GS_K:-${SUBSCRIBER_K:-}}
+      SUBSCRIBER_OPC: ${UE1_5GS_OPC:-${SUBSCRIBER_OPC:-}}
+      SUBSCRIBER_AMF: ${UE1_5GS_AMF:-${SUBSCRIBER_AMF:-}}
     volumes:
       - ./app/infrastructure/configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
     logging: *bounded-logging
@@ -57,26 +57,28 @@ services:
     environment:
       GNB_HOSTNAME: gnb
       IMSI: ${UE2_IMSI}
-      SUBSCRIBER_K: ${SUBSCRIBER_K}
-      SUBSCRIBER_OPC: ${SUBSCRIBER_OPC}
-      SUBSCRIBER_AMF: ${SUBSCRIBER_AMF}
+      SUBSCRIBER_K: ${UE2_5GS_K:-${SUBSCRIBER_K:-}}
+      SUBSCRIBER_OPC: ${UE2_5GS_OPC:-${SUBSCRIBER_OPC:-}}
+      SUBSCRIBER_AMF: ${UE2_5GS_AMF:-${SUBSCRIBER_AMF:-}}
     volumes:
       - ./app/infrastructure/configs/ueransim/ue.yaml:/etc/ueransim/ue.yaml:ro
     logging: *bounded-logging
 
   # SIP clients share each UE network namespace and discover its IMS PDU route.
+  # This PyHSS implements Digest with AuC ki as password; match each IMS profile.
 
   sipue1:
     build: app/infrastructure/images/pjsua
     image: lab-pjsua
     container_name: lab-sipue1
+    restart: unless-stopped
     depends_on: [ue1]
     network_mode: service:ue1
     cap_add: [NET_ADMIN]
     env_file: [app/config/lab.env]
     environment:
       IMSI: ${UE1_IMSI}
-      IMS_DIGEST_PASSWORD: ${IMS_DIGEST_PASSWORD}
+      IMS_DIGEST_PASSWORD: ${UE1_IMS_K:-${IMS_DIGEST_PASSWORD}}
     volumes:
       - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
     entrypoint: ["/lab/sip-ue-run.sh"]
@@ -86,13 +88,14 @@ services:
     build: app/infrastructure/images/pjsua
     image: lab-pjsua
     container_name: lab-sipue2
+    restart: unless-stopped
     depends_on: [ue2]
     network_mode: service:ue2
     cap_add: [NET_ADMIN]
     env_file: [app/config/lab.env]
     environment:
       IMSI: ${UE2_IMSI}
-      IMS_DIGEST_PASSWORD: ${IMS_DIGEST_PASSWORD}
+      IMS_DIGEST_PASSWORD: ${UE2_IMS_K:-${IMS_DIGEST_PASSWORD}}
     volumes:
       - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
     entrypoint: ["/lab/sip-ue-run.sh"]

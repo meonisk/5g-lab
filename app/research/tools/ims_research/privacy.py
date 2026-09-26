@@ -16,6 +16,7 @@ from .common import (
     SIP_RE,
     parse_env,
 )
+from .protocol_privacy import sanitize_protocol_log
 
 
 class Pseudonymizer:
@@ -38,6 +39,11 @@ class Pseudonymizer:
         value = CALL_ID_RE.sub(lambda m: m.group(1) + self.alias("call-id", m.group(2)), value)
         value = CALL_LIST_RE.sub(self._call_list, value)
         return value
+
+    def shareable_log(self, value: str, source: str = "") -> str:
+        # Protocol dumps are reduced before identifier pseudonymization because
+        # authentication and media fields are not reliably token-shaped.
+        return self.text(sanitize_protocol_log(value, source))
 
     def _call_list(self, match: re.Match[str]) -> str:
         body = re.sub(

@@ -266,6 +266,154 @@ then recreate `sipue1 sipue2` so their sockets bind the current IMS PDU addresse
 Repeat registration and the failed gate. Do not erase database/model volumes.
 A failed run remains failed; a later retry is separate evidence.
 
+## Plain Digest call without AS/AI
+
+On an idle base-only stand, run these gates serially from the repository root:
+
+```powershell
+python app/tests/integration/verify_plain_call.py
+python app/tests/integration/verify_plain_call.py --caller 2
+python app/tests/integration/verify_plain_call.py --mute-ue 1
+```
+
+The gate requires AS/AI services stopped and no active relay sessions. It takes
+the stand lock, temporarily changes both iFC paths, restarts S-CSCF and SIP
+clients, then restores their normal profiles. Do not use it during other calls.
+Each attempt writes private WAV/log evidence and `result.json` under
+`local/private/plain-call-<timestamp>`. `sip1.log` denotes the caller trace and
+`sip2.log` the callee trace; `receive1.wav` always denotes UE1.
+The muted-source scenario passes only when the opposite receiver fails its
+waveform check while the other receiver and signalling pass. This validates
+fault detection; it is not a successful two-way media call.
+
+## Isolated AKA registration probe
+
+Build the [OPc-capable SIPp image](sipp-aka-provenance.md), then use an idle stand:
+
+```powershell
+python app/tests/integration/verify_aka_registration.py
+python app/tests/integration/verify_aka_registration.py --bad-response
+```
+
+These commands run serially under the stand lock. Both Digest clients are stopped
+and S-CSCF's cached contacts are cleared before the probe. SIPp uses each UE's
+current IMS PDU route and its independent IMS K/OPc. The negative scenario sends
+a deliberately invalid response from UE1 while UE2 still registers normally.
+The probe restores ordinary clients and checks fresh Digest registration afterwards.
+
+SIP traces, the credential-bearing generated scenarios and Cx PCAP remain under
+`local/private/aka-register-<timestamp>`. A registration PASS is not a continuous
+AKA call, SQN replay/resync acceptance, Gm protection or full T03 compliance.
+Consult each result's separate Cx metadata status before making a wire-correlation claim.
+
+## Continuous AKA call gate
+
+On an idle base stand with AS/AI stopped, run these gates serially:
+
+```powershell
+python app/tests/integration/verify_aka_call.py
+python app/tests/integration/verify_aka_call.py --caller 2
+```
+
+Each UE keeps one SIPp process/socket from AKA registration through the dialog,
+with different REGISTER and INVITE Call-IDs. A separate RTP helper in the same
+UE network namespace sends and receives PCMU/8000 using the negotiated SDP.
+The gate requires correlated Cx/SIP authentication, complete SIP dialog, IMS PDU
+media routes, call-specific relay lifecycle and opposite-source receiver WAVs.
+It temporarily installs a no-AS iFC and restores the original profile and fresh
+Digest clients afterwards. `SIP_AKA_RESTORE_TIMEOUT_SECONDS` bounds the wait
+for fresh REGISTER 200 (default 90 seconds, allowing a native PJSUA retry);
+`restored_clients` records response codes, including any transient failures. Inspect both `status` and `cleanup` in private
+`local/private/aka-call-<timestamp>/result.json`; retain failed attempts.
+
+The receiver boundary is decoded UDP RTP, not speaker playback. This gate does
+not establish protected Gm, persistent UE SQN/replay/resync, policy/QoS, or the
+translation latency SLA. Scenario mechanics are documented in the
+[continuous-client design](aka-continuous-client-spike.md).
+
+## AKA registration lifecycle gate
+
+On an idle stand, run serially with the other integration gates:
+
+```powershell
+python app/tests/integration/verify_aka_lifecycle.py
+```
+
+One SIPp process per UE performs initial AKA registration, refresh and explicit
+`Expires: 0` deregistration, using a fresh challenge at each step. The gate
+requires matching Cx MAA vectors, a current S-CSCF Contact after registration,
+a renewed expiry after refresh, and removal after deregistration. Checkpoint
+pauses are controlled by `SIP_AKA_LIFECYCLE_CHECKPOINT_SECONDS` (20 seconds)
+and `SIP_AKA_LIFECYCLE_FINAL_SECONDS` (5 seconds). Physical Contact removal
+is bounded by `SIP_AKA_REGISTRAR_DELETE_TIMEOUT_SECONDS` (210 seconds): the
+S-CSCF's deletion delay and periodic timer can retain tombstones in its RPC.
+Both ordinary SIP clients stay stopped during this observation. Private XML, SIP traces, PCAP,
+registrar snapshots and verdict are retained under `local/private/aka-lifecycle-*`.
+Normal Digest clients are restored and independently checked afterwards.
+
+This scenario does not cover passive expiry, old-contact call rejection,
+address change, nonce replay, persistent UE SQN, AUTS resynchronization or Gm
+security. Generic SAR transactions are not a verified assignment-subtype claim.
+
+## Calls to inactive AKA registrations
+
+Run on an idle base stand with AS/AI stopped, serially:
+
+```powershell
+python app/tests/integration/verify_aka_inactive_call.py --mode deregister
+python app/tests/integration/verify_aka_inactive_call.py --mode expire
+```
+
+`--callee 1|2` selects the UE made inactive. Its SIPp process remains alive at
+the former Contact. Explicit deregistration waits for registrar removal; passive
+expiry first waits for a nonpositive remaining lifetime and immediately tests
+call rejection, then separately waits for physical record removal. Exact
+IMS-IP/SIP-port UDP binding is checked before and after the call. The other UE
+then registers via AKA and calls it; this no-AS profile expects a transaction-
+bound 404 and non-2xx ACK, no delivered INVITE at the old Contact, and no leaked
+relay session. Passive expiry requests `SIP_AKA_EXPIRY_SECONDS` (30 seconds);
+`SIP_AKA_INACTIVE_HOLD_SECONDS` keeps the listener alive during timer cleanup.
+Physical passive cleanup has its own `SIP_AKA_PASSIVE_DELETE_TIMEOUT_SECONDS`
+bound (390 seconds): this Kamailio version can require four 90-second timer
+passes. The callee hold is 600 seconds. An expired record may remain visible
+with zero or negative remaining seconds; that is not an active registration.
+
+Evidence stays in `local/private/aka-inactive-<mode>-*`. Its Cx capture covers
+registration authentication up to the caller's REGISTER 200; it does not claim
+to validate subsequent LIR/LIA or unregistered SAR subtypes. Original iFC and
+ordinary Digest clients are restored. Inspect separate scenario and cleanup
+verdicts; a caller timeout or 500 is not the expected unreachable result.
+
+## Real IMS PDU recovery
+
+```powershell
+python app/tests/integration/verify_pdu_recovery.py --ue 1
+```
+
+Run serially with the base stand idle and AS/AI stopped. This gate releases the
+selected UE's actual IMS PDU session (selected by DNN, not a fixed PSI) and
+observes UERANSIM's automatic re-establishment. It requires a different assigned
+IMS IPv4 address, new TUN ifindex, correct SIP/RTP routes, a restarted normal SIP
+client and a fresh REGISTER 200. The other UE and the selected UE's non-IMS
+session must retain their sampled state. A same-address allocation does not
+pass the address-change gate. Cleanup restores usable service; it does not force
+the old dynamically assigned address back into the pool.
+
+CLI requests have `UE_CLI_TIMEOUT_SECONDS` bounds. Before using `nr-cli`, the gate
+checks its registry against the current nr-ue PID, process start and owned
+loopback UDP socket. Proven stale entries are moved into a unique
+`/tmp/UERANSIM.proc-table-quarantine/` backup directory inside the UE container;
+ambiguous ownership fails. This handles stale records whose PID was reused after
+a container restart. Private receipts and PDU/network snapshots remain under
+`local/private/pdu-recovery-*`.
+
+This is access recovery evidence, not a complete IMS mobility verdict. A new
+Contact can coexist with an old Contact. Separate acceptance must explicitly
+remove or expire the old binding and correlate the subsequent call with the
+same registration epoch. The ordinary AKA call gate restarts S-CSCF, so a later
+PASS demonstrates a fresh call on the changed PDU address, not stale-binding
+replacement. PFCP wire correlation and radio mobility are separate checks.
+
 ## Stop
 
 ```powershell
