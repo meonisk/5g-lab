@@ -24,6 +24,7 @@ networks:
     internal: true
 
 volumes:
+  oai-mysql-data:
   mongo-data:
   mysql-data:
   service-control-secret:

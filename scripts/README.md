@@ -14,6 +14,9 @@
 | Файл | Зачем нужен |
 | --- | --- |
 | `start.ps1`, `start.sh` | Windows/Linux точки входа в общий launcher |
+| `start_partner.py` | Запуск только IMS + AI на Linux LAN; `--check` и `--ims-only`, без изменения ядра партнёров |
+| `phone_readiness.py` | Read-only проверка серверных возможностей; `NOT_READY` до отдельной приёмки настоящего телефона |
+| `oai_config.py`, `oai_subscribers.py`, `oai-upf-network.sh` | Приватная конфигурация OAI, UDR provisioning с сохранением SQN, internet-only NAT |
 | `start_lab.py` | Общий запуск; `--base-only` запускает сеть/IMS без AI и обязательно проверяет связность/регистрацию |
 | `migrate_mysql_storage.py` | Холодная миграция legacy MySQL в постоянный том, приватный backup и rollback image; требует остановленного MySQL и нового `--backup-dir` под `local/private` |
 | `migrate_subscriber_keys.py` | Dry-run по умолчанию; явная ротация отдельных ключей UE/домена через `--apply --backup-dir local/private/<new-dir>`, с остановленными UE/SIP, backup, сохранением SQN и rollback |

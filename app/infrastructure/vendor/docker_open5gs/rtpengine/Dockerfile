@@ -41,6 +41,8 @@ RUN apt-get update && \
 # Fetch RTPEngine code, build and install
 RUN echo "deb [signed-by=/usr/share/keyrings/dfx.at-rtpengine-archive-keyring.gpg] https://rtpengine.dfx.at/$REL $DIST main" | tee /etc/apt/sources.list.d/dfx.at-rtpengine.list && \
 	apt-get update && \
-	apt-get -y install rtpengine iptables iproute2 nftables
+	apt-get -y install rtpengine libavcodec-extra59 iptables iproute2 nftables && \
+	rtpengine --codecs 2>&1 | grep -E 'AMR: fully supported' && \
+	rtpengine --codecs 2>&1 | grep -E 'AMR-WB: fully supported'
 
 CMD ["/mnt/rtpengine/rtpengine_init.sh"]

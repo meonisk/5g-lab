@@ -28,7 +28,7 @@ class VerifyScript(unittest.TestCase):
         loader.parent.mkdir()
         loader.write_text(
             "INTERNET_UE_GATEWAY=192.0.2.1\n"
-            "INTERNET_UE_CIDR=192.0.2.0/24\n"
+            "INTERNET_UE_CIDR=192.0.2.0/24\nUPF_INTERNET_TUN=tun0\n"
             "INTERNET_PROBE_IP=198.51.100.1\n"
             "ipv4_in_cidr() { [[ $1 == 192.0.2.* ]]; }\n",
             encoding="utf-8",
@@ -42,8 +42,8 @@ class VerifyScript(unittest.TestCase):
             "  'logs lab-ue1'|'logs lab-ue2') output='Initial Registration is successful\nPDU Session establishment is successful\nTUN interface' ;;\n"
             "  *uesimtun0*) output='192.0.2.2' ;;\n"
             "  *uesimtun1*) output='' ;;\n"
-            "  *'ip -4 addr show ogstun'*) output='inet 192.0.2.1/24' ;;\n"
-            "  *'mongosh --quiet --eval'*) output='[{ imsi: 001 }]';;\n"
+            "  *'ip -4 addr show tun0'*) output='inet 192.0.2.1/24' ;;\n"
+            "  *'mysql -u oai'*) output='2';;\n"
             "  *'ping -I '*) output='4 packets received' ;;\n"
             "esac\n"
             'if [[ -n ${FAIL_MATCH:-} && "$*" == *"$FAIL_MATCH"* ]]; then exit 1; fi\n'
@@ -74,8 +74,8 @@ class VerifyScript(unittest.TestCase):
             "logs lab-gnb",
             "logs lab-ue1",
             "ping -I",
-            "ip -4 addr show ogstun",
-            "mongosh",
+            "ip -4 addr show tun0",
+            "mysql -u oai",
         ):
             with self.subTest(command=command):
                 result = self.run_verify(FAIL_MATCH=command)

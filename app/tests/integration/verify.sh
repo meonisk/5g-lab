@@ -56,18 +56,18 @@ for ue in lab-ue1 lab-ue2; do
         failures=$((failures + 1))
         continue
     fi
-    echo "----- $ue -> ogstun $INTERNET_UE_GATEWAY via $internet_tun -----"
+    echo "----- $ue -> UPF $INTERNET_UE_GATEWAY via $internet_tun -----"
     check_command "$ue gateway ping" docker exec "$ue" ping -I "$internet_tun" -c 4 "$INTERNET_UE_GATEWAY"
 
     echo "----- $ue -> $INTERNET_PROBE_IP -----"
     check_command "$ue internet probe ping" docker exec "$ue" ping -I "$internet_tun" -c 4 "$INTERNET_PROBE_IP"
 done
 
-echo "===== UPF ogstun ====="
-check_command 'UPF ogstun address' docker exec lab-upf ip -4 addr show ogstun
+echo "===== UPF internet interface ====="
+check_command 'UPF internet address' docker exec lab-upf ip -4 addr show "$UPF_INTERNET_TUN"
 
-echo "===== subscribers ====="
-check_command 'subscriber query' docker exec lab-mongo mongosh --quiet --eval \
-    'db.getSiblingDB("open5gs").subscribers.find({},{imsi:1,_id:0}).toArray()'
+echo "===== OAI subscriber count ====="
+check_command 'both configured subscribers' docker exec lab-oai-db sh -c \
+    'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u oai -N -B oai_db -e "SELECT COUNT(*) FROM AuthenticationSubscription" | grep -qx 2'
 
 exit "$((failures > 0))"

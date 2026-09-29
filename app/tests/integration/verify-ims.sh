@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Phase 4A (docker lab) gate:
 #   - both UEs hold internet+ims PDU sessions (TUN per DNN)
-#   - ims pool reachable through UPF ogstun2 without NAT
+#   - ims pool reachable through UPF $UPF_IMS_TUN without NAT
 #   - IMS DNS zone resolves from inside the lab
 #   - PyHSS holds both IMS subscribers and listens on Diameter Cx
 set -uo pipefail
@@ -69,11 +69,11 @@ for ue in lab-ue1 lab-ue2; do
     fi
 done
 
-echo "===== UPF ims DNN (ogstun2, no NAT) ====="
-check "ogstun2 carries $IMS_UE_GATEWAY_CIDR" \
-    docker exec lab-upf sh -c "ip -4 addr show ogstun2 | grep -Fq 'inet $IMS_UE_GATEWAY_CIDR'"
-check "kernel route $IMS_UE_CIDR dev ogstun2" \
-    docker exec lab-upf sh -c "ip route show '$IMS_UE_CIDR' | grep -q 'dev ogstun2'"
+echo "===== UPF ims DNN ($UPF_IMS_TUN, no NAT) ====="
+check "$UPF_IMS_TUN carries $IMS_UE_GATEWAY_CIDR" \
+    docker exec lab-upf sh -c "ip -4 addr show $UPF_IMS_TUN | grep -Fq 'inet $IMS_UE_GATEWAY_CIDR'"
+check "kernel route $IMS_UE_CIDR dev $UPF_IMS_TUN" \
+    docker exec lab-upf sh -c "ip route show '$IMS_UE_CIDR' | grep -q 'dev $UPF_IMS_TUN'"
 if nat_rules=$(docker exec lab-upf iptables -t nat -S); then
     if grep -Fq "$IMS_UE_CIDR" <<< "$nat_rules"; then
         printf 'FAIL: no MASQUERADE for the ims pool\n'

@@ -1,6 +1,11 @@
 # Implementation and validation status
 
-Updated 2026-09-22 after expired-Contact routing repair and live validation. Runtime claims below are limited
+Native-phone work is active: [device requirements and current blockers](native-phone.md).
+Virtual regression evidence does not establish automatic native-dialer operation.
+
+Current OAI migration and partner delivery status (2026-09-29): [OAI validation](oai-migration.md), [IMS + AI integration](partner-integration.md). Earlier evidence below was collected on Open5GS and does not automatically transfer to OAI.
+
+Historical snapshot updated 2026-09-22 after expired-Contact routing repair and live validation. Runtime claims below are limited
 to the explicitly executed gates; this is not standards certification or a scientific result.
 
 | Area | Current state | Evidence boundary |

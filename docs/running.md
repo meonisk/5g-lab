@@ -16,7 +16,7 @@ Implementation history: [changelog](../CHANGELOG.md).
 This directory starts the complete local stand on Windows Docker Desktop/WSL2
 or a native Linux Docker host:
 
-- Open5GS 5GC, one UERANSIM gNB, and two UEs;
+- OAI CN5G 5GC, one UERANSIM gNB, and two UEs;
 - `internet` and `ims` PDU sessions for each UE;
 - IMS DNS, PyHSS, Kamailio P/I/S-CSCF, and two PJSUA subscribers;
 - RTPengine media anchoring;
@@ -76,7 +76,7 @@ uses Docker Desktop/WSL2 and Git for Windows; Linux requires an SCTP-capable ker
 
 On Linux use `./scripts/start.sh`. The common Python launcher loads or verifies
 SCTP, builds/starts the full stack,
-idempotently provisions Open5GS and PyHSS subscribers, restarts the UE clients,
+idempotently provisions OAI UDR and PyHSS subscribers, restarts the UE clients,
 and runs the nine shell gates listed in `scripts/start_lab.py`. The Python
 bidirectional-interpreter and parallel-call checks below are additional checks;
 the launcher does not run them. Use `-SkipVerify` in PowerShell or

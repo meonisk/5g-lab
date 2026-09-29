@@ -20,6 +20,8 @@ class LocalCredentials(unittest.TestCase):
     def test_new_stand_generates_four_distinct_aka_profiles(self):
         with tempfile.TemporaryDirectory() as dirname:
             root = Path(dirname)
+            (root / "app/config").mkdir(parents=True)
+            shutil.copyfile(ROOT / "app/config/lab.env", root / "app/config/lab.env")
             with (
                 patch.object(initialize_local, "ROOT", root),
                 patch.object(initialize_local, "SECRET_PATH", root / "local/secrets/ims.env"),

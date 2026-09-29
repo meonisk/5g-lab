@@ -9,6 +9,19 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- fix: reject AI service offers without usable PCMU before allocating media;
+  do not silently accept AMR-only offers or required unsupported preconditions.
+- docs: activate native-phone integration with measured codec blockers, device/SIM
+  requirements and a read-only phone readiness command.
+- feat: include AMR/AMR-WB encoders in RTPengine and offer PCMU interworking for
+  configured AI destinations, retaining the internal PCMU/8000 media contract.
+
+- feat: replace the local Open5GS core with pinned OAI CN5G v2.2.1, dedicated UDR
+  SQL storage, SQN-preserving provisioning and internet/IMS DNN routing.
+- feat: add an independent IMS + AI partner deployment and integration contract
+  for an existing external OAI; local core and emulators are excluded.
+- test: adapt network gates to OAI and cover subscriber and deployment boundaries.
+
 - fix: recover nr-cli discovery after reused UE PIDs by quarantining only stale
   registry records verified against the current process and its UDP socket.
 - test: add real IMS PDU release/address-change recovery with TUN/source-route,

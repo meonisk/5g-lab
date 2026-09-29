@@ -1,6 +1,6 @@
 supi: 'imsi-${IMSI}'
-mcc: '001'
-mnc: '01'
+mcc: '${MCC}'
+mnc: '${MNC}'
 
 key: '${SUBSCRIBER_K}'
 op: '${SUBSCRIBER_OPC}'
@@ -26,19 +26,19 @@ uacAcc:
 
 sessions:
   - type: 'IPv4'
-    apn: 'internet'
+    apn: '${INTERNET_DNN}'
     slice:
-      sst: 1
+      sst: ${UE_PDU_SST}
   - type: 'IPv4'
-    apn: 'ims'
+    apn: '${IMS_DNN}'
     slice:
-      sst: 1
+      sst: ${UE_PDU_SST}
 
 configured-nssai:
-  - sst: 1
+  - sst: ${UE_PDU_SST}
 
 default-nssai:
-  - sst: 1
+  - sst: ${UE_PDU_SST}
 
 integrity:
   IA1: true

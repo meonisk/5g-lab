@@ -8,3 +8,7 @@
 #   service builds these recipes. PyHSS runtime templates and init remain.
 # - Retained CSCF route/SEMS/TLS files and XSDs: upstream init scripts copy them,
 #   even when the corresponding optional functionality is disabled in this lab.
+# - RTPengine image: install Debian libavcodec-extra59 for AMR/AMR-WB encoders;
+#   fail the image build if either bidirectional codec is unavailable.
+# - P-CSCF: add PCMU transcoding to configured AI service offers only; identifiers
+#   are validated and rendered by pcscf_init.sh. Normal destinations are unchanged.

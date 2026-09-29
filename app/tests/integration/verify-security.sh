@@ -85,7 +85,7 @@ check 'Voice Agent rejects non-RTPengine media destination' test "$bad_media" = 
 check 'subscriber identities are absent from custom service environment' sh -c \
     "! docker inspect lab-sip-as lab-media-adapter lab-ai-worker lab-voice-agent | grep -qE 'SUBSCRIBER_(K|OPC)|IMS_DIGEST_PASSWORD'"
 check 'Mongo provisioning does not receive SIP Digest secret' sh -c \
-    "! docker inspect lab-mongo | grep -q 'IMS_DIGEST_PASSWORD='"
+    "! docker inspect lab-oai-db | grep -q 'IMS_DIGEST_PASSWORD='"
 check 'UERANSIM does not receive SIP Digest secret' sh -c \
     "! docker inspect lab-ue1 lab-ue2 | grep -q 'IMS_DIGEST_PASSWORD='"
 check 'PJSUA does not receive subscriber K or OPc' sh -c \

@@ -8,7 +8,8 @@
 | Каталог / файл | Ответственность |
 | --- | --- |
 | `docker-compose.yml` | Короткая точка сборки стенда, сети и тома |
-| `app/infrastructure/compose/core.yml` | Open5GS и база абонентов |
+| `app/infrastructure/compose/core.yml` | Локальный OAI CN5G и отдельная база UDR |
+| `compose.partner.yml` | Только передаваемый IMS + AI для внешнего OAI |
 | `app/infrastructure/compose/access.yml` | gNB, UE и SIP-клиенты |
 | `app/infrastructure/compose/ims.yml` | DNS, HSS, CSCF и RTPengine |
 | `app/infrastructure/compose/ai.yml` | SIP AS, Media Adapter, AI Worker, LLM, Voice Agent |

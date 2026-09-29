@@ -35,7 +35,12 @@ CPU — публичный профиль по умолчанию. Локаль�
 
 Новые профили имеют отдельные `UE1/2_5GS_K/OPC/AMF` и `UE1/2_IMS_K/OPC/AMF`.
 Существующие БД не перезаписываются при provisioning: несовпадение ключей требует
-явной миграции с backup через `scripts/migrate_subscriber_keys.py`.
+явной миграции с backup. `scripts/migrate_subscriber_keys.py` относится только
+к прежнему Open5GS, его нельзя использовать для текущего OAI UDR.
+OAI имеет отдельную SQL-базу и приватные конфиги `local/oai/`; после изменения
+публичных параметров выполните `python scripts/initialize_local.py` и
+перезапустите соответствующие NFs. Параметры подключения внешнего ядра описаны
+в [partner-integration.md](partner-integration.md).
 В закреплённом PyHSS Digest использует AuC `ki` как пароль. Поэтому Compose
 передаёт каждому PJSUA его `UE*_IMS_K` в качестве `IMS_DIGEST_PASSWORD` внутри
 контейнера. Общий `IMS_DIGEST_PASSWORD` из файла остаётся fallback для legacy

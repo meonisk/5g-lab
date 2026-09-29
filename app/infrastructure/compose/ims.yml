@@ -15,6 +15,8 @@ services:
     entrypoint: ["/lab/dns-ims-run.sh"]
     env_file:
       - app/config/lab.env
+    environment:
+      UPF_IP: ${IMS_ROUTE_GATEWAY:-${UPF_IP}}
     volumes:
       - ./app/infrastructure/configs/dns/ims-dnsmasq.conf:/etc/dnsmasq.d/ims.conf:ro
       - ./scripts/dns-ims-run.sh:/lab/dns-ims-run.sh:ro
@@ -52,6 +54,8 @@ services:
     networks:
       lab5g:
         ipv4_address: ${PYHSS_IP}
+      ims-admin:
+        gw_priority: 1
     logging: *bounded-logging
 
   # --- IMS layer (Phase 4B: CSCF signalling core) ---------------------------
@@ -67,6 +71,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
+      - UPF_IP=${IMS_ROUTE_GATEWAY:-${UPF_IP}}
       - COMPONENT_NAME=icscf
     cap_add: [NET_ADMIN]
     dns:
@@ -93,6 +98,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
+      - UPF_IP=${IMS_ROUTE_GATEWAY:-${UPF_IP}}
       - COMPONENT_NAME=scscf
     cap_add: [NET_ADMIN]
     dns:
@@ -116,6 +122,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
+      - UPF_IP=${IMS_ROUTE_GATEWAY:-${UPF_IP}}
       - COMPONENT_NAME=pcscf
       - PCSCF_PUB_IP=${PCSCF_IP}
     cap_add: [NET_ADMIN]
@@ -144,6 +151,7 @@ services:
       - app/config/lab.env
     cap_add: [NET_ADMIN]
     environment:
+      UPF_IP: ${IMS_ROUTE_GATEWAY:-${UPF_IP}}
       INTERFACE: ${RTPENGINE_IP}
       LISTEN_NG: ${RTPENGINE_IP}:${RTPENGINE_NG_PORT}
       LISTEN_CLI: ${RTPENGINE_IP}:${RTPENGINE_CLI_PORT}
@@ -158,3 +166,9 @@ services:
     logging: *bounded-logging
 
   # AS and media observation services are defined in ai.yml.
+
+# Management bridge keeps the localhost REST API reachable in macvlan deployment.
+networks:
+  ims-admin:
+    name: lab-ims-admin
+    driver: bridge

@@ -26,15 +26,11 @@ COMPOSE = [
     str(ROOT / "docker-compose.yml"),
 ]
 BASE_SERVICES = (
-    "mongo",
+    "oai-db",
     "nrf",
-    "scp",
     "udr",
     "udm",
     "ausf",
-    "pcf",
-    "bsf",
-    "nssf",
     "upf",
     "smf",
     "amf",
@@ -252,12 +248,8 @@ def wait_for_pyhss_cx(settings):
 
 def provision_subscribers(bash):
     run(
-        ["docker", "cp", str(ROOT / "scripts/subscribers.js"), "lab-mongo:/tmp/subscribers.js"],
-        "Open5GS subscriber copy failed",
-    )
-    run(
-        ["docker", "exec", "lab-mongo", "mongosh", "--quiet", "/tmp/subscribers.js"],
-        "Open5GS subscriber provisioning failed",
+        [sys.executable, "scripts/oai_subscribers.py"],
+        "OAI subscriber provisioning failed",
     )
     run(
         [bash, "scripts/provision-ims-subscribers.sh", "--apply"],
@@ -267,7 +259,7 @@ def provision_subscribers(bash):
 
 def restart_registration_chain():
     stages = (
-        (["lab-udr", "lab-udm", "lab-ausf", "lab-pcf", "lab-amf"], 5),
+        (["lab-udr", "lab-udm", "lab-ausf", "lab-amf"], 5),
         (["lab-gnb"], 5),
         (["lab-ue1", "lab-ue2"], 15),
         (["lab-sipue1", "lab-sipue2"], 12),
@@ -317,10 +309,13 @@ def main():
     run([sys.executable, "scripts/initialize_local.py"], "Local initialization failed")
     guard_mysql_storage()
     prepare_sctp()
+    # Database schema must exist before provisioning and before UE authentication.
+    run(COMPOSE + ["up", "-d", "--wait", "oai-db"], "OAI database startup failed")
+    run([sys.executable, "scripts/oai_subscribers.py"], "OAI provisioning failed")
     if arguments.base_only:
-        # Explicit service selection and --no-deps keep the AI model/fixture path cold.
+        # Base services have no AI dependencies; honor core health dependency ordering.
         run(
-            COMPOSE + ["up", "-d", "--build", "--no-deps", *BASE_SERVICES],
+            COMPOSE + ["up", "-d", "--build", *BASE_SERVICES],
             "Base Docker Compose startup failed",
         )
     else:

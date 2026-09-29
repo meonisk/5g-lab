@@ -1,9 +1,9 @@
-mcc: '001'
-mnc: '01'
+mcc: '${MCC}'
+mnc: '${MNC}'
 
 nci: '0x000000010'
 idLength: 32
-tac: 1
+tac: ${OAI_TAC}
 
 linkIp: ${RADIO_BIND_IP}
 ngapIp: ${N2_BIND_IP}
@@ -15,6 +15,6 @@ amfConfigs:
     port: 38412
 
 slices:
-  - sst: 1
+  - sst: ${UE_PDU_SST}
 
 ignoreStreamIds: true

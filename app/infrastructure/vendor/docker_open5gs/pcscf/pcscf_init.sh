@@ -94,6 +94,21 @@ sed -i 's|RTPENGINE_IP|'$RTPENGINE_IP'|g' /etc/kamailio_pcscf/kamailio_pcscf.cfg
 sed -i 's|PCSCF_UDP_MTU|'$PCSCF_UDP_MTU'|g' /etc/kamailio_pcscf/kamailio_pcscf.cfg
 sed -i 's|RTPENGINE_IP|'$RTPENGINE_IP'|g' /etc/kamailio_pcscf/route/rtp.cfg
 
+# Offer the AI's fixed PCMU contract only for configured service destinations.
+# Restrict names before placing them into a Kamailio regular expression.
+ai_targets=""
+for name in VOICE_AGENT_MSISDN VOICE_TRANSLATOR_MSISDN VOICE_TRANSCRIBER_MSISDN \
+    VOICE_INTERPRETER_RU_MSISDN VOICE_INTERPRETER_EN_MSISDN VOICE_AGENT_SIP_USER \
+    VOICE_TRANSCRIBER_SIP_USER VOICE_INTERPRETER_RU_SIP_USER VOICE_INTERPRETER_EN_SIP_USER; do
+    value="${!name}"
+    if [[ ! "$value" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "Invalid AI service identifier: $name" >&2
+        exit 1
+    fi
+    ai_targets="${ai_targets:+${ai_targets}|}${value}"
+done
+sed -i "s@AI_MEDIA_TARGETS@^(${ai_targets})\$@g" /etc/kamailio_pcscf/route/rtp.cfg
+
 # Add static route to route traffic back to UE as there is not NATing
 ip route replace "${IMS_UE_CIDR}" via "${UPF_IP}"
 # Route needed for VoWiFi client where internet APN is used

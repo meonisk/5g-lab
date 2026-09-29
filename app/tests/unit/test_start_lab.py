@@ -62,10 +62,11 @@ class StartLabTests(unittest.TestCase):
     def test_base_mode_selects_only_base_services_and_mandatory_gates(self):
         commands, gates, outputs, dialogues = self.launch("--base-only", "--skip-verify")
         compose_up = [c for c in commands if c[: len(START.COMPOSE)] == START.COMPOSE]
-        self.assertEqual(len(compose_up), 1)
+        self.assertEqual(len(compose_up), 2)
+        self.assertEqual(compose_up[0], START.COMPOSE + ["up", "-d", "--wait", "oai-db"])
         self.assertEqual(
-            compose_up[0],
-            START.COMPOSE + ["up", "-d", "--build", "--no-deps", *START.BASE_SERVICES],
+            compose_up[1],
+            START.COMPOSE + ["up", "-d", "--build", *START.BASE_SERVICES],
         )
         self.assertFalse(
             set(START.BASE_SERVICES)

@@ -3,15 +3,16 @@
 Current implementation limits: [status.md](status.md). This is a migration
 contract; it is not a report of completed physical-stand acceptance.
 
-Physical work is deferred. The current scope is the virtual
-[5GS/IMS profile](3gpp-profile.md); equipment choices do not block that work.
+Native-phone integration is now active; see [native-phone.md](native-phone.md)
+for device requirements, measured blockers and physical acceptance. The virtual
+[5GS/IMS profile](3gpp-profile.md) remains the regression baseline.
 
 ## Scope
 
 The Docker profile is the executable integration baseline. A physical stand
 replaces UERANSIM gNB/UE and host-specific transport, and also requires verified
 discovery, authentication, access security, policy and codec interoperability.
-This is not just a container replacement. Open5GS, IMS DNS,
+This is not just a container replacement. OAI CN5G, IMS DNS,
 PyHSS, P/I/S-CSCF, SIP AS, RTPengine, Media Adapter, STT, LLM, and Voice Agent
 retain the same service contracts. Passing the Docker gates is necessary but
 is not evidence of RF, mobility, QoS, or physical-device behavior.
@@ -19,7 +20,7 @@ is not evidence of RF, mobility, QoS, or physical-device behavior.
 ## Preserved service path
 
 ```text
-physical UE/USIM -> NR-Uu -> physical gNB -> N2/N3 -> Open5GS/UPF
+physical UE/USIM -> NR-Uu -> physical gNB -> N2/N3 -> OAI/UPF
   -> IMS DNN -> P-CSCF -> I-CSCF -> S-CSCF -> iFC/ISC -> SIP AS
   -> RTPengine -> Voice Agent / Media Adapter -> sentence VAD
   -> bounded inference queue -> STT -> translation LLM -> language-specific TTS

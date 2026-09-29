@@ -1,0 +1,150 @@
+# core: service definitions; paths resolve from the repository root.
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${CUSTOM_SERVICE_LOG_MAX_SIZE}
+    max-file: ${CUSTOM_SERVICE_LOG_MAX_FILES}
+
+x-open5gs: &open5gs
+  image: ${OPEN5GS_IMAGE}
+  restart: unless-stopped
+  networks: [lab5g]
+  logging: *bounded-logging
+
+services:
+  mongo:
+    image: ${MONGO_IMAGE}
+    container_name: lab-mongo
+    restart: unless-stopped
+    env_file: [app/config/lab.env]
+    environment:
+      UE1_5GS_K: ${UE1_5GS_K:-${SUBSCRIBER_K:-}}
+      UE1_5GS_OPC: ${UE1_5GS_OPC:-${SUBSCRIBER_OPC:-}}
+      UE1_5GS_AMF: ${UE1_5GS_AMF:-${SUBSCRIBER_AMF:-}}
+      UE2_5GS_K: ${UE2_5GS_K:-${SUBSCRIBER_K:-}}
+      UE2_5GS_OPC: ${UE2_5GS_OPC:-${SUBSCRIBER_OPC:-}}
+      UE2_5GS_AMF: ${UE2_5GS_AMF:-${SUBSCRIBER_AMF:-}}
+    networks: [lab5g]
+    volumes:
+      - mongo-data:/data/db
+    logging: *bounded-logging
+
+  nrf:
+    <<: *open5gs
+    container_name: lab-nrf
+    command: open5gs-nrfd
+    volumes:
+      - ./app/infrastructure/configs/open5gs/nrf.yaml:/opt/open5gs/etc/open5gs/nrf.yaml:ro
+
+  scp:
+    <<: *open5gs
+    container_name: lab-scp
+    command: open5gs-scpd
+    depends_on: [nrf]
+    networks:
+      lab5g:
+        ipv4_address: ${SCP_IP}
+    volumes:
+      - ./app/infrastructure/configs/open5gs/scp.yaml:/opt/open5gs/etc/open5gs/scp.yaml:ro
+
+  udr:
+    <<: *open5gs
+    container_name: lab-udr
+    command: open5gs-udrd
+    depends_on: [scp, mongo]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/udr.yaml:/opt/open5gs/etc/open5gs/udr.yaml:ro
+
+  udm:
+    <<: *open5gs
+    container_name: lab-udm
+    command: open5gs-udmd
+    depends_on: [udr]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/udm.yaml:/opt/open5gs/etc/open5gs/udm.yaml:ro
+
+  ausf:
+    <<: *open5gs
+    container_name: lab-ausf
+    command: open5gs-ausfd
+    depends_on: [udm]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/ausf.yaml:/opt/open5gs/etc/open5gs/ausf.yaml:ro
+
+  pcf:
+    <<: *open5gs
+    container_name: lab-pcf
+    command: open5gs-pcfd
+    depends_on: [scp, mongo]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/pcf.yaml:/opt/open5gs/etc/open5gs/pcf.yaml:ro
+
+  bsf:
+    <<: *open5gs
+    container_name: lab-bsf
+    command: open5gs-bsfd
+    depends_on: [scp]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/bsf.yaml:/opt/open5gs/etc/open5gs/bsf.yaml:ro
+
+  nssf:
+    <<: *open5gs
+    container_name: lab-nssf
+    command: open5gs-nssfd
+    depends_on: [scp]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/nssf.yaml:/opt/open5gs/etc/open5gs/nssf.yaml:ro
+
+  upf:
+    <<: *open5gs
+    container_name: lab-upf
+    command: open5gs-upfd
+    # gradiant/open5gs runs as uid 999 with no capabilities; ogstun creation,
+    # the NAT rule and the entrypoint's sysctl writes all need root. privileged
+    # is what makes /proc/sys writable for that sysctl.
+    user: root
+    env_file:
+      - app/config/lab.env
+    privileged: true
+    cap_add: [NET_ADMIN]
+    devices:
+      - /dev/net/tun
+    sysctls:
+      net.ipv4.ip_forward: 1
+    environment:
+      IPV4_TUN_ADDR: ${INTERNET_UE_GATEWAY_CIDR}
+      IPV6_TUN_ADDR: ${INTERNET_UE_IPV6_GATEWAY_CIDR}
+      IPV4_TUN_SUBNET: ${INTERNET_UE_CIDR}
+      ENABLE_NAT: "true"
+      IMS_UE_GATEWAY_CIDR: ${IMS_UE_GATEWAY_CIDR}
+    volumes:
+      - ./app/infrastructure/configs/open5gs/upf.yaml:/opt/open5gs/etc/open5gs/upf.yaml:ro
+      - ./scripts/upf-ims-setup.sh:/lab/upf-ims-setup.sh:ro
+      - ./scripts/render-open5gs-config.sh:/lab/render-open5gs-config.sh:ro
+    # Wrapper creates ogstun2 (env-defined ims DNN pool, no NAT) and then chains
+    # into the stock entrypoint which handles ogstun/NAT for the internet DNN.
+    entrypoint: ["/lab/upf-ims-setup.sh"]
+    networks:
+      lab5g:
+        ipv4_address: ${UPF_IP}
+
+  smf:
+    <<: *open5gs
+    container_name: lab-smf
+    command: open5gs-smfd -c /tmp/smf.yaml
+    env_file:
+      - app/config/lab.env
+    depends_on: [scp, upf]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/smf.yaml:/opt/open5gs/etc/open5gs/smf.yaml:ro
+      - ./scripts/open5gs-config-run.sh:/lab/open5gs-config-run.sh:ro
+      - ./scripts/render-open5gs-config.sh:/lab/render-open5gs-config.sh:ro
+    entrypoint: ["/lab/open5gs-config-run.sh", "/opt/open5gs/etc/open5gs/smf.yaml", "/tmp/smf.yaml"]
+
+  amf:
+    <<: *open5gs
+    container_name: lab-amf
+    command: open5gs-amfd
+    depends_on: [scp, ausf, smf]
+    volumes:
+      - ./app/infrastructure/configs/open5gs/amf.yaml:/opt/open5gs/etc/open5gs/amf.yaml:ro

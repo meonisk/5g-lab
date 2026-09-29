@@ -2,7 +2,7 @@
 
 Repository: [2508/5g-lab](https://git.miem.hse.ru/2508/5g-lab).
 
-A local Open5GS/UERANSIM stand with IMS calls, Russian/English speech
+A local OAI CN5G/UERANSIM stand with IMS calls, Russian/English speech
 translation, and opt-in recording/transcription. Speech processing runs locally:
 faster-whisper small → Unsloth Qwen3 4B Q4_K_M through Ollama → Piper RU/EN.
 The telephone media contract is PCMU/8000.
@@ -11,6 +11,10 @@ The telephone media contract is PCMU/8000.
 profile is CPU and phrase-based translation. Streaming is experimental and off;
 the 1–3 second speech-start-to-far-end-audio target is not met. Offline checks
 and live acceptance are separate; see [validation status](docs/status.md).
+
+For delivery of **IMS + AI only** to an existing partner OAI core, see
+[partner integration](docs/partner-integration.md) and `compose.partner.yml`.
+[OAI migration and validation](docs/oai-migration.md) tracks the local test core.
 
 ## Requirements
 
@@ -70,7 +74,7 @@ env files are loaded. Stop with `scripts/compose.ps1 down` on Windows or
 
 ## Services and boundaries
 
-The stand includes Open5GS, one simulated gNB, two UEs, PyHSS, Kamailio
+The stand includes OAI CN5G, one simulated gNB, two UEs, PyHSS, Kamailio
 P/I/S-CSCF, RTPengine and four custom services: SIP AS, Media Adapter, AI Worker
 and Voice Agent. It supports ordinary IMS calls, a translation service,
 a disclosed recording/transcription service and one two-participant interpreter

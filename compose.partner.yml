@@ -1,0 +1,29 @@
+# Deploy only our IMS + AI beside an independently managed partner 5G core.
+# Linux VM/host with a LAN interface; do not run alongside the local stand.
+name: lab-docker
+include:
+  - path: app/infrastructure/compose/ims.yml
+    project_directory: .
+  - path: app/infrastructure/compose/ai.yml
+    project_directory: .
+
+networks:
+  lab5g:
+    name: lab5g
+    driver: macvlan
+    driver_opts:
+      parent: ${IMS_PARENT_INTERFACE:?Set the Linux interface facing the partner IMS network}
+    ipam:
+      config:
+        - subnet: ${LAB_NETWORK_CIDR}
+          ip_range: ${LAB_DYNAMIC_IP_RANGE}
+          gateway: ${IMS_ROUTE_GATEWAY:?Set the next hop towards the partner IMS UE pool}
+  ai-backend:
+    name: lab-ai-backend
+    internal: true
+
+volumes:
+  mysql-data:
+  service-control-secret:
+  ai-model-cache:
+  llm-model-cache:

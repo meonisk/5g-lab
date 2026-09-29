@@ -33,7 +33,7 @@ class VerifyImsNetwork(unittest.TestCase):
             "PYHSS_API_BIND=127.0.0.1\nPYHSS_API_PORT=80\nPYHSS_IP=10.0.0.4\nPYHSS_BIND_PORT=3868\n"
             "PCSCF_IP=10.0.0.1\nICSCF_IP=10.0.0.2\nSCSCF_IP=10.0.0.3\n"
             "RTPENGINE_IP=10.0.0.5\nLOOPBACK_IP=127.0.0.1\nICSCF_SIP_PORT=5060\n"
-            "UE1_IMSI=111\nUE2_IMSI=222\n"
+            "UE1_IMSI=111\nUE2_IMSI=222\nUPF_IMS_TUN=tun0\n"
             'sh() { if [[ $* == *curl* ]]; then return 0; fi; command sh "$@"; }\n'
             'ipv4_in_cidr() { case "$2:$1" in 198.51.100.0/24:198.51.100.*|192.0.2.0/24:192.0.2.*) return 0;; esac; return 1; }\n',
             encoding="utf-8",
@@ -47,8 +47,8 @@ class VerifyImsNetwork(unittest.TestCase):
             "  *'ip -o -4 addr show'*) [[ ${MISSING_TUN:-} ]] || printf '1: uesimtun7 inet 192.0.2.2/24\\n2: uesimtun9 inet 198.51.100.2/24\\n';;\n"
             "  *'ip -4 route get'*) if [[ ${BRIDGE_ROUTE:-} ]]; then echo '10.0.0.1 dev eth0 src 172.1.1.2'; else echo '10.0.0.1 dev uesimtun9 src 198.51.100.2'; fi;;\n"
             "  *'iptables -t nat -S'*) [[ ! ${NAT_FAIL:-} ]] || exit 1; echo '-A POSTROUTING -s 192.0.2.0/24 -j MASQUERADE';;\n"
-            "  *'addr show ogstun2'*) echo 'inet 198.51.100.1/24';;\n"
-            "  *'ip route show'*) echo '198.51.100.0/24 dev ogstun2';;\n"
+            "  *'addr show tun0'*) echo 'inet 198.51.100.1/24';;\n"
+            "  *'ip route show'*) echo '198.51.100.0/24 dev tun0';;\n"
             "  *'ping -I'*) :;;\n"
             "  logs*) echo 'PDU Session establishment is successful';;\n"
             "  *) echo '10.0.0.1 10.0.0.2 10.0.0.3 10.0.0.4 5060';;\n"

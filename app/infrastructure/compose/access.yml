@@ -13,6 +13,7 @@ services:
     networks: [lab5g]
     depends_on: [amf]
     command: gnb
+    env_file: [app/config/lab.env]
     environment:
       AMF_HOSTNAME: amf
       N2_IFACE: eth0

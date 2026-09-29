@@ -9,6 +9,7 @@ import time
 from . import runtime
 from .control import notify_adapter, notify_voice, stop_adapter, stop_voice
 from .messages import header, local_response
+from .sdp import accepts_pcmu
 
 
 def request_method(message: str) -> str:
@@ -130,7 +131,7 @@ def accept_agent_invite(
     send_local_response(message, peer, 100, "Trying")
 
     media_endpoint = offered_media_endpoint(message)
-    if media_endpoint is None:
+    if media_endpoint is None or not accepts_pcmu(message):
         send_local_response(
             message,
             peer,
