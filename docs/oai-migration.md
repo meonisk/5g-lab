@@ -6,7 +6,7 @@
 
 ## Изменения ядра
 
-`app/infrastructure/compose/core.yml` теперь описывает OAI CN5G v2.2.1:
+`app/infrastructure/compose/core-oai.yml` теперь описывает OAI CN5G v2.2.1:
 NRF, AMF, SMF, UPF, AUSF, UDM, UDR и отдельную MySQL `oai-db`.
 IMS MySQL/PyHSS остаются самостоятельными. Старый Mongo volume не удаляется.
 Источник конфигурационного контракта и DDL закреплён в

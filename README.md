@@ -2,6 +2,8 @@
 
 Repository: [2508/5g-lab](https://git.miem.hse.ru/2508/5g-lab).
 
+**Навигация по коду:** [карта папки app — OAI, IMS, AI и тесты](app/README.md).
+
 A local OAI CN5G/UERANSIM stand with IMS calls, Russian/English speech
 translation, and opt-in recording/transcription. Speech processing runs locally:
 faster-whisper small → Unsloth Qwen3 4B Q4_K_M through Ollama → Piper RU/EN.

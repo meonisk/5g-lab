@@ -3,7 +3,7 @@
 # Repository name: 5g-lab; see docs/running.md for the distinction.
 name: lab-docker
 include:
-  - path: app/infrastructure/compose/core.yml
+  - path: app/infrastructure/compose/core-oai.yml
     project_directory: .
   - path: app/infrastructure/compose/access.yml
     project_directory: .

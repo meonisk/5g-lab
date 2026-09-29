@@ -1,5 +1,7 @@
 # Карта проекта
 
+Быстрая навигация по компонентам: [app/README.md](../app/README.md).
+
 Пути указаны относительно корня репозитория `5g-lab`. В `app/` ровно пять разделов:
 `services`, `infrastructure`, `tests`, `research`, `config`.
 Команды находятся в `scripts/`, документация в `docs/`, локальные данные в `local/`.
@@ -8,7 +10,7 @@
 | Каталог / файл | Ответственность |
 | --- | --- |
 | `docker-compose.yml` | Короткая точка сборки стенда, сети и тома |
-| `app/infrastructure/compose/core.yml` | Локальный OAI CN5G и отдельная база UDR |
+| `app/infrastructure/compose/core-oai.yml` | Локальный OAI CN5G и отдельная база UDR |
 | `compose.partner.yml` | Только передаваемый IMS + AI для внешнего OAI |
 | `app/infrastructure/compose/access.yml` | gNB, UE и SIP-клиенты |
 | `app/infrastructure/compose/ims.yml` | DNS, HSS, CSCF и RTPengine |

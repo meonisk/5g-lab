@@ -9,6 +9,9 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- docs: add an app navigation map and infrastructure/config/test guides;
+  name the active core Compose file `core-oai.yml` and distinguish the Open5GS rollback.
+
 - fix: reject AI service offers without usable PCMU before allocating media;
   do not silently accept AMR-only offers or required unsupported preconditions.
 - docs: activate native-phone integration with measured codec blockers, device/SIM
