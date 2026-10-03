@@ -1,4 +1,4 @@
-"""Read-only readiness probe for Kamailio's established HSS Cx peers."""
+"""Проверка соединений HSS Cx в Kamailio без изменения состояния."""
 
 import re
 import subprocess
@@ -8,7 +8,7 @@ CX_APP = "16777216:10415"
 
 
 def connected_hss_peer(output, domain):
-    """Read the HSS peer's negotiated Cx state from cdp.list_peers."""
+    """Читаем согласованное состояние Cx узла HSS из cdp.list_peers."""
     hss = f"hss.{domain}"
     match = re.search(
         rf"(?m)^\s*FQDN:\s*{re.escape(hss)}\s*\n"
@@ -23,7 +23,7 @@ def connected_hss_peer(output, domain):
 
 
 def wait_ims_peers(settings, timeout_seconds=60, interval_seconds=2):
-    """Block registrations until I/S-CSCF have usable HSS Cx peers."""
+    """Ожидаем готовности HSS Cx на I/S-CSCF перед регистрациями."""
     domain = settings["IMS_DOMAIN"]
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -43,5 +43,5 @@ def wait_ims_peers(settings, timeout_seconds=60, interval_seconds=2):
         if all(ready):
             return
         if time.monotonic() >= deadline:
-            raise RuntimeError("I/S-CSCF HSS Cx peers did not reach I_Open/R_Open")
+            raise RuntimeError("Соединения I/S-CSCF с HSS Cx не достигли состояния I_Open/R_Open")
         time.sleep(interval_seconds)

@@ -27,7 +27,7 @@ IMS и AI. Не запускайте отдельные фрагменты ка�
 | [configs/open5gs](configs/open5gs) | Конфигурации прежнего ядра для отката |
 | [images](images) | Dockerfile инфраструктурных инструментов: DNS, SIP-клиенты, S-CSCF, загрузчик LLM |
 | [vendor/oai-cn5g](vendor/oai-cn5g) | SQL-схема OAI, лицензия, происхождение |
-| [vendor/docker_open5gs](vendor/docker_open5gs) | Используемые upstream-конфиги IMS и сборка RTPengine; имя отражает источник |
+| [vendor/docker_open5gs](vendor/docker_open5gs) | Сторонние конфигурации IMS и сборка RTPengine; имя отражает источник |
 | [vendor/kamailio-ims](vendor/kamailio-ims) | Материалы Kamailio для IMS |
 | [vendor/sipp-aka](vendor/sipp-aka) | Материалы SIPp для проверки AKA |
 

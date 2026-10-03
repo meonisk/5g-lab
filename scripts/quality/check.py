@@ -1,4 +1,4 @@
-"""Single offline developer/CI command; never changes the running stand."""
+"""Проверки разработки и CI одной командой без изменения работающего стенда."""
 
 import os
 import subprocess
@@ -41,8 +41,12 @@ def main():
     for command in commands:
         environment = dict(os.environ, PYTHONPATH=str(ROOT / "app/services"))
         subprocess.run(command, cwd=ROOT, check=True, env=environment)
-    print("TEAM OFFLINE CHECKS: PASS")
+    print("TEAM OFFLINE CHECKS: PASS — проверки исходников и документации пройдены")
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from script_console import configure_output
+
+    configure_output()
     main()

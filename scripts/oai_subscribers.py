@@ -1,4 +1,4 @@
-"""Provision OAI subscriptions without resetting existing AKA keys or SQN."""
+"""Настройка абонентов OAI с сохранением существующих ключей AKA и SQN."""
 
 import json
 import re
@@ -33,9 +33,9 @@ def query(statement):
         check=False,
     )
     if result.returncode:
-        # SQL diagnostics can echo credentials. Never print them.
+        # Диагностика SQL может содержать ключи; не выводим её.
         raise RuntimeError(
-            "OAI subscriber SQL failed (diagnostics withheld to protect credentials)"
+            "Ошибка SQL при настройке абонентов OAI; диагностика скрыта, поскольку может содержать ключи"
         )
     return result.stdout.strip()
 
@@ -45,14 +45,14 @@ def profiles(env):
     for ue in (1, 2):
         imsi = env[f"UE{ue}_IMSI"]
         if not re.fullmatch(r"\d{15}", imsi):
-            raise ValueError(f"UE{ue}_IMSI must contain 15 digits")
+            raise ValueError(f"UE{ue}_IMSI должен содержать 15 цифр")
         names = [f"UE{ue}_5GS_{field}" for field in ("K", "OPC", "AMF")]
         if not any(env.get(name) for name in names):
             names = [f"SUBSCRIBER_{field}" for field in ("K", "OPC", "AMF")]
         keys = [env[name] for name in names]
         for key, length in zip(keys, (32, 32, 4), strict=True):
             if not re.fullmatch(rf"[0-9a-fA-F]{{{length}}}", key):
-                raise ValueError("Invalid 5GS credential format")
+                raise ValueError("Неверный формат ключей 5GS")
         result.append((imsi, keys))
     return result
 
@@ -89,7 +89,7 @@ def statements(env, imsi, keys):
         }
     nssai = sql_value({"defaultSingleNssais": [snssai], "singleNssais": [snssai]})
     session = sql_value(dnn_config)
-    # OAI SMF encodes absent SD as FFFFFF when querying UDM/UDR.
+    # При запросе UDM/UDR OAI SMF обозначает отсутствующий SD как FFFFFF.
     slice_json = sql_value({**snssai, "sd": "FFFFFF"})
     return [
         auth,
@@ -113,11 +113,14 @@ def main():
             f"FROM AuthenticationSubscription WHERE ueid={sql_value(imsi)};"
         )
         if existing and existing.lower().split("\t") != [key.lower() for key in keys]:
-            raise RuntimeError("OAI AKA credential mismatch; explicit migration required")
+            raise RuntimeError("Ключи OAI AKA не совпадают; требуется отдельный перенос данных")
         commands.extend(statements(env, imsi, keys))
     query("\n".join([*commands, "COMMIT;"]))
-    print("OAI: two subscriber profiles provisioned; existing keys and SQN preserved")
+    print("OAI: настроены два абонента; существующие ключи и SQN сохранены")
 
 
 if __name__ == "__main__":
+    from script_console import configure_output
+
+    configure_output()
     main()

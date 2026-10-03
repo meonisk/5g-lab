@@ -133,7 +133,7 @@ python scripts/compose_ai.py --mode compact up -d ai-worker voice-agent
 ```
 
 Это запускает только два AI-компонента и их служебную зависимость. Сеть/IMS
-подготавливаются обычным `scripts/start.ps1 --base-only` (Linux: `scripts/start.sh --base-only`).
+подготавливаются командой `python scripts/start_lab.py --base-only` на Windows и Linux.
 Затем `python scripts/compose_ai.py --mode compact up -d` поднимает полный набор
 Compose с выбранным AI. Для внешнего OAI используйте `--partner` и предварительно
 выполните [подготовку партнёрского стенда](partner-integration.md).

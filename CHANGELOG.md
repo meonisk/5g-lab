@@ -1,18 +1,32 @@
-# Changelog
+# История изменений
 
-All notable changes to the Local 5G SA + IMS + voice-agent lab.
-Loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-and uses [Conventional Commits](https://www.conventionalcommits.org/) prefixes.
+Изменения стенда 5G, IMS и голосовых сервисов. Формат основан на
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); типы изменений
+соответствуют [Conventional Commits](https://www.conventionalcommits.org/).
 
-No versioned release has been published. Dates below group local development
-milestones; they are not release tags or scientific benchmark results.
+Нумерованные выпуски ещё не опубликованы. Даты ниже группируют этапы разработки
+и не обозначают выпуски или результаты научных измерений.
 
 ## [Unreleased]
+
+- docs: добавлен маршрут для первого знакомства со стендом: установка инструментов,
+  подготовка CPU-моделей, первый вызов, работа с транскрипцией и остановка;
+  убраны организационные роли из технической документации.
+
+- docs: добавлены полный справочник 246 параметров lab.env, инструкции запуска
+  CPU-профилей и контракт внешней интеграции IMS + AI; актуализированы master,
+  границы поставки, диагностика и критерии совместной приёмки.
 
 - feat: добавлены переключаемые CPU-профили с локальным OPUS-MT int8 вместо
   Qwen, raw-транскрипцией и Whisper small/base/tiny; исходный режим сохранён.
 - perf: добавлено отключение ONNX memory arena для Piper в CPU-профилях;
   измерения STT, перевода и озвучки оформлены отдельно от телефонного SLA.
+
+- docs: сокращён и переведён README, добавлены первый запуск, навигация и словарь
+  обозначений; актуальный статус отделён от истории проверок, переведены
+  инструкции по телефону, исследованиям, публикации и сторонним компонентам.
+- refactor: переведены пояснения и ошибки основных команд запуска, настройки
+  OAI и проверки телефона; добавлен UTF-8 вывод и сохранены служебные маркеры.
 
 - docs: add an app navigation map and infrastructure/config/test guides;
   name the active core Compose file `core-oai.yml` and distinguish the Open5GS rollback.

@@ -1,4 +1,4 @@
-"""Render private OAI YAML (JSON syntax) from the canonical lab environment."""
+"""Создание приватного OAI YAML в синтаксисе JSON из общих настроек стенда."""
 
 import json
 from pathlib import Path
@@ -27,7 +27,7 @@ def configuration(env):
     nfs["upf"]["n6"] = {"interface_name": "eth0"}
     plmn = {"mcc": env["MCC"], "mnc": env["MNC"]}
     return {
-        # OAI info logs include authentication vectors and subscriber keys.
+        # Журналы OAI уровня info содержат векторы аутентификации и ключи абонентов.
         "log_level": {"general": "warning"},
         "register_nf": {"general": True},
         "http_version": 1,
@@ -96,7 +96,7 @@ def render(root: Path, env):
     target.mkdir(parents=True, exist_ok=True)
     config = configuration(env)
     for nf in NFS:
-        # Only UDR needs SQL credentials. Other functions use SBI discovery.
+        # Ключи SQL нужны только UDR. Остальные функции находят сервисы через SBI.
         value = dict(config)
         if nf != "udr":
             value.pop("database")

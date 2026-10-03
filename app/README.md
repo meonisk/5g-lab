@@ -36,7 +36,7 @@ OAI запускается из Docker-образов. Версии и digest з
 [oai_config.py](../scripts/oai_config.py) в приватной папке `local/oai/`.
 Схема БД и лицензия в `vendor/oai-cn5g/` — не полный исходный код ядра.
 
-Папка `vendor/docker_open5gs/` названа по upstream-проекту: оттуда используются
+Папка `vendor/docker_open5gs/` названа по исходному стороннему проекту: оттуда используются
 конфигурации **IMS** (Kamailio, PyHSS, RTPengine). Это не означает, что активное
 ядро — Open5GS. Его прежний Compose-файл сохранён отдельно для отката.
 

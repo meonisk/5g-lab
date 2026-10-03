@@ -1,45 +1,36 @@
-# Research environment
+# Исследования и измерения
 
-This directory turns the runnable IMS lab into an experiment-preparation and
-evidence-capture environment. It does **not** turn a successful lab check into
-a scientific result.
+[Назад к карте приложения](../README.md).
 
-The current executable design, `local-language-services-smoke-v2.json`, is
-an instrumentation admission test. The earlier admission designs remain
-in `designs/` for provenance; they are not the default campaign. Path-only
-updates in this revision follow the new repository layout. The current design executes and records
-the 5GS, IMS call, two-turn Russian-to-English spoken translation, explicit
-opt-in private recording plus local-LLM transcript normalization, voice-agent,
-the four-turn two-subscriber Russian/English WAV dialogue, two-leg interpreted
-conversation, parallel inference, per-stage latency, security/privacy, and
-topology gates; it also records revisions,
-immutable input hashes, hardware, container images, bounded resource snapshots,
-and pseudonymized logs. Its result can prove that the measurement path works;
-it cannot support a conclusion about AI quality or scalability.
+Здесь находятся планы экспериментов и инструменты сбора результатов.
+Успешная проверка стенда подтверждает работу измерительного контура, но сама
+по себе не доказывает качество AI или способность обслуживать большую нагрузку.
 
-Opt-in recordings live only under ignored `local/private/recordings/`; they are not
-research evidence and must be reviewed/deleted under the declared retention
-policy. The shareable capture contract continues to forbid raw audio and text.
+Текущий исполняемый план — `local-language-services-smoke-v2.json`.
+Он проверяет сеть и IMS, перевод нескольких реплик, запись по запросу,
+нормализацию расшифровки, голосовой сервис, двуязычный диалог, перевод между
+двумя участниками, параллельную обработку, задержки этапов и защиту данных.
+Сборщик сохраняет версии кода, контрольные суммы входов, сведения об оборудовании
+и образах, ограниченные снимки ресурсов и журналы с заменёнными идентификаторами.
+Прежние планы в `designs/` сохранены для истории и не являются текущим набором.
 
-## Stages
+## Этапы исследования
 
-1. `ADMISSION`: platform gates, clock check, evidence capture, privacy check.
-2. `PILOT`: estimate variance, runtime, storage, failures, and feasible load.
-3. `FREEZE`: lock models, fixtures, factors, metrics, exclusions, repetitions,
-   seeds, and analysis before the main run.
-4. `MAIN`: execute the frozen design without tuning on outcomes.
-5. `CLOSED_ANALYSIS`: validate the ledger and exclusions, then analyse.
+| Метка в файлах | Смысл |
+| --- | --- |
+| `ADMISSION` | Проверка платформы, часов, сбора результатов и исключения приватных данных |
+| `PILOT` | Пробные запуски: разброс, длительность, объём хранения, ошибки и допустимая нагрузка |
+| `FREEZE` | Фиксация моделей, входов, факторов, метрик, исключений, повторов, seeds и анализа |
+| `MAIN` | Основной эксперимент по зафиксированному плану без подстройки под результаты |
+| `CLOSED_ANALYSIS` | Проверка полноты запусков и исключений, затем анализ |
 
-Only stages 4 and 5 may produce primary study evidence. Admission and pilot
-artifacts must retain their stage labels.
+Основные экспериментальные результаты относятся к последним двум этапам.
+Подготовительные и пробные запуски сохраняют собственные метки. Исторические
+хеши и результаты относятся к исходным запускам; см. [текущий статус](../../docs/status.md).
 
-Historical local results and source hashes identify their original run, not
-the current publication revision. Private artifacts are excluded. See the
-[current validation boundary](../../docs/status.md).
+## Команды
 
-## Commands
-
-From PowerShell:
+Выполняйте из корня репозитория. PowerShell:
 
 ```powershell
 ./scripts/research.ps1 prepare
@@ -48,7 +39,7 @@ From PowerShell:
 ./scripts/research.ps1 verify
 ```
 
-Linux uses the same CLI directly:
+Linux использует тот же инструмент напрямую:
 
 ```bash
 python app/research/tools/research_run.py prepare --root .
@@ -56,13 +47,15 @@ python app/research/tools/research_run.py collect --root . --run-id <run-id>
 python app/research/tools/research_run.py validate --root . --run-id <run-id>
 ```
 
-Generated runs live under ignored `local/evidence/runs/<run-id>/`. Share only the
-`shareable/` directory and the manifest/checksums after review. The per-run
-pseudonymization key stays under ignored `local/evidence/private/`; it is never
-written into a shareable artifact.
+Результаты создаются в игнорируемой папке `local/evidence/runs/<run-id>/`.
+После проверки передавайте только `shareable/`, манифест и контрольные суммы.
+Ключ замены идентификаторов остаётся в `local/evidence/private/`.
+Исходные аудиозаписи и тексты не входят в передаваемый набор.
 
-The proposed AI-scale campaign, local/real-stand boundary, demonstration
-scenarios, and data-protection rules are in
-[`protocols/ai-scale-v1.md`](protocols/ai-scale-v1.md). The machine-readable
-candidate design is deliberately marked `DRAFT`: named model artifacts and a
-pilot-derived repetition count must be frozen before a main campaign.
+Записи услуги расшифровки находятся в `local/private/recordings/` и отделены
+от исследовательских результатов. Их проверка и удаление выполняются по
+объявленному сроку хранения.
+
+План исследования масштабирования AI, сценарии и границы применимости описаны
+в [протоколе](protocols/ai-scale-v1.md). Его метка `DRAFT` означает проект:
+перед основным экспериментом нужно закрепить модели и число повторов по пилоту.

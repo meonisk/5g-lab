@@ -102,7 +102,7 @@ class StartLabTests(unittest.TestCase):
             "run",
             return_value=SimpleNamespace(returncode=0, stdout="old-id|exited|[]"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "migrate its stopped datadir"):
+            with self.assertRaisesRegex(RuntimeError, "перенесите данные остановленной"):
                 START.guard_mysql_storage()
 
     def test_mounted_mysql_volume_allows_compose(self):
@@ -119,7 +119,7 @@ class StartLabTests(unittest.TestCase):
             patch.object(START.subprocess, "run", return_value=SimpleNamespace(returncode=1)),
             patch.object(START.time, "sleep"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "Cx listener"):
+            with self.assertRaisesRegex(RuntimeError, "Слушатель Diameter Cx"):
                 START.wait_for_pyhss_cx({"PYHSS_IP": "127.0.0.1", "PYHSS_BIND_PORT": "3868"})
 
     def test_migration_receipt_allows_only_matching_stopped_container(self):
@@ -156,7 +156,7 @@ class StartLabTests(unittest.TestCase):
                     return_value=SimpleNamespace(returncode=0, stdout="different-id|exited|[]"),
                 ),
             ):
-                with self.assertRaisesRegex(RuntimeError, "rollback receipt"):
+                with self.assertRaisesRegex(RuntimeError, "подтверждение отката"):
                     START.guard_mysql_storage()
 
 

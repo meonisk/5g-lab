@@ -1,4 +1,4 @@
-"""Start the IMS + AI delivery without touching the partner's OAI core."""
+"""Запуск передаваемой части IMS + AI без изменения ядра OAI партнёров."""
 
 import argparse
 import ipaddress
@@ -28,9 +28,13 @@ def validate(settings):
     pool = ipaddress.ip_network(settings["IMS_UE_CIDR"])
     gateway = ipaddress.ip_address(settings.get("IMS_ROUTE_GATEWAY", ""))
     if gateway not in network or network.overlaps(pool):
-        raise ValueError("IMS next hop must be on the LAN; IMS UE pool must not overlap it")
+        raise ValueError(
+            "Шлюз IMS должен находиться в локальной сети; пул UE не должен с ней пересекаться"
+        )
     if not settings.get("IMS_PARENT_INTERFACE"):
-        raise ValueError("Set IMS_PARENT_INTERFACE to the Linux interface facing the IMS LAN")
+        raise ValueError(
+            "Укажите в IMS_PARENT_INTERFACE интерфейс Linux, подключённый к локальной сети IMS"
+        )
     keys = (
         "DNS_IP",
         "MYSQL_IP",
@@ -45,37 +49,46 @@ def validate(settings):
     )
     addresses = [ipaddress.ip_address(settings[key]) for key in keys]
     if len(set(addresses)) != len(addresses) or gateway in addresses:
-        raise ValueError("IMS service addresses must be unique and differ from the LAN gateway")
+        raise ValueError("Адреса IMS-сервисов должны быть уникальными и отличаться от адреса шлюза")
     if any(address not in network for address in addresses):
-        raise ValueError("All IMS service addresses must belong to LAB_NETWORK_CIDR")
+        raise ValueError("Все адреса IMS-сервисов должны входить в LAB_NETWORK_CIDR")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--ims-only", action="store_true", help="Start IMS before loading AI models"
+        "--ims-only", action="store_true", help="Запустить только IMS без загрузки AI-моделей"
     )
-    parser.add_argument("--check", action="store_true", help="Validate without starting containers")
+    parser.add_argument(
+        "--check", action="store_true", help="Проверить конфигурацию без запуска контейнеров"
+    )
     args = parser.parse_args()
     settings = public_environment()
     validate(settings)
     run(
         [sys.executable, "scripts/initialize_local.py", "--ims-only"],
-        "IMS credentials initialization failed",
+        "Не удалось подготовить ключи IMS",
     )
-    run(PARTNER_COMPOSE + ["config", "--quiet"], "Partner Compose validation failed")
+    run(
+        PARTNER_COMPOSE + ["config", "--quiet"],
+        "Конфигурация Compose для партнёров не прошла проверку",
+    )
     if args.check:
-        print("PARTNER CONFIG: VALID (network reachability and calls are unverified)")
+        print(
+            "PARTNER CONFIG: VALID — конфигурация корректна; доступность сети и звонки не проверены"
+        )
         return
     if not sys.platform.startswith("linux"):
-        raise RuntimeError("Partner macvlan deployment requires a Linux VM/host")
+        raise RuntimeError(
+            "Для развёртывания macvlan нужен Linux-хост или виртуальная машина с Linux"
+        )
     guard_mysql_storage()
     services = list(IMS_SERVICES) if args.ims_only else []
-    run(PARTNER_COMPOSE + ["up", "-d", "--build", *services], "IMS + AI startup failed")
+    run(PARTNER_COMPOSE + ["up", "-d", "--build", *services], "Не удалось запустить IMS + AI")
     wait_for_pyhss(settings)
     run(
         [bash_command(), "scripts/provision-ims-subscribers.sh", "--apply"],
-        "IMS provisioning failed",
+        "Не удалось настроить IMS",
     )
     wait_for_pyhss_cx(settings)
     restart_ims_chain()
@@ -93,13 +106,16 @@ def main():
                 break
             time.sleep(2)
         else:
-            raise RuntimeError("AI models did not become ready")
+            raise RuntimeError("AI-модели не стали готовы за отведённое время")
     print(
-        "PARTNER SERVICES: STARTED; external UE registration, SIP/RTP and AI call remain UNVERIFIED"
+        "PARTNER SERVICES: STARTED — сервисы запущены; регистрация внешних UE, SIP/RTP и вызов AI: UNVERIFIED"
     )
 
 
 if __name__ == "__main__":
+    from script_console import configure_output
+
+    configure_output()
     try:
         main()
     except (RuntimeError, ValueError) as error:

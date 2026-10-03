@@ -1,7 +1,8 @@
-"""Validate local Markdown link targets in tracked and new project documents."""
+"""Проверка локальных Markdown-ссылок в существующих и новых документах."""
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -32,11 +33,17 @@ def main():
             checked += 1
             destination = (path.parent / unquote(target.path)).resolve()
             if not destination.is_relative_to(ROOT) or not destination.exists():
-                errors.append(f"{name}: missing/outside-repository link {target.path}")
+                errors.append(
+                    f"{name}: ссылка не существует или выходит за репозиторий: {target.path}"
+                )
     if errors:
         raise SystemExit("\n".join(errors))
-    print(f"DOCUMENTATION LINKS: PASS ({documents} documents, {checked} local targets)")
+    print(f"DOCUMENTATION LINKS: PASS — документов: {documents}, локальных ссылок: {checked}")
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from script_console import configure_output
+
+    configure_output()
     main()

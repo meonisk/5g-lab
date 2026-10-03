@@ -1,5 +1,8 @@
 # Настройка стенда
 
+Значения, единицы измерения и назначение **всех 246 переменных**:
+[полный справочник lab.env](lab-env-reference.md). Здесь описаны правила применения.
+
 Все публичные значения по умолчанию находятся в `app/config/lab.env`. Он читается Compose,
 контейнерами и проверками стенда. Для применения изменённого env пересоздайте
 соответствующий контейнер через `scripts/compose.ps1 up -d <service>`.
@@ -9,7 +12,7 @@
 | --- | --- |
 | Сети, адреса, DNS | `LAB_*`, `IMS_UE_*`, `INTERNET_UE_*`, `*_IP`, `DNS_*` |
 | Сигнализация и порты | `*_PORT`, `RTPENGINE_QUERY_TIMEOUT_SECONDS`, `IMS_DOMAIN`, `UE*_IMSI`, `VOICE_*_MSISDN` |
-| Версии образов | `OPEN5GS_IMAGE`, `UERANSIM_IMAGE`, `MONGO_IMAGE`, `MYSQL_IMAGE`, `PYHSS_IMAGE`, `KAMAILIO_IMAGE`, `OLLAMA_IMAGE`, `CONTROL_INIT_IMAGE` |
+| Версии образов | `OAI_*_IMAGE`, `UERANSIM_IMAGE`, `MYSQL_IMAGE`, `PYHSS_IMAGE`, `KAMAILIO_IMAGE`, `SCSCF_IMAGE`, `OLLAMA_IMAGE`, `CONTROL_INIT_IMAGE`; `OPEN5GS_IMAGE` и `MONGO_IMAGE` сохранены для отката |
 | STT | `AI_MODEL_SIZE`, `AI_MODEL_REVISION`, `AI_DEVICE`, `AI_COMPUTE_TYPE`, `AI_LANGUAGE`, `AI_STT_*` |
 | Границы обычных реплик | `AI_UTTERANCE_*`, `AI_VAD_RMS`, `AI_AUDIO_PREROLL_MS` |
 | Границы исследовательского диалога | `AI_DIALOGUE_UTTERANCE_*`, `AI_DIALOGUE_EVENT_GAP_MS` |
@@ -29,6 +32,45 @@ CPU — публичный профиль по умолчанию. Локаль�
 `local/secrets/ims.env` загружается Compose после публичного env и может
 содержать машинные overrides. Не все host-side скрипты читают этот файл:
 публичную топологию и параметры проверок меняйте в `app/config/lab.env`.
+
+### Приоритет и область действия
+
+Для подстановки `${...}` Compose читает публичный env, затем secrets; обычное
+окружение shell имеет более высокий приоритет. Но контейнерный `env_file` и
+Compose `--env-file` — разные механизмы: наши сервисы читают публичный файл,
+а `environment:` в YAML явно переопределяет только перечисленные там значения.
+Поэтому перенос произвольного ключа в secrets не гарантирует, что его увидит
+каждый контейнер. Перед изменением смотрите определение нужного сервиса.
+
+`compose_ai.py` добавляет `local/ai-profiles/<режим>/profile.env` и overlay
+`compose.yml`, а также задаёт выбранные значения для Compose в окружении процесса.
+У AI Worker и Voice Agent этот профиль добавляется к контейнерному env_file.
+Он принудительно включает CPU и отключает streaming. Сгенерированные файлы
+перезаписываются скриптом; исходник вариантов — [ai-profiles.json](../app/config/ai-profiles.json).
+Сам `lab.env` при переключении не меняется. Профиль указывайте каждый раз.
+
+### Что находится вне lab.env
+
+| Настройка | Где и как используется |
+| --- | --- |
+| `UE1_5GS_K`, `UE2_5GS_K` | Secrets, K доступа 5GS, по 32 hex-символа; только наш локальный OAI |
+| `UE1_5GS_OPC`, `UE2_5GS_OPC` | Secrets, OPc доступа 5GS, по 32 hex-символа |
+| `UE1_5GS_AMF`, `UE2_5GS_AMF` | Secrets, поле Milenage AMF по 4 hex-символа; не адрес функции AMF |
+| `UE1_IMS_K`, `UE2_IMS_K` | Secrets, IMS AKA K, по 32 hex-символа |
+| `UE1_IMS_OPC`, `UE2_IMS_OPC` | Secrets, IMS AKA OPc, по 32 hex-символа |
+| `UE1_IMS_AMF`, `UE2_IMS_AMF` | Secrets, поле IMS AKA AMF, по 4 hex-символа |
+| `IMS_DIGEST_PASSWORD` | Secrets, лабораторный fallback Digest; не применять production Ki как Digest-пароль |
+| `SUBSCRIBER_K`, `SUBSCRIBER_OPC`, `SUBSCRIBER_AMF` | Полный legacy fallback 32/32/4 hex; не смешивать неполный набор с новыми ключами |
+| `OAI_DB_PASSWORD`, `OAI_DB_ROOT_PASSWORD` | Secrets, автоматически создаваемые пароли по 48 hex; не требуются partner `--ims-only` |
+| `MEDIA_ADAPTER_URL`, `AI_WORKER_URL`, `VOICE_AGENT_URL` | Формируются в Compose из адресов/портов; не отдельные операторские ключи lab.env |
+| Внутренний control token | Генерируется один раз в Docker volume; публичный файл задаёт только путь/размер |
+| Настройки OAI | `local/oai/`, генерируются из публичных настроек и secrets |
+| Весовые файлы OPUS | `local/models/opus-mt/`, оба направления и SHA manifests |
+
+Шаблон секретов: [ims.env.example](../app/config/ims.env.example). Для нового
+стенда используйте генератор, а не значения `replace-*`. `--ims-only` создаёт
+только IMS-часть; дальнейший локальный OAI потребует отдельного полного набора
+5GS-ключей. Значения секретов, токена и полный `compose config` не публикуйте.
 
 Пароли и ключи абонентов находятся в `local/secrets/ims.env`. Токен внутренних API
 создаётся в приватном Docker-томе; в публичный env он не попадает.

@@ -50,7 +50,7 @@ class OaiIntegration(unittest.TestCase):
             patch.object(SUBSCRIBERS, "read_values", return_value=self.env),
             patch.object(SUBSCRIBERS, "query", return_value="wrong\tkey\t8000") as query,
         ):
-            with self.assertRaisesRegex(RuntimeError, "credential mismatch"):
+            with self.assertRaisesRegex(RuntimeError, "Ключи OAI AKA не совпадают"):
                 SUBSCRIBERS.main()
             self.assertEqual(query.call_count, 1)
             self.assertTrue(query.call_args.args[0].startswith("SELECT"))
@@ -60,7 +60,7 @@ class OaiIntegration(unittest.TestCase):
         self.env["IMS_ROUTE_GATEWAY"] = self.env["UPF_IP"]
         PARTNER.validate(self.env)
         self.env["IMS_UE_CIDR"] = self.env["LAB_NETWORK_CIDR"]
-        with self.assertRaisesRegex(ValueError, "overlap"):
+        with self.assertRaisesRegex(ValueError, "пересекаться"):
             PARTNER.validate(self.env)
 
     def test_ims_only_initialization_does_not_need_5gs_keys_or_core(self):

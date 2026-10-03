@@ -1,23 +1,21 @@
-# Third-party material and distribution scope
+# Сторонние компоненты и лицензии
 
-Original project code has no project-wide license selected in this repository.
-This preparation does not assign one on behalf of its owner. Upstream files
-retain their own notices and terms; the vendored license does not license the
-whole project.
+Единая лицензия для собственного кода проекта пока не выбрана.
+Сторонние файлы сохраняют исходные уведомления и условия; лицензия отдельного
+компонента не распространяется автоматически на весь проект.
 
-| Material | Location / provenance |
+| Компонент | Где указаны версия и происхождение |
 | --- | --- |
-| docker_open5gs configuration and init sources | [Provenance](app/infrastructure/vendor/docker_open5gs/PROVENANCE.md), [upstream license](app/infrastructure/vendor/docker_open5gs/LICENSE) |
-| STT package and model | [Model provenance](app/services/ai-worker/MODEL_PROVENANCE.md), service requirements and Dockerfile |
-| Qwen GGUF and optional model alternatives | URL and SHA-256 in `app/config/lab.env`; [model guide](docs/local-models.md) |
+| OAI CN5G v2.2.1 и SQL-схема | [Происхождение](app/infrastructure/vendor/oai-cn5g/PROVENANCE.md), [лицензия](app/infrastructure/vendor/oai-cn5g/LICENSE) |
+| Конфигурации и скрипты из docker_open5gs | [Происхождение](app/infrastructure/vendor/docker_open5gs/PROVENANCE.md), [лицензия](app/infrastructure/vendor/docker_open5gs/LICENSE) |
+| Распознавание речи и модель | [Происхождение модели](app/services/ai-worker/MODEL_PROVENANCE.md), зависимости и Dockerfile сервиса |
+| Qwen GGUF и альтернативные модели | URL и SHA-256 в `app/config/lab.env`; [руководство](docs/local-models.md) |
 | Helsinki-NLP OPUS-MT RU→EN / EN→RU и SentencePiece | Закреплённые ревизии, заявленные CC-BY-4.0 / Apache-2.0 и конверсия: [CPU-профили](docs/cpu-ai-profiles.md); manifests создаются вместе с весами |
-| Piper engine and RU/EN voice models | Pinned downloads in the Voice Agent build and public configuration; [voice guide](docs/configuration.md) |
-| Infrastructure images and Python dependencies | Image references in `app/config/lab.env`, Dockerfiles and `requirements*.txt` |
-| FFmpeg extra codec package, OpenCORE AMR and VisualOn AMR-WB | Debian `libavcodec-extra59` and dependencies installed in RTPengine; package copyright files remain under `/usr/share/doc/` in the built image |
+| Piper и русские/английские голоса | Закреплённые загрузки в сборке Voice Agent и общей конфигурации; [настройка](docs/configuration.md) |
+| Образы инфраструктуры и Python-библиотеки | `app/config/lab.env`, Dockerfile и `requirements*.txt` |
+| Дополнительные кодеки FFmpeg, OpenCORE AMR и VisualOn AMR-WB | Пакет Debian `libavcodec-extra59` и зависимости RTPengine; уведомления сохранены в `/usr/share/doc/` внутри образа |
 
-Model weights and container images are downloaded during setup, not embedded in
-the source repository. Their licenses and redistribution obligations are separate
-from the source code. Review the exact upstream notices before redistributing
-built images or weights. This inventory is not a license clearance report.
-
-OAI CN5G v2.2.1 runtime and SQL schema: [provenance](app/infrastructure/vendor/oai-cn5g/PROVENANCE.md), [upstream license](app/infrastructure/vendor/oai-cn5g/LICENSE).
+Веса моделей и образы скачиваются при подготовке, а не хранятся в исходниках.
+Их условия распространения учитываются отдельно. Перед передачей собранных
+образов или весов нужно проверить исходные уведомления правообладателей.
+Этот перечень фиксирует компоненты, но не является заключением о лицензировании.

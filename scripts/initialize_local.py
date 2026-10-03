@@ -1,4 +1,4 @@
-"""Create and validate local credentials without exposing them in Git or logs."""
+"""Создание и проверка локальных ключей без вывода в Git и журналы."""
 
 import argparse
 import re
@@ -37,7 +37,7 @@ def main(ims_only=False):
                     )
                 )
         SECRET_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print("Created private laboratory credentials in local/secrets/ims.env")
+        print("Локальные ключи стенда созданы в local/secrets/ims.env")
 
     values = read_values(SECRET_PATH)
     added = []
@@ -46,7 +46,7 @@ def main(ims_only=False):
             values[name] = secrets.token_hex(24)
             added.append(f"{name}={values[name]}")
         if not re.fullmatch(r"[0-9a-fA-F]{48}", values[name]):
-            raise ValueError(f"{name} must contain 48 hexadecimal characters")
+            raise ValueError(f"{name} должен содержать 48 шестнадцатеричных символов")
     if added:
         with SECRET_PATH.open("a", encoding="utf-8", newline="\n") as output:
             output.write("\n" + "\n".join(added) + "\n")
@@ -58,11 +58,13 @@ def main(ims_only=False):
             selected = names if any(name in values for name in names) else legacy
             for name, length in zip(selected, (32, 32, 4), strict=True):
                 if not re.fullmatch(rf"[0-9a-fA-F]{{{length}}}", values.get(name, "")):
-                    raise ValueError(f"{name} must contain exactly {length} hexadecimal characters")
+                    raise ValueError(
+                        f"{name} должен содержать ровно {length} шестнадцатеричных символов"
+                    )
     if not values.get("IMS_DIGEST_PASSWORD", "").strip() or values[
         "IMS_DIGEST_PASSWORD"
     ].startswith("replace-"):
-        raise ValueError("IMS_DIGEST_PASSWORD must be a non-placeholder value")
+        raise ValueError("Задайте IMS_DIGEST_PASSWORD вместо шаблонного значения")
     (ROOT / "local/private/recordings").mkdir(parents=True, exist_ok=True)
     if not ims_only:
         public = read_values(ROOT / "app/config/lab.env")
@@ -70,6 +72,13 @@ def main(ims_only=False):
 
 
 if __name__ == "__main__":
+    from script_console import configure_output
+
+    configure_output()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ims-only", action="store_true")
+    parser.add_argument(
+        "--ims-only",
+        action="store_true",
+        help="Подготовить только IMS, без ключей и конфигурации локального OAI",
+    )
     main(ims_only=parser.parse_args().ims_only)

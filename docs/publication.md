@@ -1,13 +1,13 @@
-# Preparing and publishing the Git repository
+# Публикация в GitLab
 
-The publication unit is [5g-lab](https://git.miem.hse.ru/2508/5g-lab). Sibling `ims`,
-`asterisk_legacy` and `5g-arseny` repositories are not required by its startup.
-The Git remote is `https://git.miem.hse.ru/2508/5g-lab.git`; the published
-branch is `master`.
+Публикуется репозиторий [5g-lab](https://git.miem.hse.ru/2508/5g-lab).
+Для его запуска не нужны соседние проекты рабочего каталога.
+На 03.10.2026 OAI и CPU-профили опубликованы в `master` (коммит `7b05535`).
+Отдельный репозиторий передаваемой IMS + AI части ещё не создан.
 
-## Before a push
+## Перед отправкой
 
-From the repository root:
+Из корня репозитория выполните:
 
 ```bash
 python scripts/quality/check.py
@@ -17,59 +17,82 @@ git diff --check
 git remote -v
 ```
 
-Stage intended changes before running the Git check: it checks the index that
-will be committed. The optional history pass checks all reachable local refs.
-Local credential comparisons run when `local/secrets/ims.env` exists; a fresh
-clone still checks prohibited paths, executable modes and selected signatures.
-Neither check is a comprehensive secret scanner or a runtime acceptance test.
+Добавьте в индекс только нужные изменения, затем повторите проверку Git:
+она проверяет именно содержимое будущего коммита. Параметр `--history` также
+проверяет достижимую локальную историю. При наличии `local/secrets/ims.env`
+содержимое сверяется с известными локальными секретами; в свежем клоне
+проверяются запрещённые пути, права исполнения и отдельные признаки секретов.
+Это проверка публикации, а не полный аудит безопасности или проверка звонков.
 
-Commit the reviewed changes. Publish the intended branch explicitly rather than
-using `--mirror` or `--all`. For a clone of the canonical repository:
+После проверки создайте коммит. При согласованной отправке непосредственно
+в `master` указывайте назначение явно:
 
 ```bash
-git push -u origin master
+git push origin HEAD:refs/heads/master
 ```
 
-Credentials belong in a credential manager, not in a remote URL, source file
-or documentation.
+Не используйте `--mirror` или `--all` для обычной публикации. Учётные данные
+хранятся в менеджере учётных данных, а не в URL репозитория или документации.
 
-## Distribution contents
+## Что входит в поставку
 
-Include tracked source, public configuration, synthetic text fixtures, scripts,
-documentation and upstream notices. Do not upload the enclosing workspace or
-an Explorer ZIP: ignored files can still be included by filesystem archivers.
-Exclude `local/`, `.git/` directory copies, recordings, transcripts, packet
-captures, credentials, model caches and Git backup bundles.
+Исходники, публичные настройки, синтетические текстовые сценарии, скрипты,
+документация и уведомления сторонних компонентов. Не включайте `local/`,
+копии `.git/`, записи, расшифровки, сетевые трассы, ключи, кэш моделей и резервные
+копии истории. Архив всей рабочей папки может содержать игнорируемые файлы.
 
-For a source-only archive, after committing:
+Архив только закоммиченных исходников создаётся так:
 
 ```bash
 git archive --format=zip --prefix=5g-lab/ --output=../5g-lab-source.zip HEAD
 ```
 
-This exports the committed tree, with executable modes stored by Git. It omits
-uncommitted changes and local state. Development checks use Git metadata, so
-use a clone for development/validation rather than the source-only ZIP.
-The older workspace ZIP is not a publication artifact.
+Он исключает локальное состояние; после распаковки проверьте права shell-файлов,
+поскольку их сохранение зависит от распаковщика и файловой системы.
+Для разработки нужен клон: автоматические проверки используют метаданные Git.
 
-## Local history sanitization
+## Отдельный репозиторий IMS + AI
 
-Publication preparation removed laboratory credential literals from source and
-reachable history. Original Git history is retained only in an ignored local
-backup bundle; replacement expressions and migration maps are private tooling.
-Do not publish those backups, copy the old `.git`, or merge old unsanitized refs.
-Historical documents and private manifests may retain their original commit IDs
-and hashes; those are provenance, not current validation claims.
+`compose.partner.yml` уже исключает запуск OAI, RAN и UE. Это отдельный состав
+развёртывания в текущем репозитории, **не уже созданный отдельный репозиторий**.
+Полный `git archive` выше содержит также локальное ядро и тестовый стенд.
 
-The active stand's local credentials are preserved. History sanitization does
-not revoke credentials or alter existing subscriber databases. If an older
-archive was shared, rotate the affected lab credentials and reprovision before
-reusing that stand outside its isolated environment.
+Для выделения поставки:
 
-## Publication scope
+1. Согласовать GitLab namespace, имя, доступ и границы поставки. Сохранить
+   `compose.partner.yml`, определения IMS/AI, их build contexts, конфиги, vendor
+   с лицензиями, публичный env/шаблон секретов, launcher/provisioning и инструкции.
+2. Проверить транзитивные зависимости. Например, `start_partner.py` импортирует
+   помощники из `start_lab.py`, а генератор секретов связан с OAI-модулем. Простое
+   удаление всех файлов с `oai` в имени сломает импорты. Сначала выделить общие
+   помощники или явно сохранить необходимые зависимости без запуска ядра.
+3. Адаптировать корневые пути Compose/build/mount, проверки и README под новую
+   структуру; убрать требования к эмулированным `lab-ue*` из партнёрской приёмки.
+4. Создать чистый Git-репозиторий из согласованного allowlist исходников.
+   Не переносить `.git` исходного проекта, `local/`, реальные env, WAV, трассы,
+   бэкапы и веса. Для моделей передать инструкции/manifest и условия распространения.
+5. Из нового чистого клона выполнить offline-проверки, сборку и
+   `python scripts/start_partner.py --check`, затем Linux-развёртывание и совместную приёмку с внешними UE.
+   Проверка конфигурации сама по себе не подтверждает телефонный вызов.
+6. Опубликовать в согласованный репозиторий и зафиксировать версии поставки,
+   образы, модели, инструкцию обновления/отката и оставшиеся ограничения.
 
-Read [status.md](status.md) before describing this as a release. Source readiness
-does not close the live-startup, latency, physical-stand or research gates.
-Third-party notices remain in place. A project-wide license for original code
-has not been selected; publishing source must not imply a grant of rights that
-the owner has not chosen. See [THIRD_PARTY.md](../THIRD_PARTY.md).
+До выполнения этих шагов передаётся текущий репозиторий с инструкцией запуска
+partner-профиля. Контракт взаимодействия: [integration-contract.md](integration-contract.md).
+
+## Прежняя история
+
+При подготовке публикации лабораторные ключи были удалены из исходников
+и достижимой истории. Исходная история сохранена только в игнорируемой локальной
+резервной копии. Её, старые `.git` и неочищенные ветки публиковать нельзя.
+Идентификаторы прежних коммитов в отчётах обозначают происхождение результатов,
+а не текущую проверенную версию.
+
+Очистка истории не отзывает ключи и не меняет базы абонентов. Если старый архив
+передавался другим людям, перед использованием вне изолированного стенда нужно
+заменить соответствующие ключи и обновить записи абонентов.
+
+Перед описанием поставки прочитайте [текущий статус](status.md).
+Публикация исходников не подтверждает работу телефона, задержку или научные
+результаты. Условия сторонних компонентов и отсутствие общей лицензии
+собственного кода описаны в [THIRD_PARTY.md](../THIRD_PARTY.md).

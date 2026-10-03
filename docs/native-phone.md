@@ -1,92 +1,89 @@
-# Native Android phone: active integration target
+# Подключение настоящего телефона
 
-The target is automatic registration after inserting a provisioned test SIM and
-normal calling from the phone's built-in dialer. A separately installed SIP app
-does not satisfy this target. This work is active; physical acceptance is pending.
+Цель — автоматическая IMS-регистрация с подготовленной тестовой SIM и звонки
+из штатного приложения телефона. Отдельный SIP-клиент эту цель не заменяет.
+Работа ведётся; проверка на физическом устройстве ещё не выполнена.
 
-## Device and SIM selection
+## Телефон и SIM
 
-Manufacturer or a “5G” label is insufficient. Choose an unlocked Android device
-with a documented firmware build supporting **5G SA and VoNR on the partner's
-NR bands**, IMS on the selected test PLMN, and AMR/AMR-WB. Get the exact model,
-regional variant, modem/firmware and band from the partner before purchasing.
-5G NSA/VoLTE alone is not sufficient for a standalone OAI 5GC with no LTE/EPC.
-No particular Xiaomi, OnePlus or other model has been validated on this stand.
+Нужен Android без операторской блокировки с известной версией прошивки,
+поддержкой **5G SA и VoNR в диапазоне партнёров**, IMS для выбранной тестовой
+сети и кодеками AMR/AMR-WB. Перед покупкой согласуйте точную модель, региональную
+версию, модем, прошивку и частоты. Поддержки 5G NSA/VoLTE недостаточно для OAI
+в режиме SA без LTE/EPC. Конкретные Xiaomi, OnePlus и другие модели здесь не проверены.
 
-Use a programmable lab USIM/ISIM with known administration credentials and an
-agreed IMS identity profile. An ordinary operator SIM cannot simply be copied
-into our HSS. Configure matching subscriber credentials in the partner core and
-our IMS HSS; whether IMS uses the same credentials depends on the selected card.
-Keep key material in the private provisioning workflow, never in this document.
-Do not overwrite an operator SIM or assume factory-created lab keys match a card.
+Используется программируемая лабораторная USIM/ISIM с известными параметрами
+администрирования и согласованными IMS-идентификаторами. Обычную операторскую SIM
+нельзя просто скопировать в наш HSS. Параметры абонента в ядре партнёров и нашем
+IMS должны соответствовать карте; общие или отдельные IMS-ключи зависят от её профиля.
+Ключи передаются через приватную процедуру настройки, не через документацию.
+Не перезаписывайте операторскую SIM и не считайте случайные ключи стенда ключами карты.
 
-Automatic operation may require an initial carrier/IMS profile configuration on
-the selected firmware. Record that setup; a manually launched SIP client is not
-an acceptable substitute. Android's IMS behavior also depends on carrier policy:
-[Android IMS entitlement](https://source.android.com/docs/core/connect/ims-service-entitlement).
+На выбранной прошивке может потребоваться начальная настройка профиля оператора
+и IMS. Её нужно записать в инструкцию. Политика оператора влияет на поведение
+Android: [механизм допуска IMS](https://source.android.com/docs/core/connect/ims-service-entitlement).
 
-## Current evidence and remaining implementation
+## Что готово и что осталось
 
-| Area | Current state | Required acceptance |
+| Область | Состояние | Следующая проверка |
 | --- | --- | --- |
-| OAI + IMS AKA | Local synthetic AKA registration/call passed | Native UE identity and resynchronization |
-| P-CSCF IPsec | WITH_IPSEC already enabled | Negotiation, protected REGISTER/INVITE, XFRM SAs, re-registration |
-| P-CSCF discovery | OAI configured with P-CSCF address | Capture UE PCO/EPCO and automatic IMS session |
-| AMR/AMR-WB | Encoders installed; synthetic bidirectional RTP passed, octet-align 0 and 1 | Native codec modes, DTX, RTCP and audio quality |
-| AI media boundary | AI destinations add PCMU through RTPengine; incompatible offers rejected | Full AMR SIP call through IMS and AI, then native phone |
-| Phone SIP behavior | Required 100rel/precondition offers rejected | Implement/test PRACK, UPDATE and negotiated QoS behavior |
-| Normal calls | Synthetic bidirectional PCMU passed | Native outgoing/incoming calls, hangup, idle/reattach |
-| AI services | Local PCMU AI path passed previously | Native dialer service call and far-end intelligible audio |
+| OAI и IMS AKA | Пройдены синтетические регистрация и вызов | Идентификаторы устройства и повторная синхронизация |
+| P-CSCF IPsec | `WITH_IPSEC` включён | Согласование защиты, REGISTER/INVITE, XFRM SA и повторная регистрация |
+| Обнаружение P-CSCF | Адрес задан в OAI | Получение PCO/EPCO телефоном и автоматическая IMS-сессия |
+| AMR/AMR-WB | Кодирование и декодирование проверены через RTP, `octet-align` 0 и 1 | Режимы телефона, DTX, RTCP и качество звука |
+| Соединение с AI | Для AI-номеров RTPengine добавляет PCMU; несовместимые предложения отклоняются | Полный AMR-вызов через IMS и AI, затем телефон |
+| SIP телефона | Обязательные `100rel`/`precondition` пока отклоняются | Реализация и проверка PRACK, UPDATE и согласования QoS |
+| Обычные звонки | Пройден синтетический двусторонний PCMU-вызов | Входящие/исходящие звонки, завершение и восстановление подключения |
+| AI-услуги | Пройден локальный сценарий PCMU | Вызов штатным приложением и разборчивый звук у слушателя |
 
-The original RTPengine inspected on 2026-09-29 was 26.0.1.23 and reported AMR
-and AMR-WB decoding only. The rebuilt image includes `libavcodec-extra59` and
-reports both fully supported; EVS remains unsupported.
-Installing an AMR library by itself is not evidence of an encoder in FFmpeg or
-of working call negotiation. Use the runtime capability report and actual media
-tests. [RTPengine transcoding documentation](https://rtpengine.readthedocs.io/en/master/transcoding.html)
-describes this dependence and the need to explicitly enable transcoding.
+## Выполненные проверки медиатракта
 
-`python app/tests/integration/verify_phone_codecs.py` passed against the rebuilt
-running relay: AMR returned 24 encoded / 24 decoded frames, AMR-WB 23 / 22,
-for both octet-align modes. The finite wideband test leaves resampler lookahead
-buffered; it is not a packet-loss or end-to-end latency measurement. It verifies
-NG offer/answer and nonconstant RTP payload after a round trip, not intelligible
-speech, a complete SIP call or handset playback. Each synthetic call is deleted.
-After the image and P-CSCF changes, the PCMU IMS Voice Agent gate passed,
-including ACK, RTP and BYE cleanup. The multi-turn Russian-to-English AI gate
-also passed. These PCMU gates do not replace an AMR SIP/AI end-to-end test.
+Исходный RTPengine 26.0.1.23 умел только декодировать AMR/AMR-WB. После добавления
+`libavcodec-extra59` он поддерживает оба направления; EVS не поддержан.
+Установка библиотеки сама по себе не подтверждает согласование кодеков:
+нужны проверка возможностей работающего процесса и обмен звуком.
+См. [документацию RTPengine](https://rtpengine.readthedocs.io/en/master/transcoding.html).
 
-An initial ordinary two-UE call regression failed after component/client
-restarts despite successful registration; retain `local/phone-ims-call.log`
-as failed evidence. Recreating both SIP clients and waiting for registration
-restored the call: `local/phone-ims-call-retry.log` passed both RTP legs and
-fail-open operation with AI stopped. The restart failure's root cause remains
-unresolved; this recovery is not full lifecycle acceptance. Offline quality
-checks and all 185 unit tests passed. Evidence logs remain private/untracked.
+`python app/tests/integration/verify_phone_codecs.py` прошёл на пересобранном
+RTPengine. Для AMR получены 24 кодированных и 24 декодированных пакета,
+для AMR-WB — 23 и 22; оба варианта упаковки проверены. В конечном тесте
+AMR-WB часть сигнала остаётся в буфере преобразования частоты. Это не измерение
+потерь или полной задержки. Проверяются согласование NG offer/answer и изменение
+полезной нагрузки RTP после преобразования, а не разборчивость речи, полный
+SIP-вызов или воспроизведение динамиком. Тестовые сессии удаляются.
 
-Run `python scripts/phone_readiness.py` for a read-only capability report.
-Exit code 1 / `NOT_READY` is intentional until physical acceptance is complete;
-configuration checks cannot certify a phone. No credentials are read or printed.
+После изменений прошли вызов Voice Agent с ACK, RTP и очисткой по BYE,
+а также перевод нескольких реплик с русского на английский. Они используют
+PCMU и не заменяют полную проверку AMR через IMS и AI.
 
-## Partner handoff and test sequence
+Первый обычный вызов после перезапусков не прошёл; результат сохранён в
+`local/phone-ims-call.log`. Пересоздание обоих SIP-клиентов восстановило звонок:
+`local/phone-ims-call-retry.log` подтверждает два направления RTP и продолжение
+передачи при остановленном AI. Причина первоначального сбоя не установлена;
+полная проверка восстановления остаётся открытой. На этапе этих медиапроверок
+прошли 185 unit-тестов; актуальный offline-набор и CPU-профили описаны в [status.md](status.md).
+Журналы проверок остаются локальными.
 
-Use [partner-integration.md](partner-integration.md) for our IMS + AI deployment.
-Partners retain OAI/RAN/subscriber policy ownership. Agree PLMN, NR band, SA/VoNR,
-IMS DNN, UE pool, P-CSCF/DNS delivery, return routes, authentication identities,
-and QoS/policy support. Their existing core must advertise voice support as
-appropriate to the actual deployed capabilities; our containers cannot supply
-missing radio or core policy behavior.
+`python scripts/phone_readiness.py` только читает серверные возможности.
+Код завершения 1 и `NOT_READY` ожидаемы до отдельной приёмки телефона.
+Настройки сервера не могут подтвердить работу устройства; ключи не выводятся.
 
-1. Provision the chosen test card and both core/IMS subscriber records privately.
-2. Reboot the phone: observe radio and 5GS registration without a softphone.
-3. Observe automatic IMS PDU session, DNS and P-CSCF discovery.
-4. Observe IMS AKA, any AUTS recovery, negotiated IPsec and successful protected registration.
-5. Make incoming and outgoing native calls; verify ringing, answer, both audio
-   directions, codec negotiation and BYE cleanup.
-6. Call each AI service number; verify speech recognition, translation/response
-   and playback at the phone. Retain codec and timing evidence, not just SIP 200.
-7. Repeat after airplane mode, idle, IMS re-registration and service restart.
+## Подключение партнёров и порядок проверки
 
-Do not mark a stage passed using UERANSIM/PJSUA evidence. Emergency calling,
-SMS, public telephone interconnect and mobility require separately scoped tests;
-“all features” here means the project's IMS calls and AI services.
+Развёртывание нашей части описано в [инструкции](partner-integration.md).
+Партнёры отвечают за OAI, радиосеть и политику абонентов. Согласуйте PLMN,
+диапазон NR, SA/VoNR, IMS DNN, пул адресов UE, выдачу P-CSCF/DNS, обратные маршруты,
+учётные данные и QoS. Ядро должно объявлять поддержку голоса в соответствии
+с реальными возможностями сети; наши контейнеры не заменяют недостающие функции RAN/5GC.
+
+1. Настройте карту и записи абонента в ядре и IMS по приватной процедуре.
+2. Перезагрузите телефон и подтвердите подключение к 5GS без отдельного SIP-клиента.
+3. Проверьте автоматическую IMS PDU-сессию, DNS и обнаружение P-CSCF.
+4. Проверьте AKA, восстановление через AUTS при необходимости, IPsec и защищённую регистрацию.
+5. Выполните входящий и исходящий звонки: вызов, ответ, звук в обе стороны и очистку по BYE.
+6. Позвоните на номера AI-услуг и проверьте распознавание, перевод/ответ и звук на телефоне.
+7. Повторите после авиарежима, простоя, повторной регистрации и перезапуска сервисов.
+
+Результаты UERANSIM/PJSUA не заменяют эти проверки. Экстренные вызовы, SMS,
+выход в общую телефонную сеть и мобильность требуют отдельного объёма работ.
+Здесь проверяются звонки IMS и AI-услуги проекта.

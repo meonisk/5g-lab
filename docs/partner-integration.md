@@ -1,7 +1,7 @@
 # Подключение IMS + AI к OAI партнёров
 
 Передаваемая часть — DNS, PyHSS/MySQL, P/I/S-CSCF, RTPengine, SIP AS,
-Media Adapter, AI Worker, локальные STT/LLM/TTS. Партнёры сохраняют свой OAI,
+Media Adapter, AI Worker, локальные STT/перевод/TTS. Партнёры сохраняют свой OAI,
 RAN и UE. Наш OAI + UERANSIM нужен для локальной проверки интеграции.
 
 Два независимых входа:
@@ -12,6 +12,9 @@ RAN и UE. Наш OAI + UERANSIM нужен для локальной прове
 [compose.partner.yml](../compose.partner.yml) включает те же определения IMS/AI,
 что локальный стенд. Для переноса не нужно менять исходники сервисов.
 Текущее состояние проверок — [oai-migration.md](oai-migration.md).
+Таблица входов/выходов и технические требования к другому проекту:
+[контракт интеграции](integration-contract.md). Параметры:
+[справочник всех переменных](lab-env-reference.md).
 
 ## Граница интеграции
 
@@ -25,7 +28,7 @@ flowchart LR
   CSCF --> AS[SIP AS]
   UE <-->|RTP через UPF и RTPengine| MEDIA[RTPengine / Media Adapter]
   AS --> MEDIA
-  MEDIA --> AI[STT → LLM → TTS]
+  MEDIA --> AI[STT → OPUS или LLM → TTS]
   AI --> MEDIA
 ```
 
@@ -34,6 +37,10 @@ IMS не нужен доступ к SQL-базе OAI, NRF или N2/N3/N4. OAI �
 DNS и P-CSCF; UE регистрируется в нашем IMS, а HSS обслуживает Cx внутри
 нашей части. N5/Rx policy integration, dedicated QoS flows и гарантии
 физического VoNR в этот проверочный профиль не входят.
+Параметры IMS/P-CSCF в ядре сверяйте с
+[документацией OAI](https://github.com/openairinterface/oai-cn5g-fed/blob/master/docs/CONFIGURATION.md)
+для выбранной версии; локальная реализация закреплена в
+[oai_config.py](../scripts/oai_config.py).
 
 ## Что согласовать и заполнить
 
@@ -41,7 +48,7 @@ DNS и P-CSCF; UE регистрируется в нашем IMS, а HSS обс�
 ключи — только в `local/secrets/ims.env`. Таблица является контрактом
 подключения; конкретные адреса партнёров пока не получены.
 
-| Параметры | Ответственная сторона и проверка |
+| Параметры | Настройка и проверка |
 | --- | --- |
 | `MCC`, `MNC`, `IMS_DOMAIN` | Согласовать PLMN и IMS home domain; IMS domain не выводить автоматически из случайного тестового PLMN |
 | `IMS_DNN`, `IMS_UE_CIDR`, S-NSSAI | Партнёры: разрешить DNN абонентам, выдать IPv4 PDU, указать SST/SD; пул не пересекается с LAN контейнеров |
@@ -67,6 +74,10 @@ USIM/ISIM и реальный механизм IMS AKA.
 Desktop Windows этим сценарием не покрыт. Нельзя запускать локальный стенд
 и партнёрский вариант одновременно на одном Docker daemon: имена контейнеров
 и томов намеренно общие.
+Нужен обычный rootful Docker: macvlan не поддерживается в rootless-режиме.
+Хост не общается с macvlan-контейнерами напрямую без дополнительного интерфейса
+или сети; учитывайте это особенно при размещении OAI на той же ВМ.
+Ограничения описаны в [документации Docker](https://docs.docker.com/engine/network/drivers/macvlan/).
 
 `IMS_ROUTE_GATEWAY` задаёт обратные маршруты у DNS, CSCF и RTPengine.
 Партнёры обеспечивают маршрут N6 к LAN сервисов. SIP/SDP должны рекламировать
@@ -94,13 +105,46 @@ Cx, SQL, RTPengine control и AI HTTP — внутренние связи наш
    вызвать `python scripts/initialize_local.py --ims-only` и затем передать
    сгенерированные IMS-ключи клиентам защищённым способом.
 3. `python scripts/start_partner.py --check` — проверка конфигурации.
+   Команда также создаёт недостающие локальные IMS-ключи; контейнеры не запускает.
 4. `python scripts/start_partner.py --ims-only` — поднять IMS, создать
    subscriber/iFC, дождаться Cx. Команда не изменяет ядро партнёров.
-5. Проверить IMS REGISTER и обычный вызов. Затем `python scripts/start_partner.py`
-   загружает модели и запускает AI. Первый запуск требует доступа к registry
-   и хранилищам моделей; веса остаются в постоянных томах.
+5. Проверить IMS REGISTER и обычный вызов. Затем выбрать AI: обычный
+   `python scripts/start_partner.py` запускает baseline с Qwen, а для CPU без
+   Qwen выполнить команды ниже. Первый запуск требует registry и моделей.
 6. Для обслуживания использовать
-   `docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml ps`.
+  `docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml ps`.
+
+Для `compact` после шага 4 и [подготовки OPUS](cpu-ai-profiles.md#подготовка-и-переключение):
+
+```bash
+python scripts/compose_ai.py --mode compact --partner config --quiet
+python scripts/compose_ai.py --mode compact --partner build ai-worker voice-agent
+python scripts/compose_ai.py --mode compact --partner up -d --build
+python scripts/compose_ai.py --mode compact --partner ps
+python scripts/compose_ai.py --mode compact --partner logs --tail 100 ai-worker voice-agent
+```
+
+Дождитесь `healthy` AI Worker и Voice Agent, затем проверяйте звонки внешних UE.
+Задавайте `--partner` и режим в каждой команде, включая обслуживание и остановку:
+`python scripts/compose_ai.py --mode compact --partner down` сохраняет тома.
+Обычные `compose.ps1`/`compose.sh` адресуют локальный состав с OAI, для этой
+поставки используйте явный partner-файл либо `compose_ai.py --partner`.
+Полный `start_partner.py` без `--ims-only` вернёт конфигурацию Qwen.
+
+### Пример адресного плана
+
+Это пример для выделенной тестовой LAN, **не готовые адреса другого проекта**.
+Если оставляете публичную LAN `172.22.0.0/24`, резервируйте сервисные `.100`–`.110`
+по `lab.env`, динамический диапазон `.128/25`, а достижимый шлюз, например `.1`,
+выделите отдельно. Внесите `IMS_PARENT_INTERFACE=<реальный интерфейс Linux>` и
+`IMS_ROUTE_GATEWAY=<реальный шлюз к IMS UE pool>`. Сам факт указания шлюза не
+настраивает его маршруты. На OAI должны быть согласованы IMS DNN, UE-пул,
+DNS `.100` и P-CSCF `.106`. При другой LAN замените **все** статические адреса.
+
+Перед запуском проверьте `ip -br addr`, `ip route`, отсутствие пересечения LAN
+с UE-пулами и разрешение дополнительных MAC на vSwitch. Проверяйте доступность
+из UE/нужного контейнера: связность с хоста macvlan не эквивалентна связности UE.
+Для OAI на той же ВМ отдельно обеспечьте путь от его N6 к выбранной LAN.
 
 Надпись `STARTED` означает готовность процессов. До проверки внешних UE,
 SIP/RTP и AI-вызова интеграция остаётся `UNVERIFIED`.

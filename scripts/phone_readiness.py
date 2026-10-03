@@ -1,4 +1,4 @@
-"""Read-only server preflight; never certifies a physical phone from Docker tests."""
+"""Проверка серверных предпосылок; Docker-тесты не подтверждают работу телефона."""
 
 import json
 import subprocess
@@ -21,14 +21,14 @@ def run(container, *arguments):
 def inspect():
     codecs = run("lab-rtpengine", "rtpengine", "--codecs")
     supported = dict(line.strip().split(":", 1) for line in codecs.splitlines() if ":" in line)
-    # Read only this feature directive, not the generated config with DB credentials.
+    # Читаем только признак функции, не всю конфигурацию с ключами БД.
     ipsec = run("lab-pcscf", "grep", "-x", "#!define WITH_IPSEC", "/etc/kamailio_pcscf/pcscf.cfg")
     checks = [
         {"check": "rtpengine_reachable", "status": "PASS" if codecs else "FAIL"},
         {
             "check": "pcscf_ipsec_configured",
             "status": "PASS" if ipsec else "FAIL",
-            "scope": "Configuration only; no UE Security-Verify or XFRM SA proof",
+            "scope": "Проверена только настройка; Security-Verify от UE и XFRM SA не подтверждены",
         },
     ]
     for codec in ("PCMU", "AMR", "AMR-WB"):
@@ -55,14 +55,17 @@ def inspect():
     return {
         "status": "NOT_READY",
         "checks": checks,
-        "scope": "Server preflight; physical acceptance is separately required",
+        "scope": "Проверка сервера; приёмка настоящего телефона выполняется отдельно",
     }
 
 
 def main():
-    print(json.dumps(inspect(), indent=2))
-    return 1  # Hardware acceptance cannot be inferred from server capabilities.
+    print(json.dumps(inspect(), indent=2, ensure_ascii=False))
+    return 1  # Серверные возможности не подтверждают работу физического устройства.
 
 
 if __name__ == "__main__":
+    from script_console import configure_output
+
+    configure_output()
     raise SystemExit(main())
