@@ -23,6 +23,9 @@
 | `start-lab.ps1` | Обратная совместимость со старой командой Windows |
 | `compose.ps1`, `compose.sh` | Compose с публичным ENV и локальными секретами |
 | `check.ps1` | Запуск `quality/check.py` из правильного каталога |
+| `compose_ai.py` | Явные CPU-режимы baseline/balanced/compact/minimal; [инструкция](../docs/cpu-ai-profiles.md) |
+| `prepare_translation_models.py` | Однократная подготовка двух OPUS-MT int8 с ревизиями и SHA-256 |
+| `benchmark_piper.py`, `benchmark_voice_service.py`, `benchmark_cpu_pipeline.py` | Измерения компонентов на синтетических данных; результаты только в local/ |
 | `research.ps1` | Подготовка, сбор и проверка исследовательских запусков |
 | `generate-bilingual-dialogue.ps1`, `generate_dialogue.py` | Генерация приватных Piper WAV по JSON-сценарию |
 | `run-interpreter-experiment.ps1` | Полный приватный эксперимент: входные и принятые WAV, логи, метаданные и задержки |

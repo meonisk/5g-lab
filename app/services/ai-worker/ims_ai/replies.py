@@ -128,6 +128,7 @@ def record_success(
     result.update(
         {
             "llm_model": settings.llm_model,
+            "translation_backend": settings.translation_backend,
             "llm_response_chars": len(reply),
             "llm_response_cyrillic_chars": reply_cyrillic_chars,
             "llm_response_latin_chars": reply_latin_chars,

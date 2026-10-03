@@ -19,6 +19,7 @@ if tts_backend not in {"espeak-ng", "piper"}:
     raise ValueError(f"unsupported lightweight TTS backend: {tts_backend}")
 
 piper_threads = int(os.environ["PIPER_THREADS"])
+piper_cpu_mem_arena = os.environ.get("PIPER_CPU_MEM_ARENA", "1") == "1"
 tts_voice = os.environ["TTS_VOICE"]
 tts_translation_voice = os.environ["TTS_TRANSLATION_VOICE"]
 

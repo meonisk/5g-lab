@@ -70,6 +70,10 @@ def save_recording_turn(call_id, pcm8, transcript, result, speaker):
         "audio_sha256": result["audio_sha256"],
         "transcript_chars": len(transcript),
         "normalization_applied": result.get("normalization_applied", False),
+        "transcript_kind": result.get(
+            "transcript_kind",
+            "llm_normalized" if result.get("normalization_applied") else "unavailable",
+        ),
         "raw_transcript_chars": result.get("transcript_chars"),
         "normalization_processing_ms": result.get("normalization_processing_ms"),
         "detected_language": result.get("detected_language"),

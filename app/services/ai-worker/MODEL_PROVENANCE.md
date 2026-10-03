@@ -1,5 +1,9 @@
 # Local STT model provenance
 
+Дополнительные CPU-профили используют OPUS-MT int8 и закреплённые Whisper
+base/tiny: [происхождение и измерения](../../../docs/cpu-ai-profiles.md).
+Параметры — `app/config/ai-profiles.json`; это отдельные экспериментальные условия.
+
 The current translation profile uses Unsloth Qwen3-4B-Instruct-2507 Q4_K_M
 through Ollama. `app/config/lab.env` pins the GGUF URL/revision and full SHA-256;
 the model initializer verifies the file before importing the configured tag.

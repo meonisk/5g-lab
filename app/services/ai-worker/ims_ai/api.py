@@ -30,6 +30,8 @@ def events():
             model_revision=settings.model_revision,
             device=settings.device,
             streaming_enabled=settings.streaming_enabled,
+            translation_backend=settings.translation_backend,
+            transcript_normalization=settings.transcript_normalization,
             model_error=runtime.model_error,
             queue_depth=runtime.work.qsize(),
             media_queue_depth=runtime.work.qsize(),

@@ -22,12 +22,18 @@ def load_model():
             compute_type=settings.compute_type,
             download_root=os.environ["AI_MODEL_CACHE"],
             revision=settings.model_revision,
+            cpu_threads=settings.stt_cpu_threads,
         )
         # Consume the lazy iterator: construction alone leaves first-inference
         # initialization on the caller's critical path.
         segments, _ = model.transcribe(np.zeros(16000, dtype=np.float32), language="ru")
         list(segments)
-        warm_llm()
+        if settings.translation_backend == "opus-mt":
+            from .translation import load_translation_models
+
+            load_translation_models()
+        if settings.translation_backend == "llm" or settings.transcript_normalization == "llm":
+            warm_llm()
         runtime.model = model
         print(
             f"AI model_ready backend={settings.backend} model={settings.model_size} device={settings.device} "

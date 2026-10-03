@@ -1,0 +1,55 @@
+{
+  "baseline": {
+    "AI_TRANSLATION_BACKEND": "llm",
+    "AI_TRANSCRIPT_NORMALIZATION": "llm"
+  },
+  "balanced": {
+    "VOICE_AGENT_MAX_CALLS": "2",
+    "PIPER_CPU_MEM_ARENA": "0",
+    "VOICE_AGENT_MEMORY_LIMIT": "768m",
+    "AI_TRANSLATION_BACKEND": "opus-mt",
+    "AI_TRANSCRIPT_NORMALIZATION": "raw",
+    "LLM_MODEL": "opus-mt-ru-en+en-ru-int8",
+    "AI_MODEL_SIZE": "small",
+    "AI_MODEL_REVISION": "536b0662742c02347bc0e980a01041f333bce120",
+    "AI_WORKER_MEMORY_LIMIT": "2g",
+    "AI_WORKER_CPU_LIMIT": "3.0",
+    "AI_STT_CPU_THREADS": "2",
+    "AI_TRANSLATION_THREADS": "2",
+    "AI_PROCESSING_WORKERS": "1",
+    "TTS_BACKEND": "piper",
+    "PIPER_THREADS": "1"
+  },
+  "compact": {
+    "VOICE_AGENT_MAX_CALLS": "2",
+    "PIPER_CPU_MEM_ARENA": "0",
+    "VOICE_AGENT_MEMORY_LIMIT": "768m",
+    "AI_TRANSLATION_BACKEND": "opus-mt",
+    "AI_TRANSCRIPT_NORMALIZATION": "raw",
+    "LLM_MODEL": "opus-mt-ru-en+en-ru-int8",
+    "AI_MODEL_SIZE": "base",
+    "AI_MODEL_REVISION": "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66",
+    "AI_WORKER_MEMORY_LIMIT": "1536m",
+    "AI_WORKER_CPU_LIMIT": "2.0",
+    "AI_STT_CPU_THREADS": "2",
+    "AI_TRANSLATION_THREADS": "2",
+    "AI_PROCESSING_WORKERS": "1",
+    "TTS_BACKEND": "piper",
+    "PIPER_THREADS": "1"
+  },
+  "minimal": {
+    "VOICE_AGENT_MAX_CALLS": "2",
+    "AI_TRANSLATION_BACKEND": "opus-mt",
+    "AI_TRANSCRIPT_NORMALIZATION": "raw",
+    "LLM_MODEL": "opus-mt-ru-en+en-ru-int8",
+    "AI_MODEL_SIZE": "tiny",
+    "AI_MODEL_REVISION": "d90ca5fe260221311c53c58e660288d3deb8d356",
+    "AI_WORKER_MEMORY_LIMIT": "1g",
+    "AI_WORKER_CPU_LIMIT": "2.0",
+    "AI_STT_CPU_THREADS": "1",
+    "AI_TRANSLATION_THREADS": "1",
+    "AI_PROCESSING_WORKERS": "1",
+    "TTS_BACKEND": "espeak-ng",
+    "VOICE_AGENT_MEMORY_LIMIT": "256m"
+  }
+}

@@ -27,7 +27,9 @@ def record_transcript(ulaw, event, result, transcript, detected_language):
         )
     else:
         speaker = "caller"
-    if transcript:
+    if transcript and settings.transcript_normalization == "raw":
+        result.update({"normalization_applied": False, "transcript_kind": "raw_asr"})
+    elif transcript:
         try:
             normalized_transcript, normalization_ms = normalize_transcript(
                 transcript, detected_language

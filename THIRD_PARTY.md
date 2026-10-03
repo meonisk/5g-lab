@@ -10,6 +10,7 @@ whole project.
 | docker_open5gs configuration and init sources | [Provenance](app/infrastructure/vendor/docker_open5gs/PROVENANCE.md), [upstream license](app/infrastructure/vendor/docker_open5gs/LICENSE) |
 | STT package and model | [Model provenance](app/services/ai-worker/MODEL_PROVENANCE.md), service requirements and Dockerfile |
 | Qwen GGUF and optional model alternatives | URL and SHA-256 in `app/config/lab.env`; [model guide](docs/local-models.md) |
+| Helsinki-NLP OPUS-MT RU→EN / EN→RU и SentencePiece | Закреплённые ревизии, заявленные CC-BY-4.0 / Apache-2.0 и конверсия: [CPU-профили](docs/cpu-ai-profiles.md); manifests создаются вместе с весами |
 | Piper engine and RU/EN voice models | Pinned downloads in the Voice Agent build and public configuration; [voice guide](docs/configuration.md) |
 | Infrastructure images and Python dependencies | Image references in `app/config/lab.env`, Dockerfiles and `requirements*.txt` |
 | FFmpeg extra codec package, OpenCORE AMR and VisualOn AMR-WB | Debian `libavcodec-extra59` and dependencies installed in RTPengine; package copyright files remain under `/usr/share/doc/` in the built image |

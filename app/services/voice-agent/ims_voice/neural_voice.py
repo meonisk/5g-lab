@@ -21,6 +21,7 @@ def load_voice(voice):
         options = onnxruntime.SessionOptions()
         options.intra_op_num_threads = runtime.piper_threads
         options.inter_op_num_threads = 1
+        options.enable_cpu_mem_arena = runtime.piper_cpu_mem_arena
         model_path = runtime.piper_voices[voice]["path"]
         with open(model_path + ".json", encoding="utf-8") as source:
             config = PiperConfig.from_dict(json.load(source))

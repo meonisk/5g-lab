@@ -1,5 +1,8 @@
 # Локальные модели и задержка
 
+Переключаемые режимы без GPU с OPUS-MT вместо Qwen, измерения памяти и
+скорости: [CPU-профили](cpu-ai-profiles.md).
+
 Рабочая конфигурация — `app/config/lab.env`. LLM: **Unsloth
 Qwen3-4B-Instruct-2507 Q4_K_M**, без thinking; inference выполняет Ollama.
 Unsloth здесь поставщик квантованных весов, не отдельный inference-сервер.

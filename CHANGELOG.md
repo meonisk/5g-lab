@@ -9,6 +9,11 @@ milestones; they are not release tags or scientific benchmark results.
 
 ## [Unreleased]
 
+- feat: добавлены переключаемые CPU-профили с локальным OPUS-MT int8 вместо
+  Qwen, raw-транскрипцией и Whisper small/base/tiny; исходный режим сохранён.
+- perf: добавлено отключение ONNX memory arena для Piper в CPU-профилях;
+  измерения STT, перевода и озвучки оформлены отдельно от телефонного SLA.
+
 - docs: add an app navigation map and infrastructure/config/test guides;
   name the active core Compose file `core-oai.yml` and distinguish the Open5GS rollback.
 

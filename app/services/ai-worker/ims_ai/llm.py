@@ -52,6 +52,10 @@ def conversation_for(call_id: str) -> dict:
 
 
 def generate_reply(call_id, transcript, service_mode):
+    if settings.translation_backend == "opus-mt":
+        from .translation import translate
+
+        return translate(transcript, service_mode)
     messages = [
         {"role": "system", "content": prompt_for(service_mode)},
         *conversation_for(call_id)["messages"],
@@ -63,6 +67,8 @@ def generate_reply(call_id, transcript, service_mode):
 
 def repair_translation_language(text, service_mode):
     """Одна попытка исправить язык; окончательное решение принимает языковой барьер."""
+    if settings.translation_backend != "llm":
+        raise ValueError("Перевод не прошёл языковой барьер; fallback к LLM отключён")
     if service_mode == "interpret_en":
         prompt = (
             "Перепиши перевод полностью на русском языке и только кириллицей. "

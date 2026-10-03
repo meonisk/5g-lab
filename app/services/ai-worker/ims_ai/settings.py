@@ -54,6 +54,19 @@ device = os.environ["AI_DEVICE"]
 
 compute_type = os.environ["AI_COMPUTE_TYPE"]
 
+stt_cpu_threads = int(os.environ.get("AI_STT_CPU_THREADS", "4"))
+translation_backend = os.environ.get("AI_TRANSLATION_BACKEND", "llm")
+transcript_normalization = os.environ.get("AI_TRANSCRIPT_NORMALIZATION", "llm")
+translation_model_root = os.environ.get("AI_TRANSLATION_MODEL_ROOT", "/translation-models")
+translation_threads = int(os.environ.get("AI_TRANSLATION_THREADS", "2"))
+translation_beam_size = int(os.environ.get("AI_TRANSLATION_BEAM_SIZE", "4"))
+if translation_backend not in {"llm", "opus-mt"}:
+    raise ValueError("Неизвестный backend перевода")
+if transcript_normalization not in {"llm", "raw"}:
+    raise ValueError("Неизвестный режим транскрипции")
+if min(stt_cpu_threads, translation_threads, translation_beam_size) < 1:
+    raise ValueError("Число потоков должно быть положительным")
+
 language = os.environ["AI_LANGUAGE"]
 
 llm_url = os.environ["LLM_URL"]
@@ -115,6 +128,8 @@ service_modes = {
     "interpret_ru",
     "interpret_en",
 }
+if translation_backend == "opus-mt":
+    service_modes.discard("assistant")
 
 voice_agent_url = os.environ["VOICE_AGENT_URL"].rstrip("/")
 
