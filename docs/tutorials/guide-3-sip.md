@@ -161,8 +161,8 @@ python app/tests/integration/verify_phone_codecs.py
 
 Отдельно SIP-серверы не устанавливаются: их собирает и запускает общий launcher.
 Не запускайте фрагменты Compose самостоятельно — сети, тома и пути задаёт главная
-конфигурация ([docker-compose.yml](../docker-compose.yml) или
-[compose.partner.yml](../compose.partner.yml)).
+конфигурация ([docker-compose.yml](../../docker-compose.yml) или
+[compose.partner.yml](../../compose.partner.yml)).
 
 Локальный стенд (OAI + IMS, без AI):
 
@@ -198,8 +198,8 @@ python scripts/start_partner.py --ims-only
 
 Dockerfile S-CSCF проверяет коммит Kamailio `9874599e…`, SHA-256 исходного
 `lookup.c` и патча до применения. Происхождение и лицензии —
-[kamailio-scscf-provenance.md](kamailio-scscf-provenance.md),
-[THIRD_PARTY.md](../THIRD_PARTY.md).
+[kamailio-scscf-provenance.md](../kamailio-scscf-provenance.md),
+[THIRD_PARTY.md](../../THIRD_PARTY.md).
 
 ## 3. Настройка серверов
 
@@ -247,7 +247,7 @@ Dockerfile S-CSCF проверяет коммит Kamailio `9874599e…`, SHA-25
 
 ### 3.4. iFC: когда S-CSCF вызывает AS
 
-Шаблон [default_ifc.xml](../app/infrastructure/vendor/docker_open5gs/pyhss/default_ifc.xml)
+Шаблон [default_ifc.xml](../../app/infrastructure/vendor/docker_open5gs/pyhss/default_ifc.xml)
 применяется к каждому абоненту при provisioning. Действующее правило: исходящий
 (`SessionCase 0`) `INVITE`, приоритет 30, сервер
 `sip:as.<домен>:<SIP_AS_PORT>;transport=udp`, `DefaultHandling 0` — при
@@ -256,7 +256,7 @@ Dockerfile S-CSCF проверяет коммит Kamailio `9874599e…`, SHA-25
 
 ## 4. Абоненты в HSS
 
-Абонентов создаёт [provision-ims-subscribers.sh](../scripts/provision-ims-subscribers.sh)
+Абонентов создаёт [provision-ims-subscribers.sh](../../scripts/provision-ims-subscribers.sh)
 (его вызывают `start_lab.py` и `start_partner.py`). Скрипт работает через REST API
 PyHSS по отдельной management-сети и создаёт:
 
@@ -294,7 +294,7 @@ production Ki как Digest-пароль не применять.
 
 Контейнеры `lab-sipue1`/`lab-sipue2` (образ `lab-pjsua`) делят сетевое пространство
 с эмулированными UE (`network_mode: service:ue1`). Скрипт
-[sip-ue-run.sh](../scripts/sip-ue-run.sh):
+[sip-ue-run.sh](../../scripts/sip-ue-run.sh):
 
 1. ждёт TUN UERANSIM с адресом из `IMS_UE_CIDR`;
 2. ставит маршруты `/32` к `PCSCF_IP` и `RTPENGINE_IP` через этот TUN — SIP и RTP
@@ -378,14 +378,14 @@ docker run --rm lab-sipp-aka:3.7.7-opc -v
 ```
 
 Ожидается строка `SIPp v3.7.7-TLS-SCTP-PCAP-SHA256` (код выхода 1 для `-v` — норма).
-Происхождение и контрольные суммы — [sipp-aka-provenance.md](sipp-aka-provenance.md).
+Происхождение и контрольные суммы — [sipp-aka-provenance.md](../sipp-aka-provenance.md).
 
 Как устроен AKA-вызов: один процесс SIPp **на каждое UE**, один UDP-сокет
 (`-t u1 -users 1 -m 2`). Первый «вызов» сценария выполняет REGISTER с AKA, второй —
 INVITE с новым Call-ID и маршрутом из Service-Route. Вызываемая сторона принимает
 INVITE тем же сокетом через `-oocsf`. RTP передаёт отдельный помощник в сети UE.
 Ключи попадают только в приватные сгенерированные XML, не в командную строку
-и не в трассы. Подробности — [aka-continuous-client-spike.md](aka-continuous-client-spike.md).
+и не в трассы. Подробности — [aka-continuous-client-spike.md](../aka-continuous-client-spike.md).
 
 Параметры SIPp в `lab.env`: `SIP_AKA_PORT` (5062), `SIP_AKA_MEDIA_PORT` (4000),
 `SIP_AKA_CALL_SECONDS` (20), `SIP_AKA_TIMEOUT_SECONDS` (35), `SIP_AKA_EXPIRY_SECONDS`
@@ -419,7 +419,7 @@ INVITE тем же сокетом через `-oocsf`. RTP передаёт от
   телефон их требует, нужна реализация PRACK/UPDATE и согласования QoS.
 - Для телефона нужен Android с 5G SA и VoNR в диапазоне партнёров, IMS и AMR/AMR-WB;
   программируемая USIM/ISIM с согласованными IMS-идентификаторами. Операторскую SIM
-  нельзя скопировать в HSS. Подробнее — [native-phone.md](native-phone.md).
+  нельзя скопировать в HSS. Подробнее — [native-phone.md](../native-phone.md).
 - `python scripts/phone_readiness.py` только читает серверные возможности;
   `NOT_READY` ожидаем до приёмки телефона.
 

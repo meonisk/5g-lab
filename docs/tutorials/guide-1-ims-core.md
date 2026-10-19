@@ -280,7 +280,7 @@ python scripts/quality/check.py
 
 Подсети Docker, IMS и internet не должны пересекаться с LAN/VPN машины. При смене
 LAN меняйте **все** статические адреса согласованно. Полный перечень всех 246
-параметров — [lab-env-reference.md](lab-env-reference.md).
+параметров — [lab-env-reference.md](../lab-env-reference.md).
 
 Создать недостающие ключи и конфигурации OAI (существующие ключи сохраняются):
 
@@ -336,7 +336,7 @@ PDU-сессии internet и ims, DNS и маршруты к IMS работаю�
   только для internet-пула и ставит маршрут к IMS-шлюзу. Healthcheck UPF
   проверяет TUN и UDP-слушатели N3/N4, но не прохождение RTP.
 - **SMF.** Выдаёт DNS и P-CSCF из `DNS_IP` и `PCSCF_IP`. Шаблон закреплён в
-  [oai_config.py](../scripts/oai_config.py); SBI работает по HTTP/1.1
+  [oai_config.py](../../scripts/oai_config.py); SBI работает по HTTP/1.1
   (обход ошибки обработчика HTTP/2 в OAI 2.2.1), таймаут — `OAI_HTTP_TIMEOUT_MS`.
   Отсутствующий SD хранится в подписке как `FFFFFF`.
 - **UE.** UERANSIM создаёт отдельный TUN (`uesimtun*`) на каждую PDU-сессию.
@@ -380,7 +380,7 @@ AMF). Новые профили имеют независимые 5GS- и IMS-к
 работающее ядро OAI, радиосеть и абоненты, а мы ставим рядом только свою часть:
 DNS, PyHSS/MySQL, P/I/S-CSCF, RTPengine, SIP AS и AI. Наше ядро, gNB и UE
 в этом варианте **не запускаются**. Состав задаёт
-[compose.partner.yml](../compose.partner.yml).
+[compose.partner.yml](../../compose.partner.yml).
 
 ### 6.1. Как это понимать: три слоя
 
@@ -478,7 +478,7 @@ smf:
 **4. Без NAT для IMS-пула.** Если UPF делает SNAT (`enable_snat: yes`), IMS-трафик
 придёт к нам с адреса UPF, а SIP/SDP будут содержать адрес UE — звонок сломается.
 NAT допускается только для internet-пула. Так сделано в нашем локальном стенде:
-общий SNAT выключен, а [oai-upf-network.sh](../scripts/oai-upf-network.sh)
+общий SNAT выключен, а [oai-upf-network.sh](../../scripts/oai-upf-network.sh)
 добавляет `MASQUERADE` только для `INTERNET_UE_CIDR`.
 
 **5. Маршрут N6 → наша LAN.** UPF (или маршрутизатор за его N6) должен знать, что

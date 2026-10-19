@@ -171,13 +171,13 @@ flowchart LR
 ### Как вызов попадает в AI
 
 1. Для каждого абонента PyHSS хранит iFC
-   ([default_ifc.xml](../app/infrastructure/vendor/docker_open5gs/pyhss/default_ifc.xml)):
+   ([default_ifc.xml](../../app/infrastructure/vendor/docker_open5gs/pyhss/default_ifc.xml)):
    исходящий (`SessionCase 0`) `INVITE` с приоритетом 30 отправляется на
    `sip:as.<IMS_DOMAIN>:<SIP_AS_PORT>`. DNS разрешает `as.<домен>` в `SIP_AS_IP`.
 2. `DefaultHandling 0` — продолжить сессию при недоступности AS. Поэтому
    **обычный разговор абонентов продолжается при отказе AI**; услуги AI при этом,
    конечно, не работают.
-3. SIP AS ([routing.py](../app/services/sip-as/ims_sip/routing.py)) сравнивает
+3. SIP AS ([routing.py](../../app/services/sip-as/ims_sip/routing.py)) сравнивает
    номер назначения с номерами услуг. Для обычного номера он пропускает вызов
    дальше и только включает наблюдение; для номера услуги соединяет вызов
    с Voice Agent.
@@ -243,7 +243,7 @@ local/private/recordings/<session-id>/
   В `baseline` при успешной нормализации — `llm_normalized`.
 - Облегчённые режимы допускают максимум **два активных голосовых вызова**
   (одна двусторонняя пара); `baseline` — технический предел 100.
-- Варианты описаны в [ai-profiles.json](../app/config/ai-profiles.json).
+- Варианты описаны в [ai-profiles.json](../../app/config/ai-profiles.json).
 
 Измерения на i5-12400F без GPU, фразы около 6,5 с (медианы):
 
@@ -428,7 +428,7 @@ PJSUA на стороне абонента), журналы, метаданны�
 | Ресурсы | `*_CPU_LIMIT`, `*_MEMORY_LIMIT` |
 
 **Смена LLM** — три значения: `LLM_MODEL`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256`
-(пример для Gemma 3 4B — в [local-models.md](local-models.md)). Затем пересоздать
+(пример для Gemma 3 4B — в [local-models.md](../local-models.md)). Затем пересоздать
 загрузчик, LLM и AI Worker. Проверка: `docker exec lab-llm-worker ollama ps`.
 
 **GPU (NVIDIA)** — только в локальном `local/secrets/ims.env`:
@@ -483,7 +483,7 @@ CPU-режимы `compose_ai.py` всегда принудительно отк�
 Потоковый режим (`AI_STREAMING_ENABLED=1`, только для 1005/1006) существует, но
 **выключен по умолчанию и не принят**: в прогонах либо задержка выходила за 1–3 с,
 либо терялась полнота текста. Не включайте его для реальных разговоров. Подробнее —
-[streaming.md](streaming.md).
+[streaming.md](../streaming.md).
 
 Метрика эксперимента `speech_end_to_first_rtp_ms` измеряет время до отправки
 первого RTP перевода, а не до динамика телефона. Порог проверки —
