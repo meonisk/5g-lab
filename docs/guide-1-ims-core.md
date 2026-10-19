@@ -5,6 +5,10 @@
 Работа AI поверх IMS описана во [втором туториале](guide-2-ims-ai.md),
 установка и настройка SIP-серверов и клиентов — в [третьем](guide-3-sip.md).
 
+**Ядро уже работает у партнёров?** Сразу переходите к [разделу 6](#6-вариант-б-подключение-ims--ai--sip-к-уже-работающему-ядру):
+там по шагам объяснено, как связаны ядро, SIP и AI, что поменять в их OAI,
+что заполнить у нас и как проверить каждый шаг вызова.
+
 Все команды выполняются из корня репозитория (папка с `README.md`,
 `docker-compose.yml`, `app/` и `scripts/`).
 
@@ -211,102 +215,248 @@ AMF). Новые профили имеют независимые 5GS- и IMS-к
   к OAI UDR его не применять.
 - Ключи настоящих SIM передаются по защищённому каналу, не через документацию.
 
-## 6. Вариант Б: IMS подключается к OAI другого проекта
+## 6. Вариант Б: подключение IMS + AI + SIP к уже работающему ядру
 
-Передаётся только наша часть: DNS, PyHSS/MySQL, P/I/S-CSCF, RTPengine и AI.
-Ядро, RAN и UE остаются у партнёров. Состав задаёт
-[compose.partner.yml](../compose.partner.yml) — те же определения IMS/AI, что
-в локальном стенде, без OAI, gNB и UE.
+Этот раздел — пошаговая инструкция для случая, когда у партнёров уже есть
+работающее ядро OAI, радиосеть и абоненты, а мы ставим рядом только свою часть:
+DNS, PyHSS/MySQL, P/I/S-CSCF, RTPengine, SIP AS и AI. Наше ядро, gNB и UE
+в этом варианте **не запускаются**. Состав задаёт
+[compose.partner.yml](../compose.partner.yml).
 
-### 6.1. Выбрать схему
+### 6.1. Как это понимать: три слоя
 
-| Схема | Что запускать | Условие |
-| --- | --- | --- |
-| OAI партнёров и наш IMS на одной Linux ВМ | `compose.partner.yml` | N6 их UPF должен достигать LAN macvlan; общий хост сам маршруты не создаёт |
-| OAI и IMS на разных ВМ | `compose.partner.yml` | Общая LAN/VLAN, маршруты в обе стороны, разрешены дополнительные MAC на vSwitch |
+Самая частая ошибка — ожидать, что IMS «подключается к ядру» каким-то
+специальным интерфейсом. Это не так. Связь устроена слоями:
 
-Ограничения сети:
+| Слой | Что передаёт | Кто отвечает | Что видит соседний слой |
+| --- | --- | --- | --- |
+| **1. Ядро 5G (IP-транспорт)** | Только IP-пакеты UE. Выдаёт UE адрес из IMS-пула, сообщает адреса DNS и P-CSCF, отправляет пакеты через UPF (N6) в нашу LAN | Партнёры (их OAI) | Ядро не разбирает SIP и не знает про AI |
+| **2. IMS (SIP-сигнализация)** | REGISTER, INVITE, BYE между UE и нашими CSCF; аутентификация через наш HSS; вызов SIP AS по iFC | Мы (Kamailio, PyHSS) | Для ядра SIP — просто UDP/TCP на порт 5060 нашего P-CSCF |
+| **3. Медиа и AI (RTP и речь)** | Звук UE ↔ RTPengine; копия звука в AI; синтезированный ответ обратно | Мы (RTPengine, SIP AS, Media Adapter, AI Worker, Voice Agent) | Для ядра RTP — просто UDP на порты 30000–30100 RTPengine |
 
-- Партнёрский вариант использует **macvlan**: контейнеры получают собственные
-  адреса в LAN. Нужен Linux и rootful Docker; Docker Desktop под Windows этим
-  сценарием не покрыт.
-- Хост не видит свои macvlan-контейнеры напрямую. Связность с хоста не равна
-  связности с UE.
-- Нельзя запускать локальный и партнёрский составы на одном Docker daemon:
-  имена контейнеров и томов общие.
+Отсюда правило: **со стороны ядра нужны только IP-сессия, адреса DNS/P-CSCF и
+маршруты в обе стороны без NAT**. Нашему IMS не нужен доступ к SQL ядра, NRF,
+N2/N3/N4; ядру не нужен доступ к нашим Cx, SQL, RTPengine NG и AI HTTP.
+5GS-ключи абонентов остаются у партнёров (UDR и SIM); IMS-ключи — у нас (PyHSS)
+и в IMS-клиенте/ISIM.
 
-### 6.2. Согласовать параметры
+### 6.2. Один вызов с начала до конца
 
-| Параметры | Кто и что делает |
+Так выглядит вызов абонента на номер перевода 1003 через ядро партнёров.
+Каждая строка — место, где можно проверить работу (раздел 6.7).
+
+| Шаг | Что происходит | Слой | Где это задано |
+| --- | --- | --- | --- |
+| 1 | UE регистрируется в 5G и открывает PDU-сессию DNN `ims`, получает адрес, например `10.46.0.5` | 1 | OAI партнёров: DNN и пул в SMF, подписка в UDR |
+| 2 | SMF сообщает UE DNS `172.22.0.100` и P-CSCF `172.22.0.106` | 1 | SMF партнёров: `ue_dns`, `ims.pcscf_ipv4` |
+| 3 | UE отправляет SIP REGISTER на P-CSCF; пакет идёт gNB → UPF → N6 → наша LAN | 1 → 2 | Маршрут N6 → `LAB_NETWORK_CIDR` у партнёров |
+| 4 | P-CSCF → I-CSCF (по DNS-домену) → запрос в HSS (Cx) → S-CSCF | 2 | Наш DNS, PyHSS |
+| 5 | S-CSCF отвечает `401` с challenge, UE повторяет REGISTER с ответом, получает `200 OK` | 2 | Ключи абонента в PyHSS и в клиенте/ISIM |
+| 6 | Ответы идут обратно к `10.46.0.5`: наши контейнеры отправляют их на `IMS_ROUTE_GATEWAY`, дальше в UPF | 2 → 1 | Маршрут `IMS_UE_CIDR via IMS_ROUTE_GATEWAY` у нас и маршрут к пулу у шлюза |
+| 7 | UE звонит на 1003: INVITE → P-CSCF. P-CSCF через RTPengine подменяет адрес медиа в SDP на `172.22.0.101:<порт>` | 2 → 3 | P-CSCF `rtpengine_manage()` |
+| 8 | S-CSCF по iFC отправляет исходящий INVITE на `as.<домен>:5070` (SIP AS) | 2 | `default_ifc.xml` в PyHSS |
+| 9 | SIP AS видит номер услуги, отвечает от имени Voice Agent, сообщает Media Adapter и Voice Agent Call-ID | 2 → 3 | `VOICE_*_MSISDN` в `lab.env` |
+| 10 | Звук UE: UE → UPF → RTPengine. Media Adapter берёт копию, отправляет в AI Worker окнами по 100 мс | 3 | Порты `RTPENGINE_PORT_MIN`–`MAX` |
+| 11 | AI Worker: реплика по паузе → STT → перевод; Voice Agent синтезирует голос | 3 | Режим AI ([туториал 2](guide-2-ims-ai.md)) |
+| 12 | Voice Agent отправляет PCMU на RTPengine, тот — на `10.46.0.5` через шлюз и UPF; UE слышит перевод | 3 → 1 | Тот же обратный маршрут, что в шаге 6 |
+
+Для обычного вызова 1001 → 1002 шаги 8–9 другие: SIP AS лишь наблюдает и
+пересылает INVITE обратно в S-CSCF, звук идёт UE ↔ RTPengine ↔ UE. Если AS или AI
+недоступны, обычный вызов продолжается (`DefaultHandling 0` в iFC).
+
+Важное следствие шага 7: SIP AS **отклоняет вызов на номер услуги**, если адрес
+медиа в SDP — не RTPengine. Поэтому UE должен попадать в IMS только через наш
+P-CSCF; обход P-CSCF не работает.
+
+### 6.3. Выбрать сетевую схему
+
+Наши контейнеры подключаются к LAN партнёров через **macvlan**: у каждого свой
+адрес в этой LAN, как у отдельной машины.
+
+| Схема | Условие |
 | --- | --- |
-| `MCC`, `MNC`, `IMS_DOMAIN` | Согласовать PLMN и домашний IMS-домен |
-| `IMS_DNN`, `IMS_UE_CIDR`, S-NSSAI | Партнёры разрешают DNN абонентам, выдают IPv4 PDU из пула, сообщают SST/SD |
-| `LAB_NETWORK_CIDR`, `LAB_DYNAMIC_IP_RANGE` | Выделенная LAN/VLAN; диапазон Docker исключить из DHCP, статические IP зарезервировать |
-| `IMS_PARENT_INTERFACE` | Интерфейс Linux в этой LAN (имя из `ip link`) |
-| `IMS_ROUTE_GATEWAY` | Next hop в этой LAN к IMS-пулу UE: UPF или маршрутизатор |
-| `DNS_IP`, `PCSCF_IP` | Партнёры вписывают их в настройки DNS/P-CSCF своего SMF |
-| `INTERNET_UE_CIDR` | Реальный internet-пул партнёров (к нему тоже ставится обратный маршрут) |
-| `RTPENGINE_IP`, `RTPENGINE_PORT_MIN`–`MAX` | Маршрут UE ↔ RTPengine в обе стороны, без NAT/SIP ALG |
-| `UE*_IMSI`, `UE*_MSISDN` | Два тестовых IMS-абонента; IMPI/IMPU и домен совпадают с клиентом |
-| `UE*_IMS_K/OPC/AMF` | Согласовать с IMS-клиентом/ISIM по защищённому каналу |
+| OAI партнёров и наш IMS на разных Linux-машинах/ВМ | Общая LAN/VLAN; на vSwitch разрешены дополнительные MAC; маршруты в обе стороны |
+| OAI партнёров и наш IMS на одной Linux ВМ | N6 их UPF должен достигать LAN macvlan. Хост сам не видит свои macvlan-контейнеры: нужен общий L2-сегмент или маршрутизатор |
 
-5GS-ключи партнёров остаются в их UDR и SIM; нашей части они не нужны.
-Параметры IMS/P-CSCF в SMF сверяйте с
-[документацией OAI](https://github.com/openairinterface/oai-cn5g-fed/blob/master/docs/CONFIGURATION.md)
-для их версии.
+Ограничения: только Linux и rootful Docker (Docker Desktop под Windows этот вариант
+не покрывает); нельзя запускать локальный стенд и партнёрский состав на одном
+Docker daemon — имена контейнеров и томов общие.
 
-Пример адресного плана для выделенной LAN `172.22.0.0/24` (не готовые адреса
-другого проекта): сервисы `.100`–`.110`, динамический диапазон `.128/25`, шлюз
-к IMS-пулу, например `.1`. В OAI партнёров: IMS DNN, IMS-пул, DNS `172.22.0.100`,
-P-CSCF `172.22.0.106`.
+### 6.4. Что сделать на стороне ядра партнёров
 
-### 6.3. Порты на границе
+Это изменения в **их** OAI. Наши скрипты ядро партнёров не меняют.
+
+**1. DNN `ims` с отдельным пулом.** В конфигурации OAI (формат v2.x):
+
+```yaml
+dnns:
+  - dnn: "internet"
+    pdu_session_type: "IPV4"
+    ipv4_subnet: "10.45.0.0/16"
+  - dnn: "ims"
+    pdu_session_type: "IPV4"
+    ipv4_subnet: "10.46.0.0/16"
+```
+
+DNN `ims` также должен быть в `smf_info` и `upf_info` для нужного S-NSSAI.
+
+**2. Адреса DNS и P-CSCF в SMF** — наши:
+
+```yaml
+smf:
+  ue_dns:
+    primary_ipv4: "172.22.0.100"
+    secondary_ipv4: "172.22.0.100"
+  ims:
+    pcscf_ipv4: "172.22.0.106"
+```
+
+Если тот же DNS нужен и для internet, следите, чтобы он был доступен из обоих пулов.
+
+**3. Подписка абонента.** В UDR у абонента разрешены DNN `ims` и S-NSSAI.
+Без этого UE получит только internet и в IMS не попадёт.
+
+**4. Без NAT для IMS-пула.** Если UPF делает SNAT (`enable_snat: yes`), IMS-трафик
+придёт к нам с адреса UPF, а SIP/SDP будут содержать адрес UE — звонок сломается.
+NAT допускается только для internet-пула. Так сделано в нашем локальном стенде:
+общий SNAT выключен, а [oai-upf-network.sh](../scripts/oai-upf-network.sh)
+добавляет `MASQUERADE` только для `INTERNET_UE_CIDR`.
+
+**5. Маршрут N6 → наша LAN.** UPF (или маршрутизатор за его N6) должен знать, что
+`LAB_NETWORK_CIDR` (например `172.22.0.0/24`) достижима через интерфейс N6.
+
+**6. Маршрут к IMS-пулу у шлюза.** Адрес, который мы укажем как
+`IMS_ROUTE_GATEWAY`, должен пересылать пакеты для `IMS_UE_CIDR` в UPF. Если это
+сам UPF в нашей LAN — достаточно пункта 5. Если маршрутизатор — на нём:
+
+```bash
+ip route add 10.46.0.0/16 via <адрес N6 UPF>
+```
+
+**7. Без SIP ALG и фильтров** на пути UE ↔ наша LAN для UDP/TCP 53, 5060 и
+UDP 30000–30100.
+
+После изменений партнёры перезапускают SMF/UPF по своей процедуре.
+
+### 6.5. Что заполнить у нас
+
+Все значения — в `app/config/lab.env`; ключи — в `local/secrets/ims.env`.
+
+| Параметр | Что вписать | Должно совпасть с |
+| --- | --- | --- |
+| `MCC`, `MNC` | PLMN партнёров | Их AMF/SMF и SIM |
+| `IMS_DOMAIN` | Согласованный домен, обычно `ims.mnc<MNC>.mcc<MCC>.3gppnetwork.org` | Настройки IMS-клиента/ISIM |
+| `IMS_DNN` | `ims` (или их имя) | DNN в SMF партнёров |
+| `IMS_UE_CIDR` | Их IMS-пул | `ipv4_subnet` DNN `ims` |
+| `INTERNET_UE_CIDR` | Их internet-пул | `ipv4_subnet` DNN `internet` |
+| `LAB_NETWORK_CIDR` | LAN/VLAN для наших контейнеров | Маршрут N6 у партнёров; не пересекается с пулами UE |
+| `LAB_DYNAMIC_IP_RANGE` | Свободный диапазон этой LAN, исключённый из DHCP | — |
+| `DNS_IP`, `PCSCF_IP`, `RTPENGINE_IP`, `*_IP` | Свободные статические адреса в этой LAN | `ue_dns` и `pcscf_ipv4` в SMF |
+| `IMS_PARENT_INTERFACE` | Имя интерфейса Linux в этой LAN (`ip -br link`) | — |
+| `IMS_ROUTE_GATEWAY` | Адрес в этой LAN, через который достижим IMS-пул (UPF или маршрутизатор) | Пункт 6 раздела 6.4 |
+| `UE1_IMSI`, `UE2_IMSI`, `UE1_MSISDN`, `UE2_MSISDN` | IMSI и номера двух тестовых абонентов | SIM/клиенты партнёров |
+| `UE*_IMS_K`, `UE*_IMS_OPC`, `UE*_IMS_AMF` (secrets) | IMS-ключи | IMS-клиент/ISIM; передаются защищённо |
+
+Что делают эти значения автоматически:
+
+- `IMS_ROUTE_GATEWAY` становится шлюзом macvlan-сети; init-скрипты DNS, P-CSCF,
+  S-CSCF и RTPengine ставят `ip route replace <IMS_UE_CIDR> via <IMS_ROUTE_GATEWAY>`,
+  P-CSCF и RTPengine — также маршрут к `INTERNET_UE_CIDR`. Указание шлюза **не
+  настраивает сам шлюз**: пункт 6 раздела 6.4 остаётся за партнёрами.
+- `start_partner.py --check` проверяет, что все адреса уникальны и лежат в
+  `LAB_NETWORK_CIDR`, шлюз в той же сети, а пул UE с ней не пересекается.
+- Provisioning создаёт абонентов в PyHSS с iFC на SIP AS.
+
+Пример адресного плана (не готовые адреса другого проекта):
+
+```dotenv
+LAB_NETWORK_CIDR=172.22.0.0/24
+LAB_DYNAMIC_IP_RANGE=172.22.0.128/25
+IMS_PARENT_INTERFACE=ens192
+IMS_ROUTE_GATEWAY=172.22.0.1
+DNS_IP=172.22.0.100
+RTPENGINE_IP=172.22.0.101
+PCSCF_IP=172.22.0.106
+IMS_UE_CIDR=10.46.0.0/16
+INTERNET_UE_CIDR=10.45.0.0/16
+```
+
+Здесь `172.22.0.1` — N6-сторона UPF или маршрутизатор к нему. При другой LAN
+меняйте **все** статические адреса сервисов.
+
+### 6.6. Запуск по шагам
+
+На Linux-машине с Docker 28+, Compose 2.33.1+, Python 3.12+:
+
+```bash
+python scripts/initialize_local.py --ims-only
+python scripts/start_partner.py --check
+```
+
+Ожидается `PARTNER CONFIG: VALID`. Затем только IMS (без AI), чтобы сначала
+проверить сигнализацию:
+
+```bash
+python scripts/start_partner.py --ims-only
+```
+
+Скрипт поднимает DNS, MySQL, PyHSS, I/S/P-CSCF и RTPengine, создаёт абонентов и
+iFC, ждёт Cx. Выполните проверки 6.7, шаги 1–5. Затем включите AI:
+
+```bash
+python scripts/start_partner.py
+```
+
+или CPU-режим без Qwen (после [подготовки OPUS](guide-2-ims-ai.md#42-compact-без-qwen-локальный-стенд)):
+
+```bash
+python scripts/compose_ai.py --mode compact --partner up -d --build
+python scripts/compose_ai.py --mode compact --partner ps
+```
+
+Обслуживание — только с явным файлом партнёрского состава:
+
+```bash
+docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml ps
+```
+
+Обычные `compose.ps1` / `compose.sh` относятся к локальному составу с OAI.
+Надпись `PARTNER SERVICES: STARTED` означает только запуск процессов.
+
+### 6.7. Проверка по шагам вызова
+
+Проверяйте по порядку; не переходите дальше, пока шаг не прошёл. Номера — шаги
+из таблицы 6.2. Команды `docker exec` выполняются на нашей машине.
+
+| Шаг | Что проверить | Как |
+| --- | --- | --- |
+| 1–2 | У UE есть IMS PDU-адрес из `IMS_UE_CIDR`, DNS и P-CSCF — наши | Журналы SMF партнёров; на UE — сведения о сессии `ims` |
+| 3 | Пакеты UE доходят до нас | `docker exec lab-pcscf ip route` (маршрут к пулу через шлюз); захват на P-CSCF: `docker exec lab-pcscf tcpdump -ni any port 5060` (если в образе есть tcpdump) или захват на `IMS_PARENT_INTERFACE` хоста |
+| 3 | DNS отвечает с адреса UE | С UE: запрос `pcscf.<IMS_DOMAIN>` к `DNS_IP` |
+| 4–5 | REGISTER завершается `200 OK` | `docker logs --tail 200 lab-pcscf` (затем `lab-icscf`, `lab-scscf`, `lab-pyhss`): видны REGISTER, `401` и `200` |
+| 6 | Ответы уходят к UE, а не теряются | Если UE видит повторы REGISTER без ответа — проверьте пункт 6 раздела 6.4 (маршрут к пулу у шлюза) |
+| 7 | Обычный вызов UE1 → UE2: INVITE/200/ACK/BYE, звук в обе стороны | `docker logs lab-rtpengine` — сессия с адресами обоих UE |
+| 8 | S-CSCF вызвал AS | `docker logs lab-sip-as`: `AS observed INVITE call_id=...` |
+| 9 | Вызов на 1003 попал в услугу | `docker logs lab-sip-as`: `AS terminated INVITE for voice agent ...`; при `AS rejected unanchored media` — медиа не через RTPengine (шаг 7) |
+| 10 | Звук дошёл до AI | `docker logs --since 2m lab-media-adapter lab-ai-worker` |
+| 11–12 | Ответ синтезирован и отправлен | `docker logs --since 2m lab-voice-agent`: `reason=greeting state=sent`, затем ответы; UE слышит приветствие и перевод |
+
+Затем: вызов на 1004 (запись появляется в `local/private/recordings/`), пара
+1005/1006, остановка AI при обычном вызове (звук не пропадает), повтор после
+перезапуска IMS и перерегистрации. SQN не сбрасывать.
+
+Если шаг не прошёл — ищите причину в слое этого шага (таблица 6.1): нет IP-сессии
+или маршрута — ядро и сеть; есть пакеты, но нет `200 OK` — IMS и ключи; есть
+вызов, нет звука или перевода — медиа и AI. Смена модели AI не исправит проблему
+ядра или SIP.
+
+Порты на границе (всё остальное — внутреннее и наружу не открывается):
 
 | Поток | Порты |
 | --- | --- |
 | UE → DNS | UDP/TCP 53 |
 | UE ↔ P-CSCF | `PCSCF_SIP_PORT` (5060), UDP/TCP |
 | UE ↔ RTPengine | UDP `RTPENGINE_PORT_MIN`–`RTPENGINE_PORT_MAX` (30000–30100) |
-
-Cx, SQL, управление RTPengine и HTTP AI — внутренние связи нашей части. Наружу их
-не открывать; в общей LAN партнёры ограничивают доступ средствами сети. PyHSS имеет
-отдельный management bridge для локального REST provisioning.
-
-### 6.4. Запустить
-
-1. На Linux-машине: Docker 28+, Compose 2.33.1+, Python 3.12+, LAN/VLAN и адреса.
-2. Заполнить `app/config/lab.env` по таблице 6.2. Для новых программных клиентов
-   создать только IMS-ключи:
-
-   ```bash
-   python scripts/initialize_local.py --ims-only
-   ```
-
-3. Проверить конфигурацию (контейнеры не запускаются):
-
-   ```bash
-   python scripts/start_partner.py --check
-   ```
-
-4. Поднять только IMS, создать абонентов и iFC, дождаться Cx. Ядро партнёров
-   не изменяется:
-
-   ```bash
-   python scripts/start_partner.py --ims-only
-   ```
-
-5. Проверить регистрацию и обычный вызов (раздел 7), затем включить AI
-   ([туториал 2](guide-2-ims-ai.md)).
-
-Обслуживание партнёрского состава — только с явным файлом:
-
-```bash
-docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml ps
-```
-
-Обычные `compose.ps1` / `compose.sh` адресуют локальный состав с OAI.
-Надпись `STARTED` означает готовность процессов; до звонков внешних UE интеграция
-остаётся `UNVERIFIED`.
 
 ## 7. Проверка связи IMS с ядром
 
@@ -336,15 +486,9 @@ python app/tests/integration/verify_pdu_recovery.py --ue 1
 TUN, проверяет маршруты SIP/RTP и новый `REGISTER 200`. Internet-сессия и
 второе UE не должны пострадать.
 
-### Внешнее ядро: приёмка по порядку
+### Внешнее ядро
 
-1. У UE есть IMS PDU, правильные DNS/P-CSCF, разрешённые DNN/S-NSSAI.
-2. DNS и P-CSCF доступны с адреса IMS PDU; обратный маршрут подтверждён.
-3. Два IMS REGISTER завершаются `200 OK` с ожидаемой аутентификацией.
-4. Вызов UE1 → UE2: INVITE/200/ACK/BYE и RTP в обе стороны через RTPengine.
-5. S-CSCF вызывает SIP AS по iFC.
-6. Повтор после перезапуска IMS и перерегистрации; SQN не сбрасывать.
-
+Проверка по шагам вызова — [раздел 6.7](#67-проверка-по-шагам-вызова).
 Локальные скрипты используют контейнеры `lab-ue*`/`lab-sipue*` и не проверяют
 телефоны партнёров. Для партнёрской приёмки нужны их UE, трассы на границах и
 протокол результатов: дата, версии, топология, команды, результат. `FAIL`
