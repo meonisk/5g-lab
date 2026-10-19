@@ -5,8 +5,135 @@
 позвонить с клиента и проверить регистрацию и вызов. Связь IMS с ядром 5G — в
 [первом туториале](guide-1-ims-core.md), AI-услуги — во [втором](guide-2-ims-ai.md).
 
-Все команды выполняются из корня репозитория. Требования к машине и установка
-Docker/Python — [туториал 1, раздел 2](guide-1-ims-core.md#2-подготовка-машины).
+Документ состоит из двух частей:
+
+- **Часть 1 — только команды.** Поднять SIP-серверы, зарегистрировать клиентов,
+  позвонить и проверить Digest и AKA.
+- **Часть 2 — разъяснения.** Состав серверов и клиентов, конфигурация, абоненты,
+  параметры PJSUA и SIPp, внешний клиент и телефон, диагностика.
+
+Все команды — из корня репозитория, в активированном `.venv`. Требования к машине
+и установка Docker/Python — [туториал 1, часть 1](guide-1-ims-core.md#а-локальный-стенд-наше-ядро-oai--ims).
+Команды Bash даны для Linux; на Windows `bash ...` запускайте в Git Bash,
+`./scripts/compose.sh` заменяйте на `./scripts/compose.ps1`.
+
+# Часть 1. Команды
+
+## А. Поднять SIP-серверы
+
+**Локальный стенд** (ядро + IMS + два SIP-клиента):
+
+```bash
+python scripts/initialize_local.py
+python scripts/start_lab.py --base-only
+```
+
+Ожидается `LOCAL 5G IMS BASE: READY`.
+
+**Или только IMS у ядра партнёров** (Linux, `lab.env` заполнен по
+[туториалу 1, вариант Б](guide-1-ims-core.md#б-ядро-уже-работает-у-партнёров-ставим-только-ims--ai)):
+
+```bash
+python scripts/initialize_local.py --ims-only
+python scripts/start_partner.py --check
+python scripts/start_partner.py --ims-only
+```
+
+## Б. Убедиться, что серверы работают
+
+```bash
+./scripts/compose.sh ps
+./scripts/compose.sh logs --tail 50 pcscf icscf scscf pyhss rtpengine dns
+```
+
+Контейнеры `lab-pcscf`, `lab-icscf`, `lab-scscf`, `lab-pyhss`, `lab-mysql`,
+`lab-rtpengine`, `lab-dns` — `Up`. У партнёров вместо `./scripts/compose.sh`:
+`docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml`.
+
+## В. Регистрация и звонок между клиентами PJSUA (локальный стенд)
+
+**1. Проверить регистрацию**
+
+```bash
+bash app/tests/integration/verify-ims-registration.sh
+```
+
+`PASS` — оба клиента (1001, 1002) зарегистрированы.
+
+**2. Позвонить 1001 → 1002 вручную**
+
+```bash
+docker exec lab-sipue1 sh -lc 'printf "m\nsip:1002@%s\n" "$IMS_DOMAIN" > /tmp/pjsua-control'
+sleep 10
+docker logs --tail 40 lab-sipue1
+docker logs --tail 40 lab-sipue2
+docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control'
+```
+
+У `lab-sipue1` — `200 OK` на INVITE, у `lab-sipue2` — входящий вызов с автоответом.
+
+**3. Автоматическая проверка вызова**
+
+```bash
+bash app/tests/integration/verify-ims-call.sh
+```
+
+**4. После перезапуска радиочасти** — пересоздать клиентов:
+
+```bash
+./scripts/compose.sh up -d --force-recreate sipue1 sipue2
+```
+
+## Г. Проверки IMS AKA с SIPp
+
+**1. Собрать клиент SIPp**
+
+```bash
+docker build -f app/infrastructure/images/sipp-aka/Dockerfile -t lab-sipp-aka:3.7.7-opc .
+docker run --rm lab-sipp-aka:3.7.7-opc -v
+```
+
+Ожидается `SIPp v3.7.7-TLS-SCTP-PCAP-SHA256` (код выхода 1 — норма).
+
+**2. Остановить AS/AI, если они запущены**
+
+```bash
+docker stop lab-sip-as lab-ai-worker lab-media-adapter lab-voice-agent
+```
+
+**3. Проверки** (строго по одной, на свободном стенде)
+
+```bash
+python app/tests/integration/verify_plain_call.py
+python app/tests/integration/verify_aka_registration.py
+python app/tests/integration/verify_aka_registration.py --bad-response
+python app/tests/integration/verify_aka_call.py
+python app/tests/integration/verify_aka_call.py --caller 2
+python app/tests/integration/verify_aka_lifecycle.py
+```
+
+В каждом результате `status` и `cleanup` — `PASS`.
+
+**4. Вернуть AS/AI**
+
+```bash
+./scripts/compose.sh up -d --no-deps --force-recreate sip-as ai-worker media-adapter voice-agent
+```
+
+## Д. Транскодирование кодеков телефона
+
+```bash
+python app/tests/integration/verify_phone_codecs.py
+```
+
+## Е. Пересобрать сервер после изменения конфигурации
+
+```bash
+./scripts/compose.sh build scscf rtpengine
+./scripts/compose.sh up -d --force-recreate pcscf icscf scscf rtpengine
+```
+
+# Часть 2. Разъяснения
 
 ## 1. Состав
 

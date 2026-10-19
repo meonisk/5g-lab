@@ -5,12 +5,171 @@
 Работа AI поверх IMS описана во [втором туториале](guide-2-ims-ai.md),
 установка и настройка SIP-серверов и клиентов — в [третьем](guide-3-sip.md).
 
-**Ядро уже работает у партнёров?** Сразу переходите к [разделу 6](#6-вариант-б-подключение-ims--ai--sip-к-уже-работающему-ядру):
-там по шагам объяснено, как связаны ядро, SIP и AI, что поменять в их OAI,
-что заполнить у нас и как проверить каждый шаг вызова.
+Документ состоит из двух частей:
+
+- **Часть 1 — только команды.** Выполните их по порядку и получите результат.
+- **Часть 2 — разъяснения.** Что запущено, как это устроено, как настроить,
+  проверить и починить.
 
 Все команды выполняются из корня репозитория (папка с `README.md`,
-`docker-compose.yml`, `app/` и `scripts/`).
+`docker-compose.yml`, `app/` и `scripts/`). Команды Bash даны для Linux; на
+Windows используйте PowerShell для Python и `.ps1`, Git Bash — для `bash ...`.
+
+# Часть 1. Команды
+
+## А. Локальный стенд: наше ядро OAI + IMS
+
+Нужны Git, Python 3.12+, Docker 28+ с Compose 2.33.1+ (Linux или Windows с
+Docker Desktop/WSL2).
+
+**1. Исходники и окружение**
+
+```bash
+git clone --branch master https://git.miem.hse.ru/2508/5g-lab.git
+cd 5g-lab
+docker info --format '{{.OSType}}'
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python scripts/quality/check.py
+```
+
+Ожидается `linux` и `TEAM OFFLINE CHECKS: PASS`.
+Windows: `python -m venv .venv`, затем `.\.venv\Scripts\Activate.ps1`.
+
+**2. Ключи и конфигурация**
+
+```bash
+python scripts/initialize_local.py
+./scripts/compose.sh config --quiet
+```
+
+Вторая команда ничего не печатает. Windows: `./scripts/compose.ps1 config --quiet`.
+
+**3. Запуск ядра и IMS**
+
+```bash
+python scripts/start_lab.py --base-only
+```
+
+Ожидается `LOCAL 5G IMS BASE: READY`.
+
+**4. Проверка** (по одной)
+
+```bash
+bash app/tests/integration/verify.sh
+bash app/tests/integration/verify-ims.sh
+bash app/tests/integration/verify-ims-registration.sh
+```
+
+Каждая заканчивается `PASS`. Готово: две эмулированные UE подключены к ядру
+и зарегистрированы в IMS. Дальше — AI ([туториал 2](guide-2-ims-ai.md)).
+
+**5. Остановка** (базы сохраняются; `-v` не добавлять)
+
+```bash
+./scripts/compose.sh down
+```
+
+## Б. Ядро уже работает у партнёров: ставим только IMS (+ AI)
+
+Нужна Linux-машина с rootful Docker 28+, Compose 2.33.1+, Python 3.12+ и
+интерфейсом в LAN, которую видит N6 UPF партнёров.
+
+**1. Партнёры вносят в свой OAI** (подробно — [раздел 6.4](#64-что-сделать-на-стороне-ядра-партнёров))
+
+```yaml
+dnns:
+  - dnn: "ims"
+    pdu_session_type: "IPV4"
+    ipv4_subnet: "10.46.0.0/16"   # IMS-пул, без NAT
+smf:
+  ue_dns:
+    primary_ipv4: "172.22.0.100"  # наш DNS_IP
+  ims:
+    pcscf_ipv4: "172.22.0.106"    # наш PCSCF_IP
+```
+
+Также: DNN `ims` в подписке абонентов, NAT только для internet-пула, маршрут
+N6 → наша LAN, маршрут к IMS-пулу у шлюза.
+
+**2. Исходники и окружение** — как в шаге А1.
+
+**3. Узнать интерфейс и сеть машины**
+
+```bash
+ip -br link
+ip -br addr
+ip route
+```
+
+**4. Заполнить `app/config/lab.env`** (пример; подставьте свои значения)
+
+```dotenv
+MCC=001
+MNC=01
+IMS_DOMAIN=ims.mnc001.mcc001.3gppnetwork.org
+IMS_DNN=ims
+IMS_UE_CIDR=10.46.0.0/16
+INTERNET_UE_CIDR=10.45.0.0/16
+LAB_NETWORK_CIDR=172.22.0.0/24
+LAB_DYNAMIC_IP_RANGE=172.22.0.128/25
+IMS_PARENT_INTERFACE=ens192
+IMS_ROUTE_GATEWAY=172.22.0.1
+UE1_IMSI=001010000000001
+UE2_IMSI=001010000000002
+```
+
+`IMS_ROUTE_GATEWAY` — адрес в этой LAN, через который достижим IMS-пул (UPF
+или маршрутизатор). Адреса сервисов (`DNS_IP`, `PCSCF_IP`, `RTPENGINE_IP` и др.)
+должны лежать в `LAB_NETWORK_CIDR` и совпадать с тем, что указано в SMF.
+
+**5. IMS-ключи и проверка конфигурации**
+
+```bash
+python scripts/initialize_local.py --ims-only
+python scripts/start_partner.py --check
+```
+
+Ожидается `PARTNER CONFIG: VALID`. IMS-ключи абонентов из
+`local/secrets/ims.env` передайте в их IMS-клиенты/ISIM защищённым способом.
+
+**6. Запуск IMS без AI**
+
+```bash
+python scripts/start_partner.py --ims-only
+docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml ps
+```
+
+Ожидается `PARTNER SERVICES: STARTED`, все сервисы `Up`/`healthy`.
+
+**7. Проверка с телефона/UE партнёров**
+
+Зарегистрируйте UE в 5G, затем смотрите:
+
+```bash
+docker logs --tail 200 lab-pcscf
+docker logs --tail 200 lab-scscf
+```
+
+Должны быть `REGISTER`, `401`, затем `200`. Позвоните UE1 → UE2 и проверьте
+звук; затем:
+
+```bash
+docker logs --tail 50 lab-rtpengine
+```
+
+Если что-то не прошло — [проверка по шагам вызова](#67-проверка-по-шагам-вызова).
+
+**8. Включить AI** — [туториал 2, часть 1, вариант В](guide-2-ims-ai.md#в-ядро-партнёров).
+
+**9. Остановка**
+
+```bash
+docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml down
+```
+
+# Часть 2. Разъяснения
 
 ## 1. Что именно мы связываем
 

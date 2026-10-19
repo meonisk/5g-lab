@@ -6,11 +6,140 @@
 и вернула `LOCAL 5G IMS BASE: READY` (или, у партнёров, прошла регистрация и
 обычный вызов). SIP-серверы и клиенты подробно описаны в [третьем](guide-3-sip.md).
 
-Как AI и SIP связаны с уже работающим ядром партнёров и как проверить вызов
-по шагам — [туториал 1, раздел 6](guide-1-ims-core.md#6-вариант-б-подключение-ims--ai--sip-к-уже-работающему-ядру).
+Документ состоит из двух частей:
 
-Все команды выполняются из корня репозитория. Всё работает локально: речь не
-отправляется во внешние облачные API.
+- **Часть 1 — только команды.** Выполните их по порядку и получите работающие
+  AI-услуги: перевод, запись и расшифровку.
+- **Часть 2 — разъяснения.** Как AI встроен в IMS, режимы, настройка, контракт,
+  задержка и диагностика.
+
+Перед началом IMS должна быть поднята по [туториалу 1](guide-1-ims-core.md).
+Все команды — из корня репозитория, в активированном `.venv`. Команды Bash
+даны для Linux; на Windows `bash ...` запускайте в Git Bash.
+
+# Часть 1. Команды
+
+## А. Локальный стенд, полный режим с Qwen
+
+**1. Запуск** (сам поднимает ядро, IMS и AI, скачивает модели и звонит)
+
+```bash
+./scripts/start.sh
+```
+
+Windows: `./scripts/start.ps1`. Первый запуск долгий: образы, Qwen около 2,5 ГБ,
+Whisper. В конце все проверки звонков должны быть `PASS`.
+
+**2. Дополнительные проверки** (по одной)
+
+```bash
+python app/tests/integration/check_bidirectional_interpreter.py
+python app/tests/integration/check_parallel_calls.py
+```
+
+## Б. Локальный стенд, лёгкий режим `compact` без Qwen и GPU
+
+**1. Подготовить модели перевода** (один раз; можно на другой машине и
+перенести `local/models/opus-mt/`)
+
+```bash
+python -m pip install uv
+uv venv --python 3.11 local/benchmarks/cpu-ai/.venv
+uv pip install --python local/benchmarks/cpu-ai/.venv/bin/python ctranslate2==4.8.2 transformers==4.57.6 sentencepiece==0.2.2 torch==2.10.0 --torch-backend cpu
+local/benchmarks/cpu-ai/.venv/bin/python scripts/prepare_translation_models.py
+```
+
+Ожидается `OPUS MODEL READY: ru-en` и `OPUS MODEL READY: en-ru`.
+Windows: `bin/python` → `Scripts/python.exe`.
+
+**2. Поднять ядро, IMS и AI**
+
+```bash
+python scripts/start_lab.py --base-only
+python scripts/compose_ai.py --mode compact config --quiet
+python scripts/compose_ai.py --mode compact build ai-worker voice-agent
+python scripts/compose_ai.py --mode compact up -d --build
+python scripts/compose_ai.py --mode compact ps
+```
+
+Ждать, пока `lab-ai-worker` и `lab-voice-agent` станут `healthy`.
+
+**3. Проверить связь IMS и AI** (по одной)
+
+```bash
+bash app/tests/integration/verify-ims-call.sh
+bash app/tests/integration/verify-voice-agent.sh
+```
+
+Обе — `PASS`.
+
+**4. Позвонить на запись и расшифровку (1004)**
+
+```bash
+docker exec lab-sipue1 sh -lc 'printf "m\nsip:%s@%s\n" "$VOICE_TRANSCRIBER_MSISDN" "$IMS_DOMAIN" > /tmp/pjsua-control'
+sleep 15
+docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control'
+ls local/private/recordings/
+```
+
+Появляется каталог вызова с `transcript.txt` и `turn-*.wav`. Если каталога нет —
+подайте звук вручную после приветствия ([раздел 5.2](#52-ручной-вызов-услуги-с-эмулятора)).
+
+**5. Позвонить на перевод RU → EN (1003)**
+
+```bash
+docker exec lab-sipue1 sh -lc 'printf "m\nsip:%s@%s\n" "$VOICE_TRANSLATOR_MSISDN" "$IMS_DOMAIN" > /tmp/pjsua-control'
+sleep 15
+docker logs --since 1m lab-ai-worker
+docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control'
+```
+
+**6. Остановка** (`-v` не добавлять)
+
+```bash
+python scripts/compose_ai.py --mode compact down
+```
+
+Режим (`--mode compact`) указывается в **каждой** команде `compose_ai.py`.
+Другие режимы: `balanced`, `minimal`, `baseline`.
+
+## В. Ядро партнёров
+
+Сначала IMS по [туториалу 1, часть 1, вариант Б](guide-1-ims-core.md#б-ядро-уже-работает-у-партнёров-ставим-только-ims--ai).
+
+**С Qwen:**
+
+```bash
+python scripts/start_partner.py
+```
+
+**Или `compact`** (после шага Б1):
+
+```bash
+python scripts/compose_ai.py --mode compact --partner up -d --build
+python scripts/compose_ai.py --mode compact --partner ps
+```
+
+**Проверка с телефона/UE партнёров:** позвоните на 1003 (перевод), 1004
+(запись), пара 1005/1006 (двусторонний перевод). Логи:
+
+```bash
+docker logs --tail 50 lab-sip-as
+docker logs --tail 50 lab-voice-agent
+docker logs --tail 50 lab-ai-worker
+ls local/private/recordings/
+```
+
+В `lab-sip-as` — `AS terminated INVITE for voice agent`, в `lab-voice-agent` —
+`reason=greeting state=sent`, UE слышит приветствие и перевод.
+
+**Остановка:**
+
+```bash
+python scripts/compose_ai.py --mode compact --partner down
+```
+
+# Часть 2. Разъяснения
 
 ## 1. Как AI встроен в IMS
 
