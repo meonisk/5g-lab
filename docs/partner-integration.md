@@ -7,7 +7,7 @@ RAN и UE. Наш OAI + UERANSIM нужен для локальной прове
 Два независимых входа:
 
 - `python scripts/start_lab.py --base-only` — локальный OAI + UERANSIM + IMS.
-- `python scripts/start_partner.py` — только IMS + AI, без ядра и эмуляторов.
+- `python3 scripts/start_partner.py` — только IMS + AI, без ядра и эмуляторов.
 
 [compose.partner.yml](../compose.partner.yml) включает те же определения IMS/AI,
 что локальный стенд. Для переноса не нужно менять исходники сервисов.
@@ -90,6 +90,7 @@ PyHSS имеет дополнительный management bridge с приори�
 | UE → DNS | UDP/TCP 53 |
 | UE ↔ P-CSCF | `PCSCF_SIP_PORT`, текущий профиль UDP/TCP SIP |
 | UE ↔ RTPengine | UDP `RTPENGINE_PORT_MIN`–`RTPENGINE_PORT_MAX` |
+| UE ↔ P-CSCF, IPsec (sec-agree) | ESP, UDP/TCP 5100 и 6100 |
 
 Cx, SQL, RTPengine control и AI HTTP — внутренние связи нашей части.
 При использовании общей LAN партнёры должны ограничить доступ к внутренним
@@ -101,15 +102,15 @@ Cx, SQL, RTPengine control и AI HTTP — внутренние связи наш
 1. Получить исходники нашей части и Docker Engine 28+ с Compose 2.33.1+, Linux,
    Python 3.12+. Настроить LAN/VLAN и выделить адреса.
 2. Заполнить `app/config/lab.env` по таблице. Подготовить согласованные IMS
-   ключи в `local/secrets/ims.env`. Для новых программных клиентов можно
-   вызвать `python scripts/initialize_local.py --ims-only` и затем передать
-   сгенерированные IMS-ключи клиентам защищённым способом.
-3. `python scripts/start_partner.py --check` — проверка конфигурации.
+   ключи в `local/secrets/ims.env` до шага 4: телефону с USIM нужны K/OPc/AMF
+   его SIM, софтфону с Digest — пароль `UE<n>_IMS_K`. После шага 4 ключи
+   записаны в PyHSS и правкой файла не меняются.
+3. `python3 scripts/start_partner.py --check` — проверка конфигурации.
    Команда также создаёт недостающие локальные IMS-ключи; контейнеры не запускает.
-4. `python scripts/start_partner.py --ims-only` — поднять IMS, создать
+4. `python3 scripts/start_partner.py --ims-only` — поднять IMS, создать
    subscriber/iFC, дождаться Cx. Команда не изменяет ядро партнёров.
 5. Проверить IMS REGISTER и обычный вызов. Затем выбрать AI: обычный
-   `python scripts/start_partner.py` запускает baseline с Qwen, а для CPU без
+   `python3 scripts/start_partner.py` запускает baseline с Qwen, а для CPU без
    Qwen выполнить команды ниже. Первый запуск требует registry и моделей.
 6. Для обслуживания использовать
   `docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml ps`.
@@ -117,16 +118,16 @@ Cx, SQL, RTPengine control и AI HTTP — внутренние связи наш
 Для `compact` после шага 4 и [подготовки OPUS](cpu-ai-profiles.md#подготовка-и-переключение):
 
 ```bash
-python scripts/compose_ai.py --mode compact --partner config --quiet
-python scripts/compose_ai.py --mode compact --partner build ai-worker voice-agent
-python scripts/compose_ai.py --mode compact --partner up -d --build
-python scripts/compose_ai.py --mode compact --partner ps
-python scripts/compose_ai.py --mode compact --partner logs --tail 100 ai-worker voice-agent
+python3 scripts/compose_ai.py --mode compact --partner config --quiet
+python3 scripts/compose_ai.py --mode compact --partner build ai-worker voice-agent
+python3 scripts/compose_ai.py --mode compact --partner up -d --build
+python3 scripts/compose_ai.py --mode compact --partner ps
+python3 scripts/compose_ai.py --mode compact --partner logs --tail 100 ai-worker voice-agent
 ```
 
 Дождитесь `healthy` AI Worker и Voice Agent, затем проверяйте звонки внешних UE.
 Задавайте `--partner` и режим в каждой команде, включая обслуживание и остановку:
-`python scripts/compose_ai.py --mode compact --partner down` сохраняет тома.
+`python3 scripts/compose_ai.py --mode compact --partner down` сохраняет тома, но гасит и IMS.
 Обычные `compose.ps1`/`compose.sh` адресуют локальный состав с OAI, для этой
 поставки используйте явный partner-файл либо `compose_ai.py --partner`.
 Полный `start_partner.py` без `--ims-only` вернёт конфигурацию Qwen.

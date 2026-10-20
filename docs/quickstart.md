@@ -27,7 +27,7 @@ Docker Desktop/WSL2 и Git for Windows с Bash; на Linux — Bash и ядро 
 в Docker Desktop/WSL2 на i5-12400F; перенос на ARM не проверен.
 
 ```bash
-git clone --branch master https://git.miem.hse.ru/2508/5g-lab.git
+git clone --branch master https://github.com/meonisk/5g-lab.git
 cd 5g-lab
 docker info --format '{{.OSType}}'
 docker compose version
