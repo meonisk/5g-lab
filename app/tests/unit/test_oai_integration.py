@@ -63,6 +63,16 @@ class OaiIntegration(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "пересекаться"):
             PARTNER.validate(self.env)
 
+    def test_partner_rejects_missing_gateway_and_custom_domain(self):
+        self.env["IMS_PARENT_INTERFACE"] = "eth1"
+        self.env["IMS_ROUTE_GATEWAY"] = ""
+        with self.assertRaisesRegex(ValueError, "IMS_ROUTE_GATEWAY"):
+            PARTNER.validate(self.env)
+        self.env["IMS_ROUTE_GATEWAY"] = self.env["UPF_IP"]
+        self.env["IMS_DOMAIN"] = "ims.partner.example"
+        with self.assertRaisesRegex(ValueError, "ims.mnc001.mcc001"):
+            PARTNER.validate(self.env)
+
     def test_ims_only_initialization_does_not_need_5gs_keys_or_core(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

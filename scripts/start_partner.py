@@ -24,16 +24,25 @@ IMS_SERVICES = ("dns", "mysql", "pyhss", "icscf", "scscf", "rtpengine", "pcscf")
 
 
 def validate(settings):
-    network = ipaddress.ip_network(settings["LAB_NETWORK_CIDR"])
-    pool = ipaddress.ip_network(settings["IMS_UE_CIDR"])
-    gateway = ipaddress.ip_address(settings.get("IMS_ROUTE_GATEWAY", ""))
-    if gateway not in network or network.overlaps(pool):
-        raise ValueError(
-            "Шлюз IMS должен находиться в локальной сети; пул UE не должен с ней пересекаться"
-        )
     if not settings.get("IMS_PARENT_INTERFACE"):
         raise ValueError(
             "Укажите в IMS_PARENT_INTERFACE интерфейс Linux, подключённый к локальной сети IMS"
+        )
+    if not settings.get("IMS_ROUTE_GATEWAY"):
+        raise ValueError("Укажите в IMS_ROUTE_GATEWAY адрес UPF или маршрутизатора к пулу UE")
+
+    # Kamailio and PyHSS init scripts derive the realm from MCC/MNC themselves.
+    mnc = settings["MNC"].zfill(3)
+    expected = f"ims.mnc{mnc}.mcc{settings['MCC']}.3gppnetwork.org"
+    if settings["IMS_DOMAIN"] != expected:
+        raise ValueError(f"IMS_DOMAIN должен быть {expected} (выводится из MCC/MNC)")
+
+    network = ipaddress.ip_network(settings["LAB_NETWORK_CIDR"])
+    pool = ipaddress.ip_network(settings["IMS_UE_CIDR"])
+    gateway = ipaddress.ip_address(settings["IMS_ROUTE_GATEWAY"])
+    if gateway not in network or network.overlaps(pool):
+        raise ValueError(
+            "Шлюз IMS должен находиться в локальной сети; пул UE не должен с ней пересекаться"
         )
     keys = (
         "DNS_IP",

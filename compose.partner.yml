@@ -4,7 +4,9 @@ name: lab-docker
 include:
   - path: app/infrastructure/compose/ims.yml
     project_directory: .
-  - path: app/infrastructure/compose/ai.yml
+  - path:
+      - app/infrastructure/compose/ai.yml
+      - app/infrastructure/compose/ai-partner.yml
     project_directory: .
 
 networks:
