@@ -20,8 +20,10 @@ check() {
     fi
 }
 
-# Print the final verdict line and exit with its status.
+# Print the final verdict line and exit with its status. Test clients exist only
+# for the duration of a gate: they are removed here, not left on the stand.
 finish() {
+    "${compose[@]}" rm -sf sipue1 sipue2 >/dev/null 2>&1 || true
     printf '%s: %s\n' "$1" "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
     exit "$fail"
 }

@@ -23,6 +23,9 @@ from dialogue import verified_fixture  # noqa: E402
 from provision import read_env  # noqa: E402
 
 CLIENTS = ("lab-sipue1", "lab-sipue2")
+COMPOSE = ["docker", "compose", "--project-directory", str(ROOT)]
+COMPOSE += ["--env-file", str(ROOT / "app/config/lab.env"), "-f", str(ROOT / "docker-compose.yml")]
+COMPOSE += ["--profile", "test"]
 # Последняя фраза начинается почти в конце WAV: после проигрывания оставляем
 # явный запас на STT, LLM, TTS и RTP.
 POST_PLAYBACK_BUDGET_SECONDS = 90
@@ -86,16 +89,8 @@ def start_dialogue_clients(settings):
         "SIPUE2_PLAYBACK_FILE": settings["INTERPRETER_DIALOGUE_UE2_FILE"],
         "SIPUE_AUTO_CONFERENCE": "0",
     }
-    compose = ["docker", "compose", "--project-directory", str(ROOT)]
-    compose += [
-        "--env-file",
-        str(ROOT / "app/config/lab.env"),
-        "-f",
-        str(ROOT / "docker-compose.yml"),
-    ]
-    compose += ["--profile", "test"]
     run(
-        *compose,
+        *COMPOSE,
         "up",
         "-d",
         "--no-deps",
@@ -257,14 +252,19 @@ def main():
             lambda: sent_tts(calls, settings), 60, "Перевод не озвучен в обоих каналах"
         )
     finally:
-        in_parallel([(client, "ha\n") for client in CLIENTS])
-        wait_until(
-            lambda: not voice_status()["calls"] and not adapter_sessions(),
-            30,
-            "Вызовы не завершились",
-        )
+        try:
+            in_parallel([(client, "ha\n") for client in CLIENTS])
+            wait_until(
+                lambda: not voice_status()["calls"] and not adapter_sessions(),
+                30,
+                "Вызовы не завершились",
+            )
+            # Счётчики RTP читаются из логов клиентов, поэтому удаляем их только после.
+            rx = {client: received_packets(client) for client in CLIENTS}
+        finally:
+            # Тестовые клиенты живут только во время проверки и не остаются на стенде.
+            subprocess.run([*COMPOSE, "rm", "-sf", "sipue1", "sipue2"], capture_output=True)
 
-    rx = {client: received_packets(client) for client in CLIENTS}
     latencies = latency_rows(ru_events + en_events, english_tts + russian_tts)
     limit = float(settings["INTERPRETER_MAX_RESPONSE_DELAY_MS"])
     delays = [row["speech_end_to_audible_rtp_ms"] for row in latencies]
