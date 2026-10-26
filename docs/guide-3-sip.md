@@ -160,8 +160,14 @@ MSISDN, доменом и iFC `default_ifc.xml`. Скрипт можно зап�
 Если клиент настраивается вручную: outbound proxy `sip:<PCSCF_IP>:5060;transport=udp;lr`,
 registrar `sip:<IMS_DOMAIN>`, SIP URI `sip:<IMSI>@<IMS_DOMAIN>`, имя пользователя
 `<IMSI>@<IMS_DOMAIN>`, realm `<IMS_DOMAIN>`, кодек PCMU/8000 или AMR/AMR-WB (EVS не
-поддержан). Ограничения: защита Gm (IPsec) не принята; SIP AS не поддерживает
-обязательные `100rel`/`precondition` (PRACK/UPDATE).
+поддержан). Ограничение: SIP AS не поддерживает обязательные `100rel`/`precondition`
+(PRACK/UPDATE).
+
+Защита Gm (IPsec, `sec-agree`) в P-CSCF включена: модуль `ims_ipsec_pcscf`, порты
+5100 (клиент) и 6100 (сервер) на `PCSCF_IP`, у контейнера `NET_ADMIN` для туннелей
+xfrm в ядре хоста. Ключи туннеля (CK/IK) появляются только при IMS AKA с настоящей
+ISIM, поэтому тестовые клиенты (Digest) работают без IPsec, а с телефоном IPsec
+пока не проверен. ESP от телефона проходит через UPF, пока на нём нет NAT для IMS.
 
 ## 5. Диагностика SIP
 
