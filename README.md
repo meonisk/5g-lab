@@ -11,25 +11,29 @@ LLM). Все контейнеры подключаются к Docker-сети я
 ## Запуск
 
 Linux, Docker Engine 28+ с Compose 2.33+, Python 3.11+, запущенное ядро OAI.
+Перед первым запуском сверьте [app/config/lab.env](app/config/lab.env) с ядром и
+внесите изменения в SMF/UPF — [туториал 1](docs/guide-1-ims-core.md).
 
 ```bash
 git clone https://github.com/meonisk/5g-lab.git
 cd 5g-lab
 python3 scripts/start.py --check
+python3 scripts/start.py --ims-only
 python3 scripts/start.py
 ```
 
-Перед первым запуском сверьте [app/config/lab.env](app/config/lab.env) с ядром и
-внесите изменения в SMF/UPF — [туториал 1](docs/guide-1-ims-core.md).
+Второй запуск добавляет AI к уже работающей IMS, не перезапуская её.
 
 ## Документация
 
-1. [IMS + AI рядом с ядром OAI](docs/guide-1-ims-core.md) — подключение, путь одного
-   вызова, проверка по шагам, диагностика.
-2. [IMS и AI](docs/guide-2-ims-ai.md) — схема сервисов и сетей, номера услуг, режимы
-   AI, проверки.
+Три туториала — одна последовательность на одном стенде, без повторных запусков:
+
+1. [IMS рядом с ядром OAI](docs/guide-1-ims-core.md) — подключение к ядру, запуск IMS,
+   путь одного вызова, проверка шагов 1–7, диагностика.
+2. [AI поверх работающей IMS](docs/guide-2-ims-ai.md) — добавление AI, схема сервисов
+   и сетей, номера услуг, режимы AI, проверка шагов 8–12.
 3. [SIP-серверы и клиенты](docs/guide-3-sip.md) — CSCF, HSS, RTPengine, DNS,
-   тестовые клиенты, телефон.
+   тестовые клиенты, телефон; остановка стенда.
 
 Устройство репозитория — [карта проекта](docs/project-layout.md), правила разработки —
 [CONTRIBUTING.md](CONTRIBUTING.md), сторонние компоненты — [THIRD_PARTY.md](THIRD_PARTY.md).

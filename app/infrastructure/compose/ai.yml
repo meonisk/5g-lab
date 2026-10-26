@@ -17,34 +17,28 @@ x-custom-service: &custom-service
   logging: *bounded-logging
 
 services:
-  control-secret-init:
+  # One-shot preparation without network: the internal service token in its
+  # volume, and the recordings folder handed to ai-worker (uid 65532).
+  stand-init:
     image: ${CONTROL_INIT_IMAGE}
-    restart: "no"
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    network_mode: none
-    environment:
-      TOKEN_BYTES: ${SERVICE_CONTROL_TOKEN_BYTES}
-    command: >-
-      sh -eu -c 'umask 077; mkdir -p /run/lab-control;
-      if [ ! -s /run/lab-control/token ]; then
-      head -c "$${TOKEN_BYTES}" /dev/urandom | base64 > /run/lab-control/token;
-      fi; chmod 0555 /run/lab-control; chmod 0444 /run/lab-control/token'
-    volumes:
-      - service-control-secret:/run/lab-control
-
-  # ai-worker runs as 65532 and must create private session directories.
-  recordings-init:
-    image: ${CONTROL_INIT_IMAGE}
+    container_name: lab-stand-init
     restart: "no"
     read_only: true
     network_mode: none
     cap_drop: [ALL]
     cap_add: [CHOWN]
     security_opt: [no-new-privileges:true]
-    command: [chown, "65532:65532", "${RECORDING_ROOT}"]
+    environment:
+      TOKEN_BYTES: ${SERVICE_CONTROL_TOKEN_BYTES}
+      RECORDINGS: ${RECORDING_ROOT}
+    command: >-
+      sh -eu -c 'umask 077; mkdir -p /run/lab-control;
+      if [ ! -s /run/lab-control/token ]; then
+      head -c "$${TOKEN_BYTES}" /dev/urandom | base64 > /run/lab-control/token;
+      fi; chmod 0555 /run/lab-control; chmod 0444 /run/lab-control/token;
+      chown 65532:65532 "$${RECORDINGS}"'
     volumes:
+      - service-control-secret:/run/lab-control
       - ./local/private/recordings:${RECORDING_ROOT}
 
   sip-as:
@@ -63,7 +57,7 @@ services:
       scscf: {condition: service_started}
       media-adapter: {condition: service_started}
       voice-agent: {condition: service_started}
-      control-secret-init: {condition: service_completed_successfully}
+      stand-init: {condition: service_completed_successfully}
     volumes:
       - service-control-secret:/run/lab-control:ro
     networks:
@@ -85,7 +79,7 @@ services:
     depends_on:
       rtpengine: {condition: service_started}
       ai-worker: {condition: service_started}
-      control-secret-init: {condition: service_completed_successfully}
+      stand-init: {condition: service_completed_successfully}
     volumes:
       - service-control-secret:/run/lab-control:ro
 
@@ -115,8 +109,7 @@ services:
       HF_HUB_DISABLE_XET: ${AI_HF_DISABLE_XET}
       VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
     depends_on:
-      control-secret-init: {condition: service_completed_successfully}
-      recordings-init: {condition: service_completed_successfully}
+      stand-init: {condition: service_completed_successfully}
       llm-worker: {condition: service_started}
     volumes:
       - service-control-secret:/run/lab-control:ro
@@ -137,7 +130,7 @@ services:
 
   # Ollama is intentionally reachable only by the AI Worker on an internal
   # network. The one-shot initializer is the only LLM component allowed outbound
-  # access; it uses the project default bridge, not the core network.
+  # access; it leaves through the core bridge NAT and exits before LLM starts.
   llm-model-init:
     build:
       context: app/infrastructure/images/llm-init
@@ -159,7 +152,9 @@ services:
       - llm-model-cache:/root/.ollama
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
-    networks: [default]
+    networks:
+      lab5g:
+        ipv4_address: ${LLM_INIT_IP}
 
   llm-worker:
     image: ${OLLAMA_IMAGE}
@@ -212,7 +207,7 @@ services:
     mem_limit: ${VOICE_AGENT_MEMORY_LIMIT}
     env_file: [app/config/lab.env]
     depends_on:
-      control-secret-init: {condition: service_completed_successfully}
+      stand-init: {condition: service_completed_successfully}
     volumes:
       - service-control-secret:/run/lab-control:ro
     tmpfs:

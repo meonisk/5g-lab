@@ -26,7 +26,7 @@
   <text x="90" y="394" text-anchor="middle" class="c">12.1.1.x</text>
 
   <!-- Core network oai-cn5g -->
-  <rect x="180" y="50" width="880" height="870" rx="14" fill="#eef4fb" stroke="#4a78b5" stroke-width="2"/>
+  <path d="M 194 50 H 1406 Q 1420 50 1420 64 V 226 Q 1420 240 1406 240 H 1060 V 906 Q 1060 920 1046 920 H 194 Q 180 920 180 906 V 64 Q 180 50 194 50 Z" fill="#eef4fb" stroke="#4a78b5" stroke-width="2"/>
   <text x="200" y="895" class="net" fill="#2c5591">Docker-сеть ядра «oai-cn5g» (bridge, CORE_NETWORK_NAME)</text>
   <text x="200" y="912" class="netsub" fill="#2c5591">подсеть 192.168.70.128/26 · у каждого контейнера один интерфейс eth0 в этой сети</text>
 
@@ -109,7 +109,7 @@
 
   <!-- Test clients -->
   <rect x="190" y="640" width="185" height="210" rx="8" fill="none" stroke="#1f5fbf" stroke-dasharray="6 4"/>
-  <text x="282" y="660" text-anchor="middle" class="d" fill="#1f5fbf">тесты (profile test)</text>
+  <text x="282" y="660" text-anchor="middle" class="d" fill="#1f5fbf">только на время теста (profile test)</text>
   <rect x="200" y="670" width="165" height="75" rx="6" class="box"/>
   <text x="282" y="691" text-anchor="middle" class="t">PJSUA, абонент 1101</text>
   <text x="282" y="709" text-anchor="middle" class="c">lab-sipue1</text>
@@ -137,24 +137,22 @@
   <text x="1050" y="757" text-anchor="middle" class="c">oai-cn5g: .168 :8092</text>
   <text x="1050" y="775" text-anchor="middle" class="c">lab-ai-backend: IP Docker</text>
 
-  <!-- Default and no-network one-shots -->
-  <rect x="1080" y="50" width="340" height="170" rx="14" fill="#eef7ee" stroke="#4c9a52" stroke-width="2"/>
-  <text x="1095" y="72" class="net" fill="#2f6b34">Сеть «lab-docker_default»</text>
-  <text x="1095" y="89" class="netsub" fill="#2f6b34">bridge с NAT в интернет</text>
-  <rect x="1100" y="105" width="300" height="70" rx="6" class="box"/>
-  <text x="1250" y="127" text-anchor="middle" class="t">lab-llm-model-init</text>
-  <text x="1250" y="145" text-anchor="middle" class="d">разово скачивает GGUF, проверяет</text>
-  <text x="1250" y="162" text-anchor="middle" class="d">SHA-256, кладёт в том llm-model-cache</text>
-  <text x="1250" y="207" text-anchor="middle" class="d">завершается до старта LLM</text>
+  <!-- One-shot containers: model loader in the core network, stand-init without network -->
+  <rect x="1100" y="80" width="300" height="140" rx="6" class="box"/>
+  <text x="1250" y="102" text-anchor="middle" class="t">lab-llm-model-init</text>
+  <text x="1250" y="120" text-anchor="middle" class="c">.172 (разовый)</text>
+  <text x="1250" y="142" text-anchor="middle" class="d">скачивает GGUF через NAT</text>
+  <text x="1250" y="159" text-anchor="middle" class="d">сети ядра, проверяет SHA-256,</text>
+  <text x="1250" y="176" text-anchor="middle" class="d">кладёт в том llm-model-cache</text>
+  <text x="1250" y="200" text-anchor="middle" class="d">завершается до старта LLM</text>
 
-  <rect x="1080" y="250" width="200" height="170" rx="14" fill="#f3f3f3" stroke="#999" stroke-dasharray="6 4"/>
-  <text x="1095" y="272" class="net" fill="#555">network_mode: none</text>
-  <rect x="1095" y="285" width="170" height="55" rx="6" class="box"/>
-  <text x="1180" y="306" text-anchor="middle" class="c">control-secret-init</text>
-  <text x="1180" y="324" text-anchor="middle" class="d">токен служебных API</text>
-  <rect x="1095" y="350" width="170" height="55" rx="6" class="box"/>
-  <text x="1180" y="371" text-anchor="middle" class="c">recordings-init</text>
-  <text x="1180" y="389" text-anchor="middle" class="d">права каталога записей</text>
+  <rect x="1080" y="265" width="200" height="140" rx="14" fill="#f3f3f3" stroke="#999" stroke-dasharray="6 4"/>
+  <text x="1095" y="287" class="net" fill="#555">network_mode: none</text>
+  <rect x="1095" y="305" width="170" height="85" rx="6" class="box"/>
+  <text x="1180" y="326" text-anchor="middle" class="c">lab-stand-init</text>
+  <text x="1180" y="346" text-anchor="middle" class="d">разово: токен</text>
+  <text x="1180" y="362" text-anchor="middle" class="d">служебных API и</text>
+  <text x="1180" y="378" text-anchor="middle" class="d">права каталога записей</text>
 
   <!-- Legend -->
   <rect x="1295" y="250" width="125" height="285" rx="8" fill="#fff" stroke="#bbb"/>

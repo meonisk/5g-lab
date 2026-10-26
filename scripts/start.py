@@ -27,6 +27,7 @@ STATIC_ADDRESSES = (
     "VOICE_AGENT_IP",
     "SIPUE1_IP",
     "SIPUE2_IP",
+    "LLM_INIT_IP",
 )
 # CPU-режимы не должны случайно унаследовать GPU или потоковый перевод из lab.env.
 CPU_SETTINGS = {
@@ -120,8 +121,7 @@ def compose_command(mode):
         "    image: lab-ai-worker-cpu\n"
         f"    env_file: [{lab_yaml}, {env_yaml}]\n"
         "    depends_on: !override\n"
-        "      control-secret-init: {condition: service_completed_successfully}\n"
-        "      recordings-init: {condition: service_completed_successfully}\n"
+        "      stand-init: {condition: service_completed_successfully}\n"
         f"    volumes:\n      - {models}\n"
         "  voice-agent:\n"
         "    image: lab-voice-agent-cpu\n"
@@ -180,25 +180,28 @@ def connected_hss_peer(output, domain):
     return CX_APP in block and "Disabled: False" in block
 
 
+def ims_peers_ready(settings):
+    """Одна проверка: у I-CSCF и S-CSCF открыто Cx-соединение с HSS."""
+    for container in ("lab-icscf", "lab-scscf"):
+        try:
+            result = subprocess.run(
+                ["docker", "exec", container, "kamcmd", "cdp.list_peers"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if result.returncode or not connected_hss_peer(result.stdout, settings["IMS_DOMAIN"]):
+            return False
+    return True
+
+
 def wait_ims_peers(settings, timeout_seconds=60):
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        ready = []
-        for container in ("lab-icscf", "lab-scscf"):
-            try:
-                result = subprocess.run(
-                    ["docker", "exec", container, "kamcmd", "cdp.list_peers"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    check=False,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                ready.append(False)
-                continue
-            domain = settings["IMS_DOMAIN"]
-            ready.append(result.returncode == 0 and connected_hss_peer(result.stdout, domain))
-        if all(ready):
+        if ims_peers_ready(settings):
             return
         time.sleep(2)
     raise RuntimeError("Соединения I/S-CSCF с HSS Cx не достигли состояния I_Open/R_Open")
@@ -251,10 +254,10 @@ def main():
         for direction in ("ru-en", "en-ru"):
             if not (ROOT / "local/models/opus-mt" / direction / "manifest.json").is_file():
                 raise RuntimeError("Сначала выполните scripts/prepare_translation_models.py")
-        # Старый Ollama иначе продолжит занимать RAM после переключения режима.
+        # Контейнеры Ollama не нужны в CPU-режиме: удаляем, а не оставляем висеть.
         run(
-            compose + ["stop", "llm-worker", "llm-model-init"],
-            "Не удалось остановить LLM",
+            compose + ["rm", "-sf", "llm-worker", "llm-model-init"],
+            "Не удалось удалить контейнеры LLM",
             env=environment,
         )
 
@@ -266,9 +269,12 @@ def main():
     )
     wait_for_pyhss(settings)
     provision(settings)
-    wait_for_pyhss_cx(settings)
-    restart_ims_chain()
-    wait_ims_peers(settings)
+    # Работающую IMS не трогаем: перезапуск CSCF сбросил бы регистрации телефонов.
+    # Перезапуск нужен, только если CSCF поднялись раньше, чем HSS принял Cx.
+    if not ims_peers_ready(settings):
+        wait_for_pyhss_cx(settings)
+        restart_ims_chain()
+        wait_ims_peers(settings)
     if not args.ims_only:
         wait_ai_healthy(settings)
     scope = "IMS" if args.ims_only else f"IMS + AI ({args.mode})"
