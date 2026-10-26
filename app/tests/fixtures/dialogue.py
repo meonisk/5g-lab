@@ -14,7 +14,10 @@ import wave
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+# Внутри контейнера скрипт лежит в /fixture, корня репозитория там нет:
+# пути репозитория нужны только на хосте.
+HERE = Path(__file__).resolve()
+ROOT = HERE.parents[3] if len(HERE.parents) > 3 else HERE.parent
 DESIGN = ROOT / "app/tests/fixtures/interpreter-dialogue-v2.json"
 OUTPUT = ROOT / "local/private/interpreter"
 SAMPLE_RATE = 8000
@@ -128,7 +131,7 @@ def generate():
     for source, target, mode in (
         (DESIGN, "/fixture/design.json", ",readonly"),
         (OUTPUT, "/fixture/output", ""),
-        (Path(__file__).resolve(), "/fixture/dialogue.py", ",readonly"),
+        (HERE, "/fixture/dialogue.py", ",readonly"),
     ):
         command += ["--mount", f"type=bind,src={source},dst={target}{mode}"]
     # CPU-режимы собирают тот же Voice Agent под другим именем образа.
