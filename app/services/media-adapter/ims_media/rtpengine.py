@@ -1,6 +1,5 @@
 """Read per-call media endpoints from RTPengine's local NG control API."""
 
-import ipaddress
 import secrets
 import socket
 
@@ -75,7 +74,7 @@ def resolve_subscriber_port(call_id):
                     port = stream.get(b"local port")
                     if (
                         b"RTP" in stream.get(b"flags", [])
-                        and ipaddress.ip_address(address) in runtime.ims_ue_network
+                        and runtime.is_subscriber(address)
                         and runtime.port_min <= port <= runtime.port_max
                         and port % 2 == 0
                     ):

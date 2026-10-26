@@ -1,6 +1,5 @@
 """Extract subscriber PCMU from mirrored RTP packets."""
 
-import ipaddress
 import socket
 import struct
 import time
@@ -29,9 +28,9 @@ def packet_direction(src_ip, dst_ip):
         return "caller_to_agent"
     if src_ip == runtime.voice_agent_ip:
         return "agent_to_caller"
-    if ipaddress.ip_address(src_ip) in runtime.ims_ue_network:
+    if runtime.is_subscriber(src_ip):
         return "caller_to_core"
-    if ipaddress.ip_address(dst_ip) in runtime.ims_ue_network:
+    if runtime.is_subscriber(dst_ip):
         return "core_to_caller"
     return "other"
 

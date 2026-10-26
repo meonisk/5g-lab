@@ -18,6 +18,19 @@ worker_base_url = os.environ["AI_WORKER_URL"].rstrip("/")
 worker_url = worker_base_url + "/observe"
 voice_agent_ip = str(ipaddress.ip_address(os.environ["VOICE_AGENT_IP"]))
 ims_ue_network = ipaddress.ip_network(os.environ["IMS_UE_CIDR"])
+# Абонент — телефон из пула UE или тестовый клиент PJSUA: тесты ставят клиентов
+# прямо в сеть ядра, без PDU-сессии, поэтому их адреса вне IMS_UE_CIDR.
+subscriber_networks = (
+    ims_ue_network,
+    *(ipaddress.ip_network(os.environ[key]) for key in ("SIPUE1_IP", "SIPUE2_IP")),
+)
+
+
+def is_subscriber(address):
+    ip = ipaddress.ip_address(address)
+    return any(ip in network for network in subscriber_networks)
+
+
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
 allowed_service_modes = {

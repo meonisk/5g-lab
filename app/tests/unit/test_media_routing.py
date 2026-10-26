@@ -93,6 +93,17 @@ class MediaRouting(unittest.TestCase):
         with patch.object(self.rtpengine, "_query", return_value=response):
             self.assertEqual(self.rtpengine.resolve_subscriber_port("call"), 30022)
 
+    def test_core_network_test_clients_count_as_subscribers(self):
+        from ims_media import capture
+
+        runtime = self.rtpengine.runtime
+        client = os.environ["SIPUE1_IP"]
+        self.assertTrue(runtime.is_subscriber(client))
+        self.assertEqual(
+            capture.packet_direction(client, os.environ["RTPENGINE_IP"]), "caller_to_core"
+        )
+        self.assertFalse(runtime.is_subscriber(os.environ["PCSCF_IP"]))
+
     def test_bencode_decoder_detects_trailing_data(self):
         value, end = self.rtpengine._decode(b"d6:result2:okejunk")
         self.assertEqual(value[b"result"], b"ok")
