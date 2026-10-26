@@ -273,6 +273,12 @@ SIP-идентификаторов абонента. `GET /events` отдаёт 
 - **Запись**: `RECORDING_ENABLED`, `RECORDING_RETENTION_DAYS`.
 - **Ресурсы**: `*_CPU_LIMIT`, `*_MEMORY_LIMIT`.
 
+`AI_PROCESSING_WORKERS` — сколько реплик AI Worker распознаёт одновременно; каждый
+обработчик запускает Whisper в `AI_STT_CPU_THREADS` потоков в пределах
+`AI_WORKER_CPU_LIMIT` ядер. Два обработчика по 4 потока на 4 ядрах делят процессор, и
+каждая реплика идёт вдвое медленнее; один обработчик на всех ядрах быстрее для одного
+звонка, но при нескольких звонках реплики встают в очередь.
+
 GPU NVIDIA (нужен NVIDIA Container Toolkit) включается в `lab.env`:
 `LLM_CONTAINER_RUNTIME=nvidia`, `LLM_GPU_DEVICES=all`, `AI_ENABLE_CUDA=1`,
 `AI_CONTAINER_RUNTIME=nvidia`, `AI_GPU_DEVICES=all`, `AI_DEVICE=cuda`,
@@ -304,3 +310,11 @@ LLM; в CPU-режимах частая причина — нет одного �
 выходила за 1–3 с, либо терялась полнота текста. Метрика `verify_interpreter.py` —
 время от конца фразы до отправки первого слышимого RTP перевода, без jitter buffer
 телефона.
+
+Замер на сервере с 8 ядрами без GPU в режиме `baseline` (`verify_interpreter.py`,
+четыре реплики): распознавание Whisper small 2,9–3,3 с, перевод Qwen 4,7–5,4 с, синтез
+Piper 0,5–0,7 с, очередь — около нуля; от конца фразы до звука перевода 9,2–10,1 с при
+лимите `INTERPRETER_MAX_RESPONSE_DELAY_MS` 5 с. Основную часть занимает Qwen. Режим
+`balanced` заменяет его на OPUS-MT (0,1–0,2 с на перевод), по расчёту это около 4 с;
+на том же сервере это ещё не измерено. Первый вызов после запуска заметно медленнее
+следующих: в первом прогоне `verify-translation.sh` распознавание заняло 14,8 с.
