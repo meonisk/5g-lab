@@ -267,6 +267,13 @@ def main():
         "Не удалось запустить IMS + AI",
         env=environment,
     )
+    # Образ тестовых клиентов (профиль test) собираем здесь: иначе первая проверка
+    # молча компилирует pjproject несколько минут с выводом в /dev/null.
+    run(
+        compose + ["--profile", "test", "build", "sipue1"],
+        "Не удалось собрать образ тестовых клиентов",
+        env=environment,
+    )
     wait_for_pyhss(settings)
     provision(settings)
     # Работающую IMS не трогаем: перезапуск CSCF сбросил бы регистрации телефонов.
