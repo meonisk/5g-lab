@@ -1,111 +1,52 @@
 #!/usr/bin/env bash
-# Phase 4A (docker lab) gate:
-#   - both UEs hold internet+ims PDU sessions (TUN per DNN)
-#   - ims pool reachable through UPF $UPF_IMS_TUN without NAT
-#   - IMS DNS zone resolves from inside the lab
-#   - PyHSS holds both IMS subscribers and listens on Diameter Cx
+# Шаги 1–3 вызова: DNS IMS, абоненты и Cx в PyHSS, маршрут к пулу UE через UPF,
+# регистрация двух тестовых клиентов REGISTER -> 401 -> REGISTER -> 200 через
+# P/I/S-CSCF с UAR/MAR/SAR к HSS. Телефоны и вызовы не затрагивает.
 set -uo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
-# shellcheck source=load-lab-env.sh
-source "$script_dir/load-lab-env.sh"
+echo '===== IMS DNS ====='
+for entry in "pcscf $PCSCF_IP" "icscf $ICSCF_IP" "scscf $SCSCF_IP" "hss $PYHSS_IP" "as $SIP_AS_IP"; do
+    read -r name expected <<<"$entry"
+    check "dnsmasq: $name.$IMS_DOMAIN -> $expected" \
+        docker exec lab-dns sh -c "nslookup '$name.$IMS_DOMAIN' '$LOOPBACK_IP' | grep -Fq '$expected'"
+done
+check "dnsmasq: SRV _sip._udp.$IMS_DOMAIN -> I-CSCF:$ICSCF_SIP_PORT" \
+    docker exec lab-dns sh -c "nslookup -type=srv _sip._udp.$IMS_DOMAIN '$LOOPBACK_IP' | grep -q '$ICSCF_SIP_PORT'"
 
-fail=0
-check() {
-    local name=$1; shift
-    if "$@" >/dev/null 2>&1; then
-        printf 'PASS: %s\n' "$name"
-    else
-        printf 'FAIL: %s\n' "$name"
-        fail=1
-    fi
-}
-
-: "${IMS_DOMAIN:?IMS_DOMAIN is required}"
-: "${IMS_UE_GATEWAY:?IMS_UE_GATEWAY is required}"
-: "${IMS_UE_GATEWAY_CIDR:?IMS_UE_GATEWAY_CIDR is required}"
-: "${IMS_UE_CIDR:?IMS_UE_CIDR is required}"
-: "${INTERNET_UE_CIDR:?INTERNET_UE_CIDR is required}"
-: "${PYHSS_API_BIND:?PYHSS_API_BIND is required}"
-: "${PYHSS_API_PORT:?PYHSS_API_PORT is required}"
-
-echo "===== UE PDU sessions (internet + ims) ====="
-for ue in lab-ue1 lab-ue2; do
-    # Current interface addresses prove live PDU sessions; logs may contain stale successes.
-    if ! addresses=$(docker exec "$ue" ip -o -4 addr show); then
-        printf 'FAIL: %s: cannot read current interfaces\n' "$ue"
-        fail=1
-        continue
-    fi
-    ims_tun=''
-    ims_ip=''
-    internet_tun=''
-    while read -r index candidate family cidr rest; do
-        [[ $candidate == uesimtun* && $family == inet ]] || continue
-        candidate_ip=${cidr%%/*}
-        if ipv4_in_cidr "$candidate_ip" "$IMS_UE_CIDR"; then
-            ims_tun=$candidate
-            ims_ip=$candidate_ip
-        elif ipv4_in_cidr "$candidate_ip" "$INTERNET_UE_CIDR"; then
-            internet_tun=$candidate
-        fi
-    done <<< "$addresses"
-    if [[ -n $ims_tun && -n $internet_tun && $ims_tun != "$internet_tun" ]]; then
-        printf 'PASS: %s: live internet and ims TUN addresses\n' "$ue"
-        check "$ue: ping $IMS_UE_GATEWAY via $ims_tun" \
-            docker exec "$ue" ping -I "$ims_tun" -c 3 -W 2 "$IMS_UE_GATEWAY"
-        for target in "$PCSCF_IP" "$RTPENGINE_IP"; do
-            if route=$(docker exec "$ue" ip -4 route get "$target") && \
-                [[ " $route " == *" dev $ims_tun "* && " $route " == *" src $ims_ip "* ]]; then
-                printf 'PASS: %s: route to %s uses %s from %s\n' "$ue" "$target" "$ims_tun" "$ims_ip"
-            else
-                printf 'FAIL: %s: route to %s bypasses ims TUN/source\n' "$ue" "$target"
-                fail=1
-            fi
-        done
-    else
-        printf 'FAIL: %s: live internet/ims TUN pair missing\n' "$ue"
-        fail=1
-    fi
+echo '===== Маршрут к UE через UPF ====='
+for container in lab-pcscf lab-scscf lab-rtpengine; do
+    check "$container: $IMS_UE_CIDR via $UPF_IP" \
+        sh -c "docker exec $container ip route show '$IMS_UE_CIDR' | grep -q 'via $UPF_IP'"
 done
 
-echo "===== UPF ims DNN ($UPF_IMS_TUN, no NAT) ====="
-check "$UPF_IMS_TUN carries $IMS_UE_GATEWAY_CIDR" \
-    docker exec lab-upf sh -c "ip -4 addr show $UPF_IMS_TUN | grep -Fq 'inet $IMS_UE_GATEWAY_CIDR'"
-check "kernel route $IMS_UE_CIDR dev $UPF_IMS_TUN" \
-    docker exec lab-upf sh -c "ip route show '$IMS_UE_CIDR' | grep -q 'dev $UPF_IMS_TUN'"
-if nat_rules=$(docker exec lab-upf iptables -t nat -S); then
-    if grep -Fq "$IMS_UE_CIDR" <<< "$nat_rules"; then
-        printf 'FAIL: no MASQUERADE for the ims pool\n'
-        fail=1
-    else
-        printf 'PASS: no MASQUERADE for the ims pool\n'
-    fi
-else
-    printf 'FAIL: cannot read UPF NAT rules\n'
-    fail=1
-fi
-check "internet pool NAT intact" \
-    docker exec lab-upf sh -c "iptables -t nat -S | grep -Fq '$INTERNET_UE_CIDR'"
-
-echo "===== IMS DNS ====="
-for entry in "pcscf $PCSCF_IP" "icscf $ICSCF_IP" "scscf $SCSCF_IP" "hss $PYHSS_IP"; do
-    read -r name expected_ip <<<"$entry"
-    check "dnsmasq resolves $name.$IMS_DOMAIN to $expected_ip" \
-        docker exec lab-dns sh -c "nslookup '$name.$IMS_DOMAIN' '$LOOPBACK_IP' | grep -Fq '$expected_ip'"
+echo '===== PyHSS ====='
+subscribers=$(curl -fsS "http://$PYHSS_API_BIND:$PYHSS_API_PORT/ims_subscriber/list?page=0&page_size=200")
+for imsi in "$UE1_IMSI" "$UE2_IMSI" "$SIPUE1_IMSI" "$SIPUE2_IMSI"; do
+    check "PyHSS: IMS-абонент $imsi" grep -q "\"$imsi\"" <<<"$subscribers"
 done
-check "dnsmasq SRV _sip._udp home domain -> icscf:$ICSCF_SIP_PORT" \
-    docker exec lab-dns sh -c "nslookup -type=srv _sip._udp.$IMS_DOMAIN '$LOOPBACK_IP' 2>/dev/null | grep -q '$ICSCF_SIP_PORT'"
+check "PyHSS: Diameter Cx слушает $PYHSS_IP:$PYHSS_BIND_PORT" docker exec lab-pyhss python3 -c \
+    "import socket; socket.create_connection(('$PYHSS_IP', $PYHSS_BIND_PORT), 3)"
+# Готовность Cx: тот же разбор cdp.list_peers, что и в scripts/start.py.
+for container in lab-icscf lab-scscf; do
+    check "$container: Cx к hss.$IMS_DOMAIN открыт" sh -c "docker exec $container kamcmd cdp.list_peers |
+        python3 -c 'import sys; sys.path.insert(0, \"$root/scripts\"); import start;
+raise SystemExit(0 if start.connected_hss_peer(sys.stdin.read(), \"$IMS_DOMAIN\") else 1)'"
+done
 
-echo "===== PyHSS ====="
-check "REST API lists both IMSIs" \
-    sh -c "curl -fsS 'http://$PYHSS_API_BIND:$PYHSS_API_PORT/ims_subscriber/list' | grep -q '$UE1_IMSI' && curl -fsS 'http://$PYHSS_API_BIND:$PYHSS_API_PORT/ims_subscriber/list' | grep -q '$UE2_IMSI'"
-check "Diameter Cx listening on ${IMS_DOMAIN}:$PYHSS_BIND_PORT" \
-    docker exec lab-pyhss python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect(('$PYHSS_IP', int('$PYHSS_BIND_PORT')))"
+echo '===== Регистрация тестовых клиентов ====='
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+check 'lab-sipue1 и lab-sipue2: REGISTER 200 OK' fresh_clients
+scscf_logs=$(docker logs --since "$since" lab-scscf 2>&1)
+icscf_logs=$(docker logs --since "$since" lab-icscf 2>&1)
+for entry in "$SIPUE1_IMSI $SIPUE1_IP" "$SIPUE2_IMSI $SIPUE2_IP"; do
+    read -r imsi address <<<"$entry"
+    check "S-CSCF: контакт $imsi@$address действителен" \
+        grep -q "${imsi}@${address}.*Contact valid" <<<"$scscf_logs"
+done
+uaa_ok() { grep -q uaa_return <<<"$icscf_logs" && ! grep -q 'UAR failure' <<<"$icscf_logs"; }
+check 'I-CSCF: UAA получен (выбор S-CSCF)' uaa_ok
+check 'S-CSCF: MAA успешен (вектор аутентификации)' grep -q 'maa_return code is 1' <<<"$scscf_logs"
+check 'S-CSCF: SAA успешен (профиль и iFC)' grep -q 'saa_return code is 1' <<<"$scscf_logs"
 
-if [ "$fail" -eq 0 ]; then
-    echo "PHASE 4A (DOCKER): PASS"
-else
-    echo "PHASE 4A (DOCKER): FAIL"
-    exit 1
-fi
+finish 'IMS DNS + HSS + REGISTRATION'

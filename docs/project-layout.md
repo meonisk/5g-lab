@@ -1,77 +1,84 @@
 # Карта проекта
 
-Быстрая навигация по компонентам: [app/README.md](../app/README.md).
+Пути — от корня репозитория. Команды лежат в `scripts/`, документация — в `docs/`,
+код и конфигурация — в `app/`, локальные данные (записи, модели, WAV) — в
+игнорируемом `local/`.
 
-Пути указаны относительно корня репозитория `5g-lab`. В `app/` ровно пять разделов:
-`services`, `infrastructure`, `tests`, `research`, `config`.
-Команды находятся в `scripts/`, документация в `docs/`, локальные данные в `local/`.
-Назначение каждого скрипта описано в `scripts/README.md`.
+## Каталоги и файлы
 
-| Каталог / файл | Ответственность |
-| --- | --- |
-| `docker-compose.yml` | Короткая точка сборки стенда, сети и тома |
-| `app/infrastructure/compose/core-oai.yml` | Локальный OAI CN5G и отдельная база UDR |
-| `compose.partner.yml` | Только передаваемый IMS + AI для внешнего OAI |
-| `app/infrastructure/compose/access.yml` | gNB, UE и SIP-клиенты |
-| `app/infrastructure/compose/ims.yml` | DNS, HSS, CSCF и RTPengine |
-| `app/infrastructure/compose/ai.yml` | SIP AS, Media Adapter, AI Worker, LLM, Voice Agent |
-| `app/tests/fixtures/docker-compose.dialogue.yml` | Подключение двух локальных WAV для теста |
-| `app/tests/fixtures/docker-compose.interpreter.yml` | Два языковых входа и WAV полного перевода |
-| `app/tests/fixtures/docker-compose.parallel.yml` | Одинаковые WAV для проверки параллельной обработки |
-| `app/config/lab.env` | Публичные параметры, образы, лимиты, модели, топология |
-| `app/config/ims.env.example`, `local/secrets/` | Шаблон и игнорируемые локальные ключи |
-| `app/infrastructure/configs/` | Шаблоны конфигураций сетевых компонентов |
-| `app/services/` | Собственные Python-сервисы и их Dockerfile |
-| `app/infrastructure/images/` | Образы инфраструктурных утилит |
-| `scripts/` | Запуск, provisioning и совместимые команды оператора |
-| `scripts/quality/` | Автоматические проверки правил разработки |
-| `app/tests/unit/` | Быстрые проверки без контейнеров и скачивания моделей |
-| `app/tests/integration/` | Проверки работающего IMS-стенда |
-| `app/tests/fixtures/` | Текстовые сценарии синтетических разговоров |
-| `app/research/` | Дизайны, схемы и модульный сборщик evidence |
-| `docs/` | Устройство проекта, настройка, перенос на физический стенд |
-| `docs/tutorials/` | Три основных туториала: IMS и ядро, IMS и AI, SIP-серверы и клиенты |
-| `docs/hardening/` | Модель развёртывания, решения по защите и масштабированию |
-| `app/infrastructure/vendor/` | Сторонние файлы с отдельной лицензией и provenance |
-| `local/private/` | Локальные WAV и записи, исключённые из Git |
-| `local/evidence/` | Локальные результаты admission/research, исключённые из Git |
+- `docker-compose.yml` — единственная точка сборки: подключает `ims.yml` и `ai.yml`,
+  объявляет внешнюю сеть ядра и тома.
+- `app/config/lab.env` — все параметры: сеть ядра, адреса, абоненты и ключи SIM,
+  номера услуг, модели, лимиты.
+- `app/config/ai-profiles.json` — параметры CPU-режимов AI.
+- `app/infrastructure/compose/ims.yml` — DNS, MySQL, PyHSS, P/I/S-CSCF, RTPengine и
+  тестовые клиенты PJSUA (профиль `test`).
+- `app/infrastructure/compose/ai.yml` — SIP AS, Media Adapter, AI Worker, LLM, Voice Agent
+  и разовые init-контейнеры.
+- `app/infrastructure/configs/dns/` — шаблон DNS-зоны IMS.
+- `app/infrastructure/images/` — Dockerfile инфраструктуры: DNS, PJSUA, S-CSCF с патчем,
+  загрузчик LLM.
+- `app/infrastructure/vendor/` — сторонние конфигурации (docker_open5gs, kamailio-ims)
+  с лицензией и provenance.
+- `app/services/` — наши Python-сервисы: `sip-as/`, `media-adapter/`, `ai-worker/`,
+  `voice-agent/` и общая HTTP-обвязка `lab_common/`.
+- `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
+  работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
+- `scripts/` — шесть файлов, описаны ниже.
+- `docs/` — три туториала, схема `ims-ai.svg` и эта карта.
 
-Публикация и границы проверки описаны в [publication.md](publication.md)
-и [status.md](status.md).
+## Скрипты
 
-## Где менять поведение
+- `start.py` — проверка `lab.env` и сети ядра, запуск, абоненты, ожидание готовности;
+  `--check`, `--ims-only`, `--mode baseline|balanced|compact|minimal`.
+- `provision.py` — абоненты в PyHSS (вызывается из `start.py`, можно отдельно).
+- `prepare_translation_models.py` — однократная подготовка OPUS-MT для CPU-режимов.
+- `check.py` — offline-проверки перед коммитом.
+- `dns-ims-run.sh`, `sip-ue-run.sh` — entrypoint контейнеров DNS и PJSUA.
 
-AI Worker: `app/services/ai-worker/ims_ai/`.
+## Где менять поведение AI
 
-- `settings.py`: параметры из env с единицами измерения.
-- `runtime.py`: очередь, блокировка, буферы, модель, контекст звонков.
-- `audio.py`: декодирование PCMU и энергия кадра.
-- `segmentation.py`: границы реплик по тишине и промежуткам RTP.
-- `models.py`: загрузка фиксированной версии Whisper.
-- `utterances.py`: распознавание STT и сбор метрик обработки.
-- `interpretation.py`: выбор пофразового или экспериментального потокового перевода.
-- `streaming.py`: согласование ASR-префиксов; режим по умолчанию выключен.
-- `transcription.py`: нормализация текста и приватная запись.
-- `replies.py`: перевод/ответ и доставка в нужный языковой канал.
-- `queueing.py`: типизированное задание реплики и ограниченная очередь.
-- `llm.py`: запросы к локальной LLM и проверки текста.
-- `recording.py`: приватные WAV, транскрипция и manifest.
-- `lifecycle.py`: очередь обработки и сохранение хвоста при BYE.
-- `maintenance.py`: удаление устаревшего состояния из памяти.
-- `api.py`: короткие HTTP-маршруты приёма аудио и статуса.
-- `app.py`: запуск потоков и HTTP-сервера.
+AI Worker, `app/services/ai-worker/ims_ai/`: `settings.py` — параметры из env,
+`runtime.py` — изменяемое состояние (не копируйте его через `from runtime import ...`),
+`segmentation.py` — границы реплик, `queueing.py` — очередь, `utterances.py` — STT,
+`translation.py` — OPUS-MT, `llm.py` — запросы к Ollama, `replies.py` — доставка ответа,
+`transcription.py` и `recording.py` — запись 1004, `lifecycle.py` — хвост вызова при BYE,
+`api.py` и `app.py` — HTTP и запуск потоков.
 
-SIP AS: `app/services/sip-as/ims_sip/`: сообщения, управление сервисами и маршрутизация.
-Voice Agent: `app/services/voice-agent/ims_voice/`: синтез, RTP, HTTP-управление.
-Его `calls.py` отвечает за начало/завершение звонка и единственную очередь озвучки.
-Media Adapter: `app/services/media-adapter/ims_media/`: захват RTP, публикация, API.
-Общая обвязка `app/services/lab_common/http.py`: Flask, Waitress, HTTPX,
-проверка токена и ограничения запросов. Карта чтения кода — `app/services/README.md`.
-Файлы `worker.py`, `server.py`, `agent.py`, `adapter.py` — короткие точки входа.
+SIP AS — `app/services/sip-as/ims_sip/` (`routing.py` выбирает сценарий, `sdp.py` —
+проверка SDP). Voice Agent — `app/services/voice-agent/ims_voice/` (`calls.py` — жизнь
+вызова и очередь озвучки, `media.py` — RTP). Media Adapter —
+`app/services/media-adapter/ims_media/`. Файлы `worker.py`, `server.py`, `agent.py`,
+`adapter.py` — короткие точки входа. Пакет `lab_common` копируется во все четыре
+образа: после его изменения пересоберите их все.
 
-Сборщик исследований: `app/research/tools/ims_research/`: CLI, общие функции,
-инвентаризация, сбор, приватность и валидация. `research_run.py` сохраняет CLI.
+## Тесты
 
-Compose include использует корень проекта как `project_directory`: относительные
-пути томов и `app/config/lab.env` не зависят от расположения фрагмента. Запускайте Compose
-через `scripts/compose.ps1` или `scripts/compose.sh`, которые передают оба env.
+Каждый тест начинается с описания того, что он проверяет.
+
+Интеграционные (`app/tests/integration/`, на работающем стенде, строго по одному;
+подробно — [туториал 2](guide-2-ims-ai.md#5-проверки)):
+
+- `verify-ims.sh` — DNS, HSS и Cx, маршрут к UE, регистрация тестовых клиентов.
+- `verify-ims-call.sh` — обычный вызов, iFC → SIP AS, RTPengine, fail-open при отказе AI.
+- `verify-voice-agent.sh` — номер услуги, приветствие, RTP, BYE.
+- `verify-translation.sh` — 1003: русская речь → английский перевод по RTP.
+- `verify-transcription.sh` — 1004: нормализация, запись WAV и расшифровки.
+- `verify_interpreter.py` — 1005/1006: перевод в обе стороны и задержка.
+- `verify-security.sh` — изоляция и права контейнеров, токены, журналы.
+- `common.sh` — общий код shell-проверок (загрузка `lab.env`, PASS/FAIL, PJSUA).
+
+Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/check.py`):
+
+- `test_start.py` — проверка `lab.env`, разбор Cx-пиров, overlay CPU-режимов.
+- `test_subscriber_provisioning.py` — проверка ключей до записи, сохранение AuC.
+- `test_service_api.py` — HTTP-контракты сервисов и жизненный цикл очереди озвучки.
+- `test_media_routing.py` — привязка RTP к вызову в Media Adapter.
+- `test_phrase_boundaries.py` — целые фразы, независимые вызовы, хвост при BYE.
+- `test_phone_sdp.py` — AS не соглашается на кодек, которого не было в offer.
+- `test_cpu_ai_profiles.py` — направления OPUS-MT, без LLM в CPU-режимах.
+
+## Правила
+
+Перед коммитом — `python3 scripts/check.py` (нужны `pip install -r requirements-dev.txt`).
+Остальные правила — в [CONTRIBUTING.md](../CONTRIBUTING.md).

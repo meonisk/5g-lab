@@ -1,5 +1,4 @@
 local/
-docs/hardening/context.local.md
 __pycache__/
 *.py[cod]
 .ruff_cache/
@@ -24,7 +23,6 @@ dist/
 *.zip
 .env.*
 !.env.example
-ims.env
 .pytest_cache/
 .coverage
 htmlcov/

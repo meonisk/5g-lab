@@ -5,6 +5,21 @@ x-bounded-logging: &bounded-logging
     max-size: ${CUSTOM_SERVICE_LOG_MAX_SIZE}
     max-file: ${CUSTOM_SERVICE_LOG_MAX_FILES}
 
+x-sip-ue: &sip-ue
+  build: app/infrastructure/images/pjsua
+  image: lab-pjsua
+  profiles: [test]
+  restart: unless-stopped
+  # tini forwards SIGTERM to PJSUA so docker stop ends the client cleanly.
+  init: true
+  depends_on: [pcscf]
+  env_file: [app/config/lab.env]
+  volumes:
+    - ./scripts/sip-ue-run.sh:/lab/sip-ue-run.sh:ro
+    - ./local/private/interpreter:/fixtures:ro
+  entrypoint: ["/lab/sip-ue-run.sh"]
+  logging: *bounded-logging
+
 services:
   dns:
     build: app/infrastructure/images/dnsmasq
@@ -16,7 +31,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
-      UPF_IP: ${IMS_ROUTE_GATEWAY:-${UPF_IP}}
+      UPF_IP: ${UPF_IP}
     volumes:
       - ./app/infrastructure/configs/dns/ims-dnsmasq.conf:/etc/dnsmasq.d/ims.conf:ro
       - ./scripts/dns-ims-run.sh:/lab/dns-ims-run.sh:ro
@@ -54,15 +69,12 @@ services:
     networks:
       lab5g:
         ipv4_address: ${PYHSS_IP}
-      ims-admin:
-        gw_priority: 1
     logging: *bounded-logging
 
-  # --- IMS layer (Phase 4B: CSCF signalling core) ---------------------------
   # Kamailio P/I/S-CSCF from the vendored docker_open5gs configs; the image
   # entrypoint dispatches on COMPONENT_NAME and the init scripts template the
-  # configs from the app/config/lab.env variables. CSCFs resolve IMS FQDNs through the
-  # lab dnsmasq (dns: override) and route back to UE pools via the UPF.
+  # configs from app/config/lab.env. CSCFs resolve IMS FQDNs through the lab
+  # dnsmasq (dns: override) and route back to the UE pools via the UPF.
 
   icscf:
     image: ${KAMAILIO_IMAGE}
@@ -71,7 +83,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
-      - UPF_IP=${IMS_ROUTE_GATEWAY:-${UPF_IP}}
+      - UPF_IP=${UPF_IP}
       - COMPONENT_NAME=icscf
     cap_add: [NET_ADMIN]
     dns:
@@ -98,7 +110,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
-      - UPF_IP=${IMS_ROUTE_GATEWAY:-${UPF_IP}}
+      - UPF_IP=${UPF_IP}
       - COMPONENT_NAME=scscf
     cap_add: [NET_ADMIN]
     dns:
@@ -122,7 +134,7 @@ services:
     env_file:
       - app/config/lab.env
     environment:
-      - UPF_IP=${IMS_ROUTE_GATEWAY:-${UPF_IP}}
+      - UPF_IP=${UPF_IP}
       - COMPONENT_NAME=pcscf
       - PCSCF_PUB_IP=${PCSCF_IP}
     cap_add: [NET_ADMIN]
@@ -151,7 +163,7 @@ services:
       - app/config/lab.env
     cap_add: [NET_ADMIN]
     environment:
-      UPF_IP: ${IMS_ROUTE_GATEWAY:-${UPF_IP}}
+      UPF_IP: ${UPF_IP}
       INTERFACE: ${RTPENGINE_IP}
       LISTEN_NG: ${RTPENGINE_IP}:${RTPENGINE_NG_PORT}
       LISTEN_CLI: ${RTPENGINE_IP}:${RTPENGINE_CLI_PORT}
@@ -165,10 +177,30 @@ services:
         ipv4_address: ${RTPENGINE_IP}
     logging: *bounded-logging
 
-  # AS and media observation services are defined in ai.yml.
+  # Test SIP clients (profile "test"): PJSUA registers with SIP Digest straight
+  # from the core bridge, without a 5G UE. Phones use UE1/UE2; these use SIPUE*.
+  sipue1:
+    <<: *sip-ue
+    container_name: lab-sipue1
+    environment:
+      IMSI: ${SIPUE1_IMSI}
+      SIP_UE_IP: ${SIPUE1_IP}
+      IMS_DIGEST_PASSWORD: ${SIPUE1_IMS_K}
+      SIP_UE_PLAYBACK_FILE: ${SIPUE1_PLAYBACK_FILE:-}
+      SIP_UE_AUTO_CONFERENCE: ${SIPUE_AUTO_CONFERENCE:-1}
+    networks:
+      lab5g:
+        ipv4_address: ${SIPUE1_IP}
 
-# Management bridge keeps the localhost REST API reachable in macvlan deployment.
-networks:
-  ims-admin:
-    name: lab-ims-admin
-    driver: bridge
+  sipue2:
+    <<: *sip-ue
+    container_name: lab-sipue2
+    environment:
+      IMSI: ${SIPUE2_IMSI}
+      SIP_UE_IP: ${SIPUE2_IP}
+      IMS_DIGEST_PASSWORD: ${SIPUE2_IMS_K}
+      SIP_UE_PLAYBACK_FILE: ${SIPUE2_PLAYBACK_FILE:-}
+      SIP_UE_AUTO_CONFERENCE: ${SIPUE_AUTO_CONFERENCE:-1}
+    networks:
+      lab5g:
+        ipv4_address: ${SIPUE2_IP}

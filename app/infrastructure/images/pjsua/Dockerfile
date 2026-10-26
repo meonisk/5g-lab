@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
-# Minimal pjsua CLI (pjproject 2.14.1, audio only) for the UE-side IMS SIP
-# client containers. Built once, then the containers attach to the UE network
-# namespaces (network_mode: service:ueN) so signalling and media ride the ims
-# PDU session (uesimtun1).
+# Minimal pjsua CLI (pjproject 2.14.1, audio only) for the test SIP clients
+# lab-sipue1/2. They attach to the core bridge and register to the P-CSCF
+# directly; ping and ip stay for manual network diagnostics.
 FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl libasound2-dev libssl-dev \

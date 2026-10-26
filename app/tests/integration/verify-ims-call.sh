@@ -1,71 +1,58 @@
 #!/usr/bin/env bash
-# Phase 4C/4D acceptance: IMS call, RTPengine media, iFC-triggered AS,
-# normalized media delivery, AI inference, and fail-open behavior.
-set -Eeuo pipefail
-
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../scripts" && pwd)
-# shellcheck source=load-lab-env.sh
-source "$script_dir/load-lab-env.sh"
-
-fail=0
-check() {
-    local label=$1; shift
-    if "$@"; then printf 'PASS: %s\n' "$label"; else printf 'FAIL: %s\n' "$label"; fail=1; fi
-}
+# Шаги 4–6 обычного вызова: INVITE lab-sipue1 -> lab-sipue2 через P/S-CSCF,
+# S-CSCF вызывает SIP AS по iFC, RTPengine держит медиа обеих сторон, Media
+# Adapter передаёт звук в AI Worker. При остановленном AI Worker RTP продолжается
+# (fail-open). На время проверки AI Worker останавливается: не запускайте во
+# время чужих звонков через AI.
+# Без -e: сбой одной команды даёт строку FAIL, а не обрыв без итога.
+set -uo pipefail
+source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
 worker_stopped=0
 cleanup() {
     if ((worker_stopped)); then docker start lab-ai-worker >/dev/null 2>&1 || true; fi
-    docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
+    hangup_clients
 }
 trap cleanup EXIT
 
+rtp_packets() {
+    docker exec lab-rtpengine rtpengine-ctl -ip "$RTPENGINE_IP" -port "$RTPENGINE_CLI_PORT" \
+        call "$1" info 2>&1 || true
+}
+packet_sum() {
+    awk '/Port / {for(i=1;i<=NF;i++) if($i=="p,") sum+=$(i-1)} END {print sum+0}'
+}
+
+check 'тестовые клиенты зарегистрированы' fresh_clients
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-docker exec lab-sipue1 sh -lc 'printf "ha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
-docker exec lab-sipue2 sh -lc 'printf "ha\n" > /tmp/pjsua-control' >/dev/null 2>&1 || true
-docker exec lab-rtpengine rtpengine-ctl -ip "$RTPENGINE_IP" -port "$RTPENGINE_CLI_PORT" terminate all >/dev/null 2>&1 || true
-sleep 1
-docker exec lab-sipue1 sh -lc 'printf "m\nsip:${UE2_IMSI}@${IMS_DOMAIN}\n" > /tmp/pjsua-control'
-
-deadline=$((SECONDS + 25))
-call_id=''
-while ((SECONDS < deadline)); do
-    as_logs=$(docker logs lab-sip-as --since "$since" 2>&1)
-    call_id=$(sed -n 's/.*AS observed INVITE call_id=\([^ ]*\).*/\1/p' <<<"$as_logs" | tail -1)
-    ue1_logs=$(docker logs lab-sipue1 --since "$since" 2>&1)
-    [[ -n "$call_id" && "$ue1_logs" == *'Response msg 200/INVITE'* ]] && break
-    sleep 1
-done
-
-ue2_logs=$(docker logs lab-sipue2 --since "$since" 2>&1)
-check 'caller received 200/INVITE' grep -q 'Response msg 200/INVITE' <<<"${ue1_logs:-}"
-check 'callee received INVITE over IMS path' grep -q 'Request msg INVITE' <<<"$ue2_logs"
-check 'S-CSCF triggered SIP AS through iFC/ISC' test -n "$call_id"
-
+pjsua lab-sipue1 "m\nsip:${SIPUE2_IMSI}@${IMS_DOMAIN}\n"
+call_id=$(wait_call_id '.*AS observed INVITE call_id=\([^ ]*\).*' "$since")
 sleep 4
-call_info=$(docker exec lab-rtpengine rtpengine-ctl -ip "$RTPENGINE_IP" -port "$RTPENGINE_CLI_PORT" call "$call_id" info 2>&1 || true)
-ue1_ip=$(docker exec lab-ue1 ip route get "$PCSCF_IP" | sed -n 's/.* src \([^ ]*\).*/\1/p')
-ue2_ip=$(docker exec lab-ue2 ip route get "$PCSCF_IP" | sed -n 's/.* src \([^ ]*\).*/\1/p')
-check 'RTPengine has caller IMS-PDU stream' grep -q "$ue1_ip" <<<"$call_info"
-check 'RTPengine has callee IMS-PDU stream' grep -q "$ue2_ip" <<<"$call_info"
-before=$(awk '/Port / {for(i=1;i<=NF;i++) if($i=="p,") sum+=$(i-1)} END {print sum+0}' <<<"$call_info")
 
-ai_logs=$(docker logs lab-ai-worker --since "$since" 2>&1)
-check 'AI Worker accepted an RTP observation window for this IMS call' \
-    grep -q "AI stream_received .*calls=.*$call_id" <<<"$ai_logs"
+caller_logs=$(docker logs lab-sipue1 --since "$since" 2>&1)
+callee_logs=$(docker logs lab-sipue2 --since "$since" 2>&1)
+check 'вызывающий получил 200/INVITE' grep -q 'Response msg 200/INVITE' <<<"$caller_logs"
+check 'вызываемый получил INVITE через IMS' grep -q 'Request msg INVITE' <<<"$callee_logs"
+check 'S-CSCF вызвал SIP AS по iFC (ISC)' test -n "$call_id"
 
+call_info=$(rtp_packets "$call_id")
+check 'RTPengine: медиа вызывающего' grep -q "$SIPUE1_IP" <<<"$call_info"
+check 'RTPengine: медиа вызываемого' grep -q "$SIPUE2_IP" <<<"$call_info"
+check 'AI Worker получил окна звука этого вызова' \
+    grep -q "AI stream_received .*calls=.*$call_id" <<<"$(docker logs lab-ai-worker --since "$since" 2>&1)"
+before=$(packet_sum <<<"$call_info")
+
+# Fail-open: остановка AI не должна прерывать разговор абонентов.
 docker stop -t 1 lab-ai-worker >/dev/null
 worker_stopped=1
 outage_since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 sleep 7
-after_info=$(docker exec lab-rtpengine rtpengine-ctl -ip "$RTPENGINE_IP" -port "$RTPENGINE_CLI_PORT" call "$call_id" info 2>&1 || true)
-after=$(awk '/Port / {for(i=1;i<=NF;i++) if($i=="p,") sum+=$(i-1)} END {print sum+0}' <<<"$after_info")
-adapter_logs=$(docker logs lab-media-adapter --since "$outage_since" 2>&1)
-printf 'INFO: RTP packets before AI outage=%s after=%s\n' "$before" "$after"
-check 'RTP packet counters advance while AI is stopped' test "$after" -gt "$before"
-check 'Media Adapter reports fail-open AI outage' grep -q 'AI unavailable (media relay unaffected)' <<<"$adapter_logs"
-
+after=$(rtp_packets "$call_id" | packet_sum)
+printf 'INFO: RTP-пакетов до остановки AI=%s, после=%s\n' "$before" "$after"
+check 'счётчики RTP растут при остановленном AI' test "$after" -gt "$before"
+check 'Media Adapter сообщает fail-open' grep -q 'AI unavailable (media relay unaffected)' \
+    <<<"$(docker logs lab-media-adapter --since "$outage_since" 2>&1)"
 docker start lab-ai-worker >/dev/null
 worker_stopped=0
-printf 'PHASE 4C/4D (DOCKER): %s\n' "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
-exit "$fail"
+
+finish 'IMS CALL + AS + RTPENGINE + AI FAIL-OPEN'
