@@ -1,83 +1,24 @@
 #!/usr/bin/env bash
+# Test SIP client: PJSUA registers to our P-CSCF straight from the core bridge
+# (SIP Digest, no 5G UE) and is controlled through the FIFO /tmp/pjsua-control.
 set -Eeuo pipefail
 
 : "${IMSI:?IMSI is required}"
-: "${IMS_DIGEST_PASSWORD:?IMS_DIGEST_PASSWORD is required in local/secrets/ims.env}"
-
+: "${IMS_DIGEST_PASSWORD:?IMS_DIGEST_PASSWORD is required}"
+: "${SIP_UE_IP:?SIP_UE_IP is required}"
 : "${IMS_DOMAIN:?IMS_DOMAIN is required}"
 : "${PCSCF_IP:?PCSCF_IP is required}"
 : "${PCSCF_SIP_PORT:?PCSCF_SIP_PORT is required}"
-: "${RTPENGINE_IP:?RTPENGINE_IP is required}"
-: "${IMS_UE_GATEWAY:?IMS_UE_GATEWAY is required}"
-: "${IMS_UE_CIDR:?IMS_UE_CIDR is required}"
 : "${SIP_UE_AUTO_ANSWER:?SIP_UE_AUTO_ANSWER is required}"
 : "${SIP_UE_AUTO_CONFERENCE:?SIP_UE_AUTO_CONFERENCE is required}"
 : "${SIP_UE_TEST_UTTERANCE:?SIP_UE_TEST_UTTERANCE is required}"
 : "${SIP_UE_PLAYBACK_FILE:=}"
-: "${SIP_UE_RECORD_FILE:=}"
 : "${SIP_UE_CODEC:?SIP_UE_CODEC is required}"
 : "${TTS_VOICE:?TTS_VOICE is required}"
 : "${TTS_RATE:?TTS_RATE is required}"
-net_class_dir=${SIP_UE_NET_CLASS_DIR:-/sys/class/net}
-watch_interval=${SIP_UE_WATCH_INTERVAL:-2}
 
-ipv4_to_int() {
-    local a b c d
-    IFS=. read -r a b c d <<<"$1"
-    printf '%u\n' "$(( (a << 24) | (b << 16) | (c << 8) | d ))"
-}
-
-ipv4_in_cidr() {
-    local address=$1 network=${2%/*} bits=${2#*/} mask address_i network_i
-    address_i=$(ipv4_to_int "$address")
-    network_i=$(ipv4_to_int "$network")
-    mask=$(( (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
-    (( (address_i & mask) == (network_i & mask) ))
-}
-
-for _ in $(seq 1 60); do
-    ims_tun=''
-    for candidate in "$net_class_dir"/uesimtun*; do
-        [[ -e "$candidate" ]] || continue
-        device=${candidate##*/}
-        candidate_ip=$(ip -o -4 addr show "$device" | awk '{print $4}' | cut -d/ -f1)
-        if [[ -n "$candidate_ip" ]] && ipv4_in_cidr "$candidate_ip" "$IMS_UE_CIDR"; then
-            ims_tun=$device
-            break
-        fi
-    done
-    [[ -n "$ims_tun" ]] && break
-    sleep 1
-done
-[[ -n "${ims_tun:-}" ]] || { echo 'ERROR: no TUN reaches IMS_UE_GATEWAY' >&2; exit 1; }
-ue_ip=$(ip -o -4 addr show "$ims_tun" | awk '{print $4}' | cut -d/ -f1)
-
-# These /32 routes are the proof-carrying boundary: SIP and relayed media enter
-# UERANSIM's IMS PDU session instead of taking the shared Docker bridge.
-ip route replace "$PCSCF_IP/32" dev "$ims_tun"
-ip route replace "$RTPENGINE_IP/32" dev "$ims_tun"
-printf 'IMS transport: dev=%s source=%s gateway=%s\n' "$ims_tun" "$ue_ip" "$IMS_UE_GATEWAY"
-
-# Include ifindex so a recreated TUN with the same name and IP still forces
-# a new SIP registration and media socket bind.
-ims_ifindex=$(cat "$net_class_dir/$ims_tun/ifindex")
-network_matches() {
-    local current_ip route target
-    [[ -e "$net_class_dir/$ims_tun/ifindex" ]] || return 1
-    [[ $(cat "$net_class_dir/$ims_tun/ifindex") == "$ims_ifindex" ]] || return 1
-    current_ip=$(ip -o -4 addr show "$ims_tun" 2>/dev/null | awk '{print $4}' | cut -d/ -f1) || return 1
-    [[ "$current_ip" == "$ue_ip" ]] || return 1
-    # Only the two /32 routes installed above are owned by this process.
-    # The gateway may resolve through Docker's bridge without an explicit
-    # interface-bound lookup, even while both SIP and media routes are valid.
-    for target in "$PCSCF_IP" "$RTPENGINE_IP"; do
-        route=$(ip -4 route get "$target" 2>/dev/null) || return 1
-        [[ " $route " == *" dev $ims_tun "* && " $route " == *" src $ue_ip "* ]] || return 1
-    done
-}
-network_matches || { echo 'ERROR: IMS transport route is invalid' >&2; exit 1; }
-
-control=${SIP_UE_CONTROL_PATH:-/tmp/pjsua-control}
+# Speech source: a mounted synthetic WAV for dialogue tests, otherwise one
+# Russian phrase rendered locally by espeak-ng.
 playback=/tmp/ims-agent-test.wav
 if [[ -n "$SIP_UE_PLAYBACK_FILE" ]]; then
     [[ "$SIP_UE_PLAYBACK_FILE" == /* ]] || SIP_UE_PLAYBACK_FILE="/$SIP_UE_PLAYBACK_FILE"
@@ -87,36 +28,24 @@ if [[ -n "$SIP_UE_PLAYBACK_FILE" ]]; then
 else
     espeak-ng -v "$TTS_VOICE" -s "$TTS_RATE" -w "$playback" "$SIP_UE_TEST_UTTERANCE"
 fi
+
+control=/tmp/pjsua-control
 rm -f "$control"
 mkfifo "$control"
 exec 3<>"$control"
-
-recording_arguments=()
-if [[ -n "$SIP_UE_RECORD_FILE" ]]; then
-    [[ "$SIP_UE_RECORD_FILE" == /* ]] || SIP_UE_RECORD_FILE="/$SIP_UE_RECORD_FILE"
-    mkdir -p "$(dirname -- "$SIP_UE_RECORD_FILE")"
-    rm -f "$SIP_UE_RECORD_FILE"
-
-    # pjsua attaches this recorder to the remote call leg. The resulting WAV is
-    # therefore the continuous audio heard by this subscriber, not an AI-side
-    # reconstruction assembled from individual replies.
-    recording_arguments=(--rec-file="$SIP_UE_RECORD_FILE" --auto-rec)
-    printf 'Recording received call audio: %s\n' "$SIP_UE_RECORD_FILE"
-fi
 
 conference_arguments=()
 if [[ "$SIP_UE_AUTO_CONFERENCE" == 1 ]]; then
     conference_arguments=(--auto-conf)
 fi
 
-# Flush SIP events while the dialog is live, not only when the stdio buffer fills.
-# Otherwise receiver/BYE evidence can appear only after the client exits.
-stdbuf -oL -eL pjsua \
+# Line-buffered output keeps SIP events visible in docker logs while the dialog
+# is live; the integration tests read them from there.
+exec stdbuf -oL -eL pjsua \
     --log-level=4 --app-log-level=4 --null-audio --no-tcp --use-compact-form \
     --clock-rate=8000 --snd-clock-rate=8000 \
     --dis-codec='*' --add-codec="$SIP_UE_CODEC" \
     --play-file="$playback" "${conference_arguments[@]}" \
-    "${recording_arguments[@]}" \
     --auto-answer="$SIP_UE_AUTO_ANSWER" \
     --id "sip:${IMSI}@${IMS_DOMAIN}" \
     --registrar "sip:${IMS_DOMAIN}" \
@@ -125,28 +54,5 @@ stdbuf -oL -eL pjsua \
     --username "${IMSI}@${IMS_DOMAIN}" \
     --password "$IMS_DIGEST_PASSWORD" \
     --reg-timeout=3600 \
-    --ip-addr="$ue_ip" \
-    <&3 &
-pjsua_pid=$!
-
-cleanup() {
-    if [[ -n ${pjsua_pid:-} ]]; then
-        kill "$pjsua_pid" 2>/dev/null || true
-        wait "$pjsua_pid" 2>/dev/null || true
-    fi
-    exec 3>&-
-    rm -f "$control"
-}
-trap cleanup EXIT
-trap 'exit 143' TERM
-trap 'exit 130' INT
-
-while kill -0 "$pjsua_pid" 2>/dev/null; do
-    sleep "$watch_interval" &
-    wait "$!" || true
-    if ! network_matches; then
-        echo 'ERROR: IMS TUN, address, or route changed; restarting SIP UE' >&2
-        exit 1
-    fi
-done
-wait "$pjsua_pid"
+    --ip-addr="$SIP_UE_IP" \
+    <&3

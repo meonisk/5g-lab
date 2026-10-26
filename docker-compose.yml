@@ -1,31 +1,24 @@
-# Entry point: domain-specific service definitions live under app/infrastructure/compose.
-# Keep this deployment identifier stable: existing named volumes use this prefix.
-# Repository name: 5g-lab; see docs/running.md for the distinction.
+# IMS + AI beside an independently managed OAI 5G core (Linux host).
+# Run from the repository root: docker compose --env-file app/config/lab.env ...
+# Keep this project name stable: existing named volumes use its prefix.
 name: lab-docker
 include:
-  - path: app/infrastructure/compose/core-oai.yml
-    project_directory: .
-  - path: app/infrastructure/compose/access.yml
-    project_directory: .
   - path: app/infrastructure/compose/ims.yml
     project_directory: .
   - path: app/infrastructure/compose/ai.yml
     project_directory: .
 
 networks:
+  # The core owns this bridge; IMS and AI only attach to it with static IPs.
   lab5g:
-    name: lab5g
-    ipam:
-      config:
-        - subnet: ${LAB_NETWORK_CIDR}
-          ip_range: ${LAB_DYNAMIC_IP_RANGE}
+    name: ${CORE_NETWORK_NAME:?Set CORE_NETWORK_NAME to the Docker network of the OAI core}
+    external: true
+  # Ollama is reachable only from the AI Worker.
   ai-backend:
     name: lab-ai-backend
     internal: true
 
 volumes:
-  oai-mysql-data:
-  mongo-data:
   mysql-data:
   service-control-secret:
   ai-model-cache:

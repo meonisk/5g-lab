@@ -1,7 +1,0 @@
-flowchart LR
-  UE[IMS UE] --> ROUTER[Tenant-aware IMS edge]
-  ROUTER --> C1[Tenant cell A: AS + RTP + Agent + DB + key]
-  ROUTER --> C2[Tenant cell B: AS + RTP + Agent + DB + key]
-  ROUTER --> CN[Tenant cell N]
-  POLICY[Central policy, no media] --> ROUTER
-  AUDIT[Per-tenant redacted audit] --> SEC[Security operations]

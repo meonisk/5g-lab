@@ -121,7 +121,8 @@ class CpuTranslation(unittest.TestCase):
 
 class CpuProfiles(unittest.TestCase):
     def test_profile_model_pairs_and_cpu_guarantees(self):
-        module = load_module("compose_ai_test", ROOT / "scripts/compose_ai.py")
+        sys.path.insert(0, str(ROOT / "scripts"))
+        module = load_module("start_profiles_test", ROOT / "scripts/start.py")
         modes = module.profiles()
         self.assertEqual(modes["balanced"]["AI_MODEL_SIZE"], "small")
         self.assertEqual(modes["compact"]["AI_MODEL_SIZE"], "base")

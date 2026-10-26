@@ -34,6 +34,19 @@ services:
     volumes:
       - service-control-secret:/run/lab-control
 
+  # ai-worker runs as 65532 and must create private session directories.
+  recordings-init:
+    image: ${CONTROL_INIT_IMAGE}
+    restart: "no"
+    read_only: true
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    command: [chown, "65532:65532", "${RECORDING_ROOT}"]
+    volumes:
+      - ./local/private/recordings:${RECORDING_ROOT}
+
   sip-as:
     <<: *custom-service
     build:
@@ -103,6 +116,7 @@ services:
       VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
     depends_on:
       control-secret-init: {condition: service_completed_successfully}
+      recordings-init: {condition: service_completed_successfully}
       llm-worker: {condition: service_started}
     volumes:
       - service-control-secret:/run/lab-control:ro
@@ -122,8 +136,8 @@ services:
       start_period: 180s
 
   # Ollama is intentionally reachable only by the AI Worker on an internal
-  # network. The one-shot initializer is the only component allowed outbound
-  # access while populating the content-verified model volume.
+  # network. The one-shot initializer is the only LLM component allowed outbound
+  # access; it uses the project default bridge, not the core network.
   llm-model-init:
     build:
       context: app/infrastructure/images/llm-init
@@ -145,7 +159,7 @@ services:
       - llm-model-cache:/root/.ollama
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
-    networks: [lab5g]
+    networks: [default]
 
   llm-worker:
     image: ${OLLAMA_IMAGE}
