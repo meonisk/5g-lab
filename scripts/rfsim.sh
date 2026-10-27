@@ -21,6 +21,9 @@ work=$root/local/rfsim
 build=$ran/cmake_targets/ran_build/build
 # Кавычки обязательны: [0] без них — шаблон имени файла для bash.
 channel=('--rfsimulator.[0].options' chanmod --channelmod.modellist modellist_rfsimu_1)
+# Шаблон процессов с нашими копиями; [n] не даёт pgrep/pkill найти собственную
+# командную строку, в которой этот шаблон записан.
+ours="[n]r-.*softmodem -O $work/"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -61,13 +64,14 @@ prepare_configs() {
 }
 
 start_radio() {
-    pgrep -f softmodem >/dev/null && die "softmodem уже запущен: $(pgrep -af softmodem | head -1)"
+    pgrep -f '[s]oftmodem' >/dev/null && die "softmodem уже запущен: $(pgrep -af '[s]oftmodem' | head -1)"
     [[ -x $build/nr-softmodem ]] || die "нет $build/nr-softmodem"
     sudo -v
     prepare_configs
 
+    # </dev/null у фоновых процессов: они не забирают терминал и не портят его режим.
     nohup sudo env RFSIMULATOR=server "$build/nr-softmodem" -O "$work/gnb.conf" --continuous-tx \
-        --rfsim "${channel[@]}" >"$work/gnb.log" 2>&1 &
+        --rfsim "${channel[@]}" </dev/null >"$work/gnb.log" 2>&1 &
     wait_for 30 grep -q 'Received NGSetupResponse' "$work/gnb.log" ||
         die "gNB не подключился к AMF: grep -E 'SCTP|errno|bind' $work/gnb.log"
     echo "gNB: NGSetupResponse получен"
@@ -83,11 +87,12 @@ start_radio() {
         sudo ip netns list | grep -qw "ue$n" || sudo "$ran/tools/scripts/multi-ue.sh" "-c$n" >/dev/null
         # shellcheck disable=SC2086 # параметры UE — несколько отдельных слов
         nohup sudo ip netns exec "ue$n" "$build/nr-uesoftmodem" -O "$work/ue$n.conf" --rfsim $ue_options \
-            "${channel[@]}" "--rfsimulator.[0].serveraddr" "10.$((200 + n)).1.100" >"$work/ue$n.log" 2>&1 &
+            "${channel[@]}" "--rfsimulator.[0].serveraddr" "10.$((200 + n)).1.100" </dev/null >"$work/ue$n.log" 2>&1 &
     done
 
     for n in 1 2; do
-        wait_for 60 test -n "$(tunnel_ip "$n")" ||
+        # Регистрация и PDU-сессия в rfsim под нагрузкой занимают до двух минут.
+        wait_for 120 test -n "$(tunnel_ip "$n")" ||
             die "UE$n без PDU-сессии: tail $work/ue$n.log; если запрос PDU без ответа — SMF (docker logs --tail 20 oai-smf)"
         printf 'UE%s: %s\n' "$n" "$(tunnel_ip "$n")"
     done
@@ -95,13 +100,13 @@ start_radio() {
 
 # Останавливаются только процессы с нашими копиями конфигураций: чужой gNB не трогаем.
 stop_radio() {
-    sudo pkill -f -- "-O $work/" 2>/dev/null || true
-    wait_for 10 sh -c "! pgrep -f -- '-O $work/' >/dev/null" || sudo pkill -9 -f -- "-O $work/" || true
+    sudo pkill -f -- "$ours" 2>/dev/null || true
+    wait_for 10 sh -c "! pgrep -f -- '$ours' >/dev/null" || sudo pkill -9 -f -- "$ours" || true
     echo "rfsim остановлен"
 }
 
 status() {
-    pgrep -af -- "-O $work/" || echo "rfsim не запущен"
+    pgrep -af -- "$ours" || echo "rfsim не запущен"
     local n
     for n in 1 2; do
         printf 'UE%s: %s\n' "$n" "$(tunnel_ip "$n" || true)"

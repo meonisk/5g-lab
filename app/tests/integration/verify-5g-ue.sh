@@ -10,6 +10,9 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
 work=$root/local/rfsim
 jail=$work/pjsua-root
+# Короткая фраза: SIP_UE_TEST_UTTERANCE длиннее предела реплики AI Worker и
+# режется по maximum-duration, а не по паузе.
+phrase='Добрый день. Как у вас дела?'
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 sudo -v || exit 1
 
@@ -47,7 +50,7 @@ wait_docker() {
 stop_clients() {
     for n in 1 2; do ue_cmd "$n" 'ha\nq\n' 2>/dev/null || true; done
     sleep 1
-    sudo pkill -f -- "chroot $jail" 2>/dev/null || true
+    sudo pkill -f -- "[c]hroot $jail" 2>/dev/null || true
 }
 trap stop_clients EXIT
 
@@ -69,7 +72,7 @@ prepare_jail() {
     done
     # Фраза и 20 с тишины: плеер PJSUA играет по кругу, а агенту нужна пауза,
     # чтобы закончить реплику и ответить, не будучи перебитым.
-    sudo chroot "$jail" espeak-ng -v "$TTS_VOICE" -s "$TTS_RATE" -w /tmp/phrase.wav "$SIP_UE_TEST_UTTERANCE" &&
+    sudo chroot "$jail" espeak-ng -v "$TTS_VOICE" -s "$TTS_RATE" -w /tmp/phrase.wav "$phrase" &&
         sudo python3 - "$jail/tmp" <<'EOF'
 import sys, wave
 folder = sys.argv[1]
@@ -78,6 +81,8 @@ with wave.open(f"{folder}/phrase.wav", "rb") as source:
 with wave.open(f"{folder}/phrase-pause.wav", "wb") as target:
     target.setparams(params)
     target.writeframes(audio + bytes(params.sampwidth * params.framerate * 20))
+with open(f"{folder}/phrase.seconds", "w") as seconds:
+    seconds.write(str(len(audio) // (params.sampwidth * params.framerate) + 1))
 EOF
 }
 
@@ -100,7 +105,7 @@ start_client() {
 
 # Порты конференц-моста: проигрыватель WAV подаётся в последний вызов.
 connect_player() {
-    local n=$1 offset rows player call
+    local n=$1 offset rows
     offset=$(mark "$n")
     ue_cmd "$n" 'cl\n'
     sleep 1
@@ -108,6 +113,13 @@ connect_player() {
     player=$(grep '\.wav' <<<"$rows" | sed -E 's/^Port #0*([0-9]+).*/\1/' | tail -1)
     call=$(grep -E '\] +sip:' <<<"$rows" | sed -E 's/^Port #0*([0-9]+).*/\1/' | tail -1)
     [[ -n $player && -n $call ]] && ue_cmd "$n" "cc\n$player\n$call\n"
+}
+
+# Фраза звучит один раз: повтор по кругу перебивал бы медленный ответ агента.
+say_once() {
+    connect_player "$1"
+    sleep "$(cat "$jail/tmp/phrase.seconds")"
+    [[ -n ${player:-} && -n ${call:-} ]] && ue_cmd "$1" "cd\n$player\n$call\n"
 }
 
 # RX текущего вызова из dq; PJSUA пишет тысячи как "2.0Kpkt".
@@ -140,8 +152,9 @@ for n in 1 2; do start_client "$n" "${address[$n]}"; done
 for n in 1 2; do
     imsi_name=UE${n}_IMSI
     check "UE$n: REGISTER 200 OK" wait_log "$n" 'registration success' 40 0
+    # Contact в 200 OK на REGISTER возвращает регистратор S-CSCF: это сохранённый им адрес.
     check "S-CSCF: контакт ${!imsi_name}@${address[$n]} (адрес туннеля)" \
-        wait_docker lab-scscf "${!imsi_name}@${address[$n]}.*Contact valid" 10
+        wait_log "$n" "Contact: <sip:${!imsi_name}@${address[$n]}:[0-9]+;alias=" 5 0
 done
 
 echo "===== A: UE1 -> переводчик $VOICE_TRANSLATOR_MSISDN ====="
@@ -151,7 +164,7 @@ offset=$(mark 1)
 ue_cmd 1 "m\nsip:$VOICE_TRANSLATOR_MSISDN@$IMS_DOMAIN\n"
 check 'UE1: 200/INVITE' wait_log 1 'Response msg 200/INVITE' 30 "$offset"
 check 'Voice Agent: приветствие' wait_docker lab-voice-agent 'reason=greeting state=sent' 20
-connect_player 1
+say_once 1
 # На CPU рядом с rfsim перевод занимает до 20 с; запас на STT, LLM и синтез.
 check 'Voice Agent: перевод озвучен полностью' wait_docker lab-voice-agent 'reason=llm_reply state=sent' 120
 greeting=$(docker logs --since "$since" lab-voice-agent 2>&1 | sed -n 's/.*reason=greeting .*packets=\([0-9]*\).*/\1/p' | tail -1)
@@ -184,7 +197,7 @@ offset=$(mark 2)
 ue_cmd 2 "m\nsip:$VOICE_TRANSCRIBER_MSISDN@$IMS_DOMAIN\n"
 check 'UE2: 200/INVITE' wait_log 2 'Response msg 200/INVITE' 30 "$offset"
 sleep 6
-connect_player 2
+say_once 2
 check 'AI Worker: фраза UE2 распознана' wait_docker lab-ai-worker 'utterance_processed .*transcript_chars=[1-9]' 90
 ue_cmd 2 'ha\n'
 
