@@ -33,6 +33,10 @@ tunnel_ip() {
     sudo ip netns exec "ue$1" ip -4 -o addr show oaitun_ue1 2>/dev/null | awk '{print $4}' | cut -d/ -f1
 }
 
+# Проверка — отдельная функция: wait_for должен заново читать адрес на каждой
+# попытке, а подстановка $(...) в его аргументах вычислилась бы один раз.
+has_tunnel() { [[ -n $(tunnel_ip "$1") ]]; }
+
 wait_for() {
     local seconds=$1; shift
     local deadline=$((SECONDS + seconds))
@@ -91,7 +95,7 @@ start_radio() {
         # UE подключаются по очереди: при одновременном входе gNB rfsim под нагрузкой
         # не успевает с PDCCH (растёт CCE fail), и SMF отклоняет сессию по таймеру.
         # Регистрация и PDU-сессия одного UE занимают до двух минут.
-        wait_for 120 test -n "$(tunnel_ip "$n")" ||
+        wait_for 120 has_tunnel "$n" ||
             die "UE$n без PDU-сессии: grep -E 'PduSession|reject' $work/ue$n.log; docker logs --tail 20 oai-smf. Радио оставлено для разбора: scripts/rfsim.sh down"
         printf 'UE%s: %s\n' "$n" "$(tunnel_ip "$n")"
     done
