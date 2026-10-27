@@ -35,6 +35,13 @@ python3 scripts/start.py
 3. [SIP-серверы и клиенты](docs/guide-3-sip.md) — CSCF, HSS, RTPengine, DNS,
    тестовые клиенты, телефон; остановка стенда.
 
+Проверка через 5G без телефона (OAI RAN в RF Simulator) — после туториала 3:
+
+4. [Вручную](docs/guide-4-5g-manual.md) — gNB, UE и PJSUA по шагам в нескольких
+   терминалах, вызовы в переводчик, между UE и в расшифровку.
+5. [Скриптами](docs/guide-5-5g-scripts.md) — тот же прогон через `rfsim.sh` и
+   `verify-5g-ue.sh`, журналы, диагностика.
+
 Устройство репозитория — [карта проекта](docs/project-layout.md), правила разработки —
 [CONTRIBUTING.md](CONTRIBUTING.md), сторонние компоненты — [THIRD_PARTY.md](THIRD_PARTY.md).
 
