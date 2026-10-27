@@ -93,15 +93,22 @@ start_radio() {
     for n in 1 2; do
         # Регистрация и PDU-сессия в rfsim под нагрузкой занимают до двух минут.
         wait_for 120 test -n "$(tunnel_ip "$n")" ||
-            die "UE$n без PDU-сессии: tail $work/ue$n.log; если запрос PDU без ответа — SMF (docker logs --tail 20 oai-smf)"
+            die "UE$n без PDU-сессии: tail $work/ue$n.log; если PduSessionEstablishRequest без ответа — старая сессия в SMF (docker logs --tail 20 oai-smf). Радио оставлено для разбора: scripts/rfsim.sh down"
         printf 'UE%s: %s\n' "$n" "$(tunnel_ip "$n")"
     done
 }
 
 # Останавливаются только процессы с нашими копиями конфигураций: чужой gNB не трогаем.
+# Сначала UE по SIGINT, пока gNB ещё работает: так у UE есть шанс отключиться от
+# сети. Иначе SMF хранит старую PDU-сессию, и новый запрос с тем же ID остаётся
+# без ответа.
 stop_radio() {
-    sudo pkill -f -- "$ours" 2>/dev/null || true
+    local ues="[n]r-uesoftmodem -O $work/"
+    sudo pkill -INT -f -- "$ues" 2>/dev/null || true
+    wait_for 10 sh -c "! pgrep -f -- '$ues' >/dev/null" || true
+    sudo pkill -INT -f -- "$ours" 2>/dev/null || true
     wait_for 10 sh -c "! pgrep -f -- '$ours' >/dev/null" || sudo pkill -9 -f -- "$ours" || true
+    grep -h 'Deregistration' "$work"/ue[12].log 2>/dev/null | tail -2 || true
     echo "rfsim остановлен"
 }
 
