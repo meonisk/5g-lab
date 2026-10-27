@@ -24,7 +24,7 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — шесть файлов, описаны ниже.
+- `scripts/` — семь файлов, описаны ниже.
 - `docs/` — три туториала, схема `ims-ai.svg` и эта карта.
 
 ## Скрипты
@@ -34,6 +34,7 @@
 - `provision.py` — абоненты в PyHSS (вызывается из `start.py`, можно отдельно).
 - `prepare_translation_models.py` — однократная подготовка OPUS-MT для CPU-режимов.
 - `check.py` — offline-проверки перед коммитом.
+- `rfsim.sh` — gNB и два UE OAI в RF Simulator для проверки через 5G (`up`, `down`, `status`).
 - `dns-ims-run.sh`, `sip-ue-run.sh` — entrypoint контейнеров DNS и PJSUA.
 
 ## Где менять поведение AI
@@ -66,6 +67,7 @@ SIP AS — `app/services/sip-as/ims_sip/` (`routing.py` выбирает сце�
 - `verify-transcription.sh` — 1004: нормализация, запись WAV и расшифровки.
 - `verify_interpreter.py` — 1005/1006: перевод в обе стороны и задержка.
 - `verify-security.sh` — изоляция и права контейнеров, токены, журналы.
+- `verify-5g-ue.sh` — абоненты UE через OAI rfsim (`scripts/rfsim.sh`): 1003, UE↔UE, 1004.
 - `common.sh` — общий код shell-проверок (загрузка `lab.env`, PASS/FAIL, PJSUA).
 
 Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/check.py`):
