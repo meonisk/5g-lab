@@ -88,12 +88,11 @@ start_radio() {
         # shellcheck disable=SC2086 # параметры UE — несколько отдельных слов
         nohup sudo ip netns exec "ue$n" "$build/nr-uesoftmodem" -O "$work/ue$n.conf" --rfsim $ue_options \
             "${channel[@]}" "--rfsimulator.[0].serveraddr" "10.$((200 + n)).1.100" </dev/null >"$work/ue$n.log" 2>&1 &
-    done
-
-    for n in 1 2; do
-        # Регистрация и PDU-сессия в rfsim под нагрузкой занимают до двух минут.
+        # UE подключаются по очереди: при одновременном входе gNB rfsim под нагрузкой
+        # не успевает с PDCCH (растёт CCE fail), и SMF отклоняет сессию по таймеру.
+        # Регистрация и PDU-сессия одного UE занимают до двух минут.
         wait_for 120 test -n "$(tunnel_ip "$n")" ||
-            die "UE$n без PDU-сессии: tail $work/ue$n.log; если PduSessionEstablishRequest без ответа — старая сессия в SMF (docker logs --tail 20 oai-smf). Радио оставлено для разбора: scripts/rfsim.sh down"
+            die "UE$n без PDU-сессии: grep -E 'PduSession|reject' $work/ue$n.log; docker logs --tail 20 oai-smf. Радио оставлено для разбора: scripts/rfsim.sh down"
         printf 'UE%s: %s\n' "$n" "$(tunnel_ip "$n")"
     done
 }
