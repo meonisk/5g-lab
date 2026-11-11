@@ -245,17 +245,26 @@ def ai_round(client, settings, phrase_seconds):
     wait_for(lambda: voice("greeting"), 30, "нет приветствия Voice Agent")
     client.say_once(phrase_seconds)
 
-    def reply():
+    def utterances():
         events = query("lab-ai-worker", "AI_WORKER_PORT", "/events").get("events", [])
+        return [e for e in events if e.get("processed_at", 0) >= started]
+
+    def reply():
         sent = {e.get("reply_id"): e for e in voice("llm_reply")}
-        for event in events:
-            if event.get("processed_at", 0) >= started and event.get("reply_id") in sent:
+        for event in utterances():
+            if event.get("reply_delivered") and event.get("reply_id") in sent:
                 return event, sent[event["reply_id"]]
         return None
 
-    event, tts = wait_for(reply, 120, "перевод не озвучен за 120 с")
-    client.send("ha\n")
-    time.sleep(3)
+    # Ожидание по этапам: при отказе видно, где именно остановился конвейер.
+    try:
+        wait_for(utterances, 60, "AI Worker не получил или не распознал фразу")
+        wait_for(lambda: any(e.get("reply_delivered") for e in utterances()), 60,
+                 "AI Worker распознал фразу, но не отправил перевод")  # fmt: skip
+        event, tts = wait_for(reply, 60, "перевод отправлен, но Voice Agent его не озвучил")
+    finally:
+        client.send("ha\n")
+        time.sleep(3)
     speech_end, audible = event.get("last_voice_packet_at"), tts.get("first_voice_rtp_at")
     return {
         "invite_to_200_ms": setup,
@@ -315,6 +324,8 @@ def report(result):
     if ai:
         total = summary([r["speech_end_to_reply_rtp_ms"] + statistics.mean(via) for r in ai])
         print(f"\nОценка «конец речи -> перевод в трубке» (AI + RTT 5G): {total['median']:.0f} мс")
+    for error in result.get("ai_errors", []):
+        print(f"ОТКАЗ переводчика: {error}")
 
 
 def main():
@@ -339,7 +350,14 @@ def main():
         print("SIP...", flush=True)
         result["sip"] = sip_rounds(clients, settings, args.rounds)
         print("AI...", flush=True)
-        result["ai"] = [ai_round(clients[0], settings, phrase_seconds) for _ in range(args.rounds)]
+        result["ai"], result["ai_errors"] = [], []
+        for _ in range(args.rounds):
+            # Отказ одного вызова не отменяет уже снятые замеры сети и SIP.
+            try:
+                result["ai"].append(ai_round(clients[0], settings, phrase_seconds))
+            except (RuntimeError, TimeoutError, IndexError) as error:
+                print(f"  переводчик: {error}", flush=True)
+                result["ai_errors"].append(str(error))
     finally:
         for client in clients:
             client.stop()
