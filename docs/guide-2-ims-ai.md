@@ -11,9 +11,12 @@
 **1. Добавить AI к работающей IMS** (режим `baseline`: Whisper + Qwen + Piper)
 
 ```bash
-python3 scripts/start.py
+python3 scripts/start.py --mode baseline
 docker compose --env-file app/config/lab.env ps
 ```
+
+В `lab.env` по умолчанию `AI_MODE=compact` (шаг 5); эталонные проверки этого
+туториала рассчитаны на `baseline`, поэтому режим здесь задан явно.
 
 Результат: `STARTED: IMS + AI (baseline)`. К семи контейнерам IMS добавились пять
 долгоживущих: `lab-sip-as`, `lab-media-adapter`, `lab-ai-worker`, `lab-voice-agent`,
@@ -54,22 +57,22 @@ docker exec lab-ai-worker ls /recordings
 docker compose --env-file app/config/lab.env logs -f sip-as media-adapter ai-worker voice-agent
 ```
 
-**5. Необязательно: лёгкий режим `compact` без Qwen и GPU.** Он заменяет `baseline` на
-том же стенде. Сначала один раз модели перевода OPUS-MT (можно на другой машине и
-перенести каталог `local/models/opus-mt/`):
+**5. Лёгкий режим `compact` без Qwen и GPU** — режим по умолчанию (`AI_MODE` в
+`lab.env`). Он заменяет `baseline` на том же стенде. Модели перевода OPUS-MT
+готовятся один раз (каталог `local/models/opus-mt/` можно перенести с другой машины):
 
 ```bash
-python3 -m pip install --user uv
-uv venv --python 3.11 local/opus-venv
-uv pip install --python local/opus-venv/bin/python ctranslate2==4.8.2 transformers==4.57.6 sentencepiece==0.2.2 torch==2.10.0 --torch-backend cpu
-local/opus-venv/bin/python scripts/prepare_translation_models.py
-python3 scripts/start.py --mode compact
+scripts/setup.sh
 ```
+
+`setup.sh` ставит `uv` и конвертер Python 3.11 в `local/uv-venv` и `local/opus-venv`
+(системный Python не меняется), готовит модели, если их нет, и запускает
+`start.py` в режиме `AI_MODE`.
 
 Результат: `OPUS MODEL READY: ru-en`, `OPUS MODEL READY: en-ru`, затем
 `STARTED: IMS + AI (compact)`. Пересоздаются только `lab-ai-worker` и `lab-voice-agent`;
 `lab-llm-worker` и `lab-llm-model-init` удаляются, а не остаются висеть. Проверки 3–5
-из шага 2 рассчитаны на `baseline`. Вернуться к Qwen: `python3 scripts/start.py`.
+из шага 2 рассчитаны на `baseline`. Вернуться к Qwen: `scripts/setup.sh --mode baseline`.
 
 Стенд не останавливайте: дальше — [туториал 3](guide-3-sip.md).
 
@@ -165,8 +168,8 @@ local/private/recordings/<session-id>/
 
 ## 4. Режимы AI
 
-Режим выбирается при запуске: `python3 scripts/start.py --mode <режим>`. `lab.env`
-не меняется: скрипт пишет параметры режима и overlay Compose в
+Режим по умолчанию — `AI_MODE` в `lab.env` (`compact`); разово его меняет
+`python3 scripts/start.py --mode <режим>`. Скрипт пишет параметры режима и overlay Compose в
 `local/ai-profiles/<режим>/`. Режим действует до следующего запуска `start.py`.
 
 - **`baseline`** — Whisper small, перевод Qwen3-4B (Ollama), Piper. Эталон: все

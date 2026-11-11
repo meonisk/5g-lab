@@ -12,7 +12,7 @@ OAI в RF Simulator, PJSUA внутри namespace UE, вызовы через 5G
 **1. Прогон целиком**
 
 ```bash
-scripts/rfsim.sh up && bash app/tests/integration/verify-5g-ue.sh; scripts/rfsim.sh down
+scripts/verify-5g.sh
 ```
 
 Результат через 4–5 минут:
@@ -36,8 +36,8 @@ PASS: AI Worker: фраза UE2 распознана
 rfsim остановлен
 ```
 
-`down` стоит после `;`, а не после `&&`: радио останавливается и тогда, когда тест
-упал.
+Это то же, что `scripts/rfsim.sh up && bash app/tests/integration/verify-5g-ue.sh;
+scripts/rfsim.sh down`: радио останавливается и тогда, когда тест упал.
 
 **2. По частям**
 

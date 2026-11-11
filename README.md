@@ -15,14 +15,20 @@ Linux, Docker Engine 28+ с Compose 2.33+, Python 3.11+, запущенное я
 внесите изменения в SMF/UPF — [туториал 1](docs/guide-1-ims-core.md).
 
 ```bash
-git clone https://github.com/meonisk/5g-lab.git
+git clone --branch partner-ims-ai https://github.com/meonisk/5g-lab.git
 cd 5g-lab
-python3 scripts/start.py --check
-python3 scripts/start.py --ims-only
-python3 scripts/start.py
+scripts/setup.sh
+scripts/verify-5g.sh
 ```
 
-Второй запуск добавляет AI к уже работающей IMS, не перезапуская её.
+`setup.sh` один раз готовит модели перевода OPUS-MT и запускает IMS + AI в лёгком
+режиме `compact` (без Qwen; режим задаёт `AI_MODE` в `lab.env`). Повторный запуск
+ничего не скачивает и не перезапускает работающую IMS. `verify-5g.sh` проверяет
+путь телефон → gNB → AMF/SMF/UPF → IMS → AI через OAI RF Simulator
+([туториал 5](docs/guide-5-5g-scripts.md)).
+
+Режим с Qwen: `scripts/setup.sh --mode baseline`; обратно — `scripts/setup.sh`.
+Только проверка конфигурации: `python3 scripts/start.py --check`.
 
 ## Документация
 

@@ -9,6 +9,17 @@
 
 ## [Unreleased]
 
+- feat: `lab.env` настроен на ядро партнёра: сеть `oai-cn5g-public-net`, пул DNN ims
+  `10.0.9.0/24` из SMF, остальные DNN — `10.0.0.0/16`; адреса IMS и AI — свободные
+  `.160`–`.172` внутри сети ядра `192.168.70.128/26`.
+- feat: режим AI по умолчанию задаёт `AI_MODE` в `lab.env` (`compact`, без Qwen);
+  `start.py --mode` по-прежнему переопределяет его на один запуск.
+- feat: `scripts/setup.sh` — установка одной командой: `uv` и конвертер OPUS-MT в
+  `local/`, модели перевода (один раз), затем `start.py`. `scripts/verify-5g.sh` —
+  проверка через 5G (`rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down`) одной командой.
+- fix(tests): `verify-5g-ue.sh` объясняет провал проверки контакта, если UPF делает
+  NAT трафика UE в IMS (контакт с адресом UPF вместо адреса туннеля).
+
 - refactor!: проект оставлен в одном сценарии — IMS + AI рядом с работающим ядром
   OAI на Linux. Удалены собственное ядро OAI/Open5GS, UERANSIM, поддержка Windows,
   обёртки `start.sh`/`compose.sh`/`*.ps1`, исследовательский сборщик `app/research`,

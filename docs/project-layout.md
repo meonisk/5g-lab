@@ -24,14 +24,17 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — семь файлов, описаны ниже.
+- `scripts/` — девять файлов, описаны ниже.
 - `docs/` — три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
   и эта карта.
 
 ## Скрипты
 
+- `setup.sh` — установка одной командой: модели OPUS-MT для CPU-режима (один раз в
+  `local/`), затем `start.py`; режим — `AI_MODE` из `lab.env` или `--mode`.
+- `verify-5g.sh` — `rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down` одной командой.
 - `start.py` — проверка `lab.env` и сети ядра, запуск, абоненты, ожидание готовности;
-  `--check`, `--ims-only`, `--mode baseline|balanced|compact|minimal`.
+  `--check`, `--ims-only`, `--mode baseline|balanced|compact|minimal` (по умолчанию `AI_MODE`).
 - `provision.py` — абоненты в PyHSS (вызывается из `start.py`, можно отдельно).
 - `prepare_translation_models.py` — однократная подготовка OPUS-MT для CPU-режимов.
 - `check.py` — offline-проверки перед коммитом.

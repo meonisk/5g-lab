@@ -155,6 +155,12 @@ for n in 1 2; do
     # Contact в 200 OK на REGISTER возвращает регистратор S-CSCF: это сохранённый им адрес.
     check "S-CSCF: контакт ${!imsi_name}@${address[$n]} (адрес туннеля)" \
         wait_log "$n" "Contact: <sip:${!imsi_name}@${address[$n]}:[0-9]+;alias=" 5 0
+    # Регистратор видит адрес UPF вместо адреса UE: UPF применяет SNAT и к DNN ims.
+    # Вызовы при этом идут (rport), но контакт живёт только пока жива NAT-запись.
+    if grep -q "Contact: <sip:${!imsi_name}@${UPF_IP}:" "$(log_of "$n")"; then
+        echo "  ПРИЧИНА: UPF ядра делает NAT трафика UE в IMS (контакт @$UPF_IP)."
+        echo "  Нужен NAT только в интернет — docs/guide-1-ims-core.md, шаг 2 (enable_snat: no)."
+    fi
 done
 
 echo "===== A: UE1 -> переводчик $VOICE_TRANSLATOR_MSISDN ====="

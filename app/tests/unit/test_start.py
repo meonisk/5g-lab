@@ -19,6 +19,9 @@ class Validation(unittest.TestCase):
     def test_repository_lab_env_is_consistent(self):
         start.validate(self.settings)
 
+    def test_default_ai_mode_is_a_known_profile(self):
+        self.assertIn(self.settings.get("AI_MODE", "baseline"), start.profiles())
+
     def test_domain_must_follow_mcc_mnc(self):
         with self.assertRaisesRegex(ValueError, "IMS_DOMAIN"):
             start.validate({**self.settings, "MNC": "02"})

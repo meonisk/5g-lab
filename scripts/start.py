@@ -232,13 +232,17 @@ def wait_ai_healthy(settings):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=profiles(), default="baseline", help="Режим AI")
+    parser.add_argument("--mode", choices=profiles(), help="Режим AI (по умолчанию AI_MODE)")
     parser.add_argument("--ims-only", action="store_true", help="Только IMS, без AI-моделей")
     parser.add_argument("--check", action="store_true", help="Проверить конфигурацию и выйти")
     args = parser.parse_args()
 
     settings = read_env()
     validate(settings)
+    # Режим из командной строки важнее AI_MODE из lab.env; без обоих — эталон baseline.
+    args.mode = args.mode or settings.get("AI_MODE") or "baseline"
+    if args.mode not in profiles():
+        raise ValueError(f"AI_MODE={args.mode}: допустимы {', '.join(profiles())}")
     compose, mode_values = compose_command(args.mode)
     # Shell-переменные приоритетнее --env-file; режим не должен от них зависеть.
     environment = None if mode_values is None else {**os.environ, **mode_values}
@@ -253,7 +257,9 @@ def main():
     if mode_values is not None and not args.ims_only:
         for direction in ("ru-en", "en-ru"):
             if not (ROOT / "local/models/opus-mt" / direction / "manifest.json").is_file():
-                raise RuntimeError("Сначала выполните scripts/prepare_translation_models.py")
+                raise RuntimeError(
+                    f"Нет моделей OPUS-MT для {args.mode}: запустите scripts/setup.sh"
+                )
         # Контейнеры Ollama не нужны в CPU-режиме: удаляем, а не оставляем висеть.
         run(
             compose + ["rm", "-sf", "llm-worker", "llm-model-init"],
