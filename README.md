@@ -27,6 +27,8 @@ scripts/verify-5g.sh
 путь телефон → gNB → AMF/SMF/UPF → IMS → AI через OAI RF Simulator
 ([туториал 5](docs/guide-5-5g-scripts.md)).
 
+Задержки через 5G (сеть, SIP, перевод по этапам): `python3 scripts/bench_5g.py`.
+
 Режим с Qwen: `scripts/setup.sh --mode baseline`; обратно — `scripts/setup.sh`.
 Только проверка конфигурации: `python3 scripts/start.py --check`.
 

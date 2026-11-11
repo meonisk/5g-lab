@@ -24,7 +24,7 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — девять файлов, описаны ниже.
+- `scripts/` — десять файлов, описаны ниже.
 - `docs/` — три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
   и эта карта.
 
@@ -33,6 +33,8 @@
 - `setup.sh` — установка одной командой: модели OPUS-MT для CPU-режима (один раз в
   `local/`), затем `start.py`; режим — `AI_MODE` из `lab.env` или `--mode`.
 - `verify-5g.sh` — `rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down` одной командой.
+- `bench_5g.py` — бенчмарк задержек через 5G: путь через туннель, RTT 5G и напрямую,
+  REGISTER/INVITE, переводчик по этапам; отчёт в `local/bench/`.
 - `start.py` — проверка `lab.env` и сети ядра, запуск, абоненты, ожидание готовности;
   `--check`, `--ims-only`, `--mode baseline|balanced|compact|minimal` (по умолчанию `AI_MODE`).
 - `provision.py` — абоненты в PyHSS (вызывается из `start.py`, можно отдельно).
@@ -82,6 +84,7 @@ Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/che
 - `test_media_routing.py` — привязка RTP к вызову в Media Adapter.
 - `test_phrase_boundaries.py` — целые фразы, независимые вызовы, хвост при BYE.
 - `test_phone_sdp.py` — AS не соглашается на кодек, которого не было в offer.
+- `test_bench_5g.py` — разбор ping и медианы бенчмарка.
 - `test_cpu_ai_profiles.py` — направления OPUS-MT, без LLM в CPU-режимах.
 
 ## Правила
