@@ -87,14 +87,16 @@ EOF
 }
 
 # Клиент UEn с ключами абонента UEn из lab.env. --no-vad: тишина тоже уходит в
-# RTP, иначе счётчики пакетов зависят от длины фразы.
+# RTP, иначе счётчики пакетов зависят от длины фразы. --auto-update-nat=0: если
+# UPF делает NAT, PJSUA видит в 401 адрес UPF и заново начинает REGISTER с новым
+# Contact посреди аутентификации — S-CSCF отвечает 403. Телефон так не делает.
 start_client() {
     local n=$1 address=$2 imsi_name=UE${1}_IMSI key_name=UE${1}_IMS_K
     local imsi=${!imsi_name}
     sudo rm -f "$jail/tmp/control-ue$n"
     sudo mkfifo -m 666 "$jail/tmp/control-ue$n"
     nohup sudo ip netns exec "ue$n" chroot "$jail" bash -c 'exec 3<>"$0"; exec stdbuf -oL -eL pjsua "$@" <&3' \
-        "/tmp/control-ue$n" --log-level=4 --app-log-level=4 --null-audio --no-tcp --no-vad \
+        "/tmp/control-ue$n" --log-level=4 --app-log-level=4 --null-audio --no-tcp --no-vad --auto-update-nat=0 \
         --clock-rate=8000 --snd-clock-rate=8000 --dis-codec='*' --add-codec="$SIP_UE_CODEC" \
         --auto-answer=200 --play-file=/tmp/phrase-pause.wav \
         --id "sip:$imsi@$IMS_DOMAIN" --registrar "sip:$IMS_DOMAIN" \

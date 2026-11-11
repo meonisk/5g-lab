@@ -142,7 +142,7 @@ sudo chroot $J espeak-ng -v $TTS_VOICE -s $TTS_RATE -w /tmp/phrase.wav 'Добр
 
 ```bash
 IP=$(sudo ip netns exec ue1 ip -4 -o addr show oaitun_ue1 | awk '{print $4}' | cut -d/ -f1)
-sudo ip netns exec ue1 chroot $J pjsua --log-level=3 --app-log-level=4 --null-audio --no-tcp --no-vad \
+sudo ip netns exec ue1 chroot $J pjsua --log-level=3 --app-log-level=4 --null-audio --no-tcp --no-vad --auto-update-nat=0 \
   --clock-rate=8000 --snd-clock-rate=8000 --dis-codec='*' --add-codec=$SIP_UE_CODEC \
   --auto-answer=200 --play-file=/tmp/phrase.wav \
   --id sip:$UE1_IMSI@$IMS_DOMAIN --registrar sip:$IMS_DOMAIN \
@@ -151,7 +151,9 @@ sudo ip netns exec ue1 chroot $J pjsua --log-level=3 --app-log-level=4 --null-au
 ```
 
 Результат: `registration success, status=200 (OK)`. `--no-vad` нужен, чтобы тишина
-тоже шла в RTP и счётчики пакетов не зависели от длины фразы.
+тоже шла в RTP и счётчики пакетов не зависели от длины фразы. `--auto-update-nat=0`
+не даёт PJSUA перезапускать REGISTER с адресом UPF, если UPF делает NAT трафика в IMS:
+иначе S-CSCF отвечает `403 Authentication Failed`.
 
 Команды консоли PJSUA:
 
