@@ -17,9 +17,14 @@ Linux, Docker Engine 28+ с Compose 2.33+, Python 3.11+, запущенное я
 ```bash
 git clone --branch partner-ims-ai https://github.com/meonisk/5g-lab.git
 cd 5g-lab
+scripts/core-setup.sh apply
 scripts/setup.sh
 scripts/verify-5g.sh
 ```
+
+`core-setup.sh` один раз настраивает ядро OAI под наш IMS (NAT UPF, P-CSCF и DNS в
+SMF, отключение демо-IMS OAI) — что и зачем меняется, описано в
+[docs/partner-core.md](docs/partner-core.md).
 
 `setup.sh` один раз готовит модели перевода OPUS-MT и запускает IMS + AI в лёгком
 режиме `compact` (без Qwen; режим задаёт `AI_MODE` в `lab.env`). Повторный запуск

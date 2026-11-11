@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+- feat: `scripts/core-setup.sh` (`check`, `apply`, `revert`) настраивает ядро OAI
+  партнёра под наш IMS: `enable_snat: no`, NAT только в интернет через `post_start`
+  UPF, `pcscf_ipv4` и `ue_dns` в SMF — наши адреса, демо-IMS OAI (`ims`) — в профиль
+  `oai-demo-ims`. Копии исходных файлов — `*.bak-ims`. Описание — `docs/partner-core.md`.
 - feat: `scripts/bench_5g.py` — бенчмарк задержек через 5G одной командой: проверка
   пути через туннель UE, RTT до P-CSCF через 5G и напрямую, REGISTER и INVITE, перевод
   по этапам (сборка фразы, очередь, STT, перевод, синтез) из событий AI Worker и

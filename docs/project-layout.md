@@ -24,12 +24,14 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — десять файлов, описаны ниже.
-- `docs/` — три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
+- `scripts/` — одиннадцать файлов, описаны ниже.
+- `docs/` — описание правок ядра партнёра (`partner-core.md`), три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
   и эта карта.
 
 ## Скрипты
 
+- `core-setup.sh` — настройка ядра OAI партнёра под наш IMS (`check`, `apply`, `revert`);
+  что меняется — [partner-core.md](partner-core.md).
 - `setup.sh` — установка одной командой: модели OPUS-MT для CPU-режима (один раз в
   `local/`), затем `start.py`; режим — `AI_MODE` из `lab.env` или `--mode`.
 - `verify-5g.sh` — `rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down` одной командой.
