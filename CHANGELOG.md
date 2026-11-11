@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+- docs: `docs/partner-integration.md` — отчёт о подключении IMS + AI к ядру партнёра:
+  пути абонентов (SIPUE напрямую, UE через 5G), изменения, проблемы и решения,
+  результаты проверок и бенчмарка 11.11.2026, открытые вопросы.
 - feat: `scripts/core-setup.sh` (`check`, `apply`, `revert`) настраивает ядро OAI
   партнёра под наш IMS: `enable_snat: no`, NAT только в интернет через `post_start`
   UPF, `pcscf_ipv4` и `ue_dns` в SMF — наши адреса, демо-IMS OAI (`ims`) — в профиль

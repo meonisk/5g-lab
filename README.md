@@ -25,6 +25,8 @@ scripts/verify-5g.sh
 `core-setup.sh` один раз настраивает ядро OAI под наш IMS (NAT UPF, P-CSCF и DNS в
 SMF, отключение демо-IMS OAI) — что и зачем меняется, описано в
 [docs/partner-core.md](docs/partner-core.md).
+Что было сделано на стенде партнёра, какие проблемы встретились и результаты
+проверок — [docs/partner-integration.md](docs/partner-integration.md).
 
 `setup.sh` один раз готовит модели перевода OPUS-MT и запускает IMS + AI в лёгком
 режиме `compact` (без Qwen; режим задаёт `AI_MODE` в `lab.env`). Повторный запуск
