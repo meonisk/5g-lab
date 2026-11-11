@@ -39,12 +39,25 @@ upf:
     enable_snat: no                 # NAT включаем вручную, только в интернет
 ```
 
-На UPF (в контейнере UPF или в его entrypoint) интернет-трафик UE по-прежнему
-проходит через NAT, а трафик к IMS идёт без NAT:
+Интернет-трафик UE по-прежнему проходит через NAT, а трафик к IMS — без NAT. Правило
+ставится при каждом старте UPF через `post_start` в docker-compose ядра (сервис
+`oai-upf`, Compose 2.30+); `-s` — все пулы UE из `dnns`, `! -d` — `LAB_NETWORK_CIDR`:
 
-```bash
-iptables -t nat -A POSTROUTING -s 12.1.1.0/24 ! -d 192.168.70.128/26 -j MASQUERADE
+```yaml
+    oai-upf:
+        post_start:
+            - command: ["iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "12.1.1.0/24", "!", "-d", "192.168.70.128/26", "-o", "eth0", "-j", "MASQUERADE"]
 ```
+
+Конфиг подключён к SMF и UPF файлом, поэтому применяйте правки пересозданием:
+`docker compose up -d --force-recreate oai-smf oai-upf` (обрывает PDU-сессии всех UE).
+Проверка: `docker exec oai-upf iptables -t nat -S POSTROUTING` — одно правило
+`MASQUERADE` и ни одного `SNAT --to-source`.
+
+На стенде партнёра (`oai-cn5g-public-net`) все пулы — `10.0.0.0/16`, DNN `ims` —
+`10.0.9.0/24`; эти значения уже записаны в `lab.env`. Если `enable_snat` остался
+`yes`, `verify-5g-ue.sh` проваливает проверку контакта и пишет причину: S-CSCF видит
+адрес UPF вместо адреса UE.
 
 У абонентов в UDR должен быть разрешён DNN `ims`. После изменений перезапустите SMF и UPF.
 
@@ -271,7 +284,8 @@ NAT на UPF выключается для IMS (`enable_snat: no`). Причин
 записан внутри SIP и SDP: если UPF подменит адрес источника, P-CSCF и RTPengine
 будут отвечать не туда. Для интернета NAT нужен, поэтому его возвращает одно правило
 `iptables`: `MASQUERADE` для пула UE, кроме адресов сети ядра (`! -d LAB_NETWORK_CIDR`).
-Правило теряется при пересоздании контейнера UPF, поэтому добавьте его в entrypoint UPF.
+Ручное правило теряется при пересоздании контейнера UPF, поэтому оно ставится через
+`post_start` в docker-compose ядра (шаг 2 части 1).
 
 Обратный путь к телефону обеспечиваем мы: init-скрипты P-CSCF, S-CSCF, RTPengine и
 DNS добавляют маршрут `IMS_UE_CIDR via UPF_IP`. От ядра нужно только, чтобы UPF

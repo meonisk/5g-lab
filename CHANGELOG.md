@@ -17,6 +17,9 @@
 - feat: `scripts/setup.sh` — установка одной командой: `uv` и конвертер OPUS-MT в
   `local/`, модели перевода (один раз), затем `start.py`. `scripts/verify-5g.sh` —
   проверка через 5G (`rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down`) одной командой.
+- docs: NAT UPF только в интернет — через `post_start` сервиса `oai-upf` в
+  docker-compose ядра, переживает пересоздание; значения стенда партнёра. Проверено на
+  стенде партнёра: `verify-ims.sh` и `verify-5g.sh` — PASS в режиме `compact`.
 - fix: `provision.py` приводит регистр ki в PyHSS к `lab.env`: PyHSS использует ki
   как пароль SIP Digest строкой, и ключ, отличающийся только регистром, давал
   `403 Authentication Failed` при сохранённой записи «без изменений».
