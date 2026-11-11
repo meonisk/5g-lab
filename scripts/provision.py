@@ -111,8 +111,14 @@ def ensure_auc(hss, entry, replace_keys):
     current = stored_keys(entry["imsi"]) if record.get("ki") is None else record
     if str(current.get("auc_id", record["auc_id"])) != str(record["auc_id"]):
         raise RuntimeError(f"{entry['name']}: REST и база PyHSS указывают на разные AuC")
-    if all(str(current.get(f, "")).lower() == keys[f].lower() for f in KEY_FIELDS):
+    same_keys = all(str(current.get(f, "")).lower() == keys[f].lower() for f in KEY_FIELDS)
+    if same_keys and str(current.get("ki", "")) == keys["ki"]:
         print(f"{entry['name']}: AuC {record['auc_id']} сохранён без изменений")
+    elif same_keys:
+        # PyHSS берёт ki как пароль SIP Digest строкой: регистр должен совпадать
+        # с lab.env, иначе S-CSCF отвечает 403. Ключ AKA тот же, SQN не трогаем.
+        hss.call("PATCH", f"/auc/{record['auc_id']}", {**keys, "imsi": entry["imsi"]})
+        print(f"{entry['name']}: регистр ki в AuC {record['auc_id']} приведён к lab.env")
     elif replace_keys:
         hss.call("PATCH", f"/auc/{record['auc_id']}", {**keys, "imsi": entry["imsi"]})
         print(f"{entry['name']}: ключи AuC {record['auc_id']} заменены значениями из lab.env")

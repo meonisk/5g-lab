@@ -57,6 +57,12 @@ class ExistingAuc(unittest.TestCase):
         stored.assert_called_once_with("001")
         self.assertEqual(hss.calls, [("GET", "/auc/imsi/001", None)])
 
+    def test_ki_case_follows_lab_env_because_digest_uses_it_verbatim(self):
+        hss = FakeHss({"auc_id": 11, **KEYS, "ki": "a" * 32})
+        self.assertEqual(provision.ensure_auc(hss, ENTRY, False), 11)
+        self.assertEqual(hss.calls[1][:2], ("PATCH", "/auc/11"))
+        self.assertEqual(hss.calls[1][2]["ki"], "A" * 32)
+
     def test_mismatch_stops_unless_replacement_is_explicit(self):
         hss = FakeHss({"auc_id": 11, **KEYS, "ki": "C" * 32})
         with self.assertRaisesRegex(RuntimeError, "--replace-keys"):

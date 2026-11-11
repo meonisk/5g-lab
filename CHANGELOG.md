@@ -17,6 +17,9 @@
 - feat: `scripts/setup.sh` — установка одной командой: `uv` и конвертер OPUS-MT в
   `local/`, модели перевода (один раз), затем `start.py`. `scripts/verify-5g.sh` —
   проверка через 5G (`rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down`) одной командой.
+- fix: `provision.py` приводит регистр ki в PyHSS к `lab.env`: PyHSS использует ki
+  как пароль SIP Digest строкой, и ключ, отличающийся только регистром, давал
+  `403 Authentication Failed` при сохранённой записи «без изменений».
 - fix(tests): клиенты UE в `verify-5g-ue.sh` и туториале 4 запускаются с
   `--auto-update-nat=0`: за NAT UPF PJSUA перезапускал REGISTER с адресом UPF
   посреди Digest-аутентификации и получал `403 Authentication Failed`.
