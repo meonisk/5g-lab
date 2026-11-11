@@ -212,7 +212,12 @@ class Client:
         except OSError:
             pass
         time.sleep(1)
-        sh("sudo", "pkill", "-f", f"[b]ench-ue{self.n} ", check=False)
+        pattern = f"[b]ench-ue{self.n} "
+        sh("sudo", "pkill", "-f", pattern, check=False)
+        # Следующий клиент займёт тот же адрес и порт SIP: ждём выхода прежнего.
+        wait_for(
+            lambda: not sh("pgrep", "-f", pattern, check=False).strip(), 10, "PJSUA не завершился"
+        )
 
 
 def network(settings):
@@ -269,7 +274,8 @@ def ai_round(client, settings, phrase_seconds):
     return {
         "invite_to_200_ms": setup,
         "speech_end_to_reply_rtp_ms": round((audible - speech_end) * 1000, 1),
-        "sentence_assembly_ms": round(event.get("sentence_assembly_ms", 0), 1),
+        # От начала речи до готовой фразы: сама речь плюс пауза AI_UTTERANCE_SILENCE_MS.
+        "speech_plus_pause_ms": round(event.get("sentence_assembly_ms", 0), 1),
         "queue_wait_ms": round(event.get("queue_wait_ms", 0), 1),
         "stt_ms": round(event.get("stt_processing_ms", 0), 1),
         "translation_ms": round(event.get("llm_processing_ms", 0), 1),
@@ -352,8 +358,17 @@ def main():
         print("AI...", flush=True)
         result["ai"], result["ai_errors"] = [], []
         for _ in range(args.rounds):
+            # Плеер PJSUA продвигается, только пока подключён к вызову: после первого
+            # раунда он стоит в паузе файла. Новый клиент играет фразу с начала.
+            clients[0].stop()
+            clients[0] = Client(1, addresses[1], settings)
             # Отказ одного вызова не отменяет уже снятые замеры сети и SIP.
             try:
+                result["sip"]["register_ms"].append(
+                    clients[0].between_ms(
+                        r"TX .*Request msg REGISTER", r"Response msg 200/REGISTER", 0, 60
+                    )
+                )
                 result["ai"].append(ai_round(clients[0], settings, phrase_seconds))
             except (RuntimeError, TimeoutError, IndexError) as error:
                 print(f"  переводчик: {error}", flush=True)
