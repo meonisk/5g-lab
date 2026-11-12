@@ -54,3 +54,5 @@ record_marks = set()
 ai_worker_url = os.environ["AI_WORKER_URL"].rstrip("/")
 voice_status_url = os.environ["VOICE_AGENT_URL"].rstrip("/") + "/status"
 voice_max_calls = int(os.environ["VOICE_AGENT_MAX_CALLS"])
+b2bua_calls = {}
+b2bua_branches = {}

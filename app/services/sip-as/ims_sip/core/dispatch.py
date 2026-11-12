@@ -1,11 +1,12 @@
-"""Вход SIP AS: запрос — логическому AS по первому Route, ответ — по своему Via."""
+"""Вход SIP AS: запрос — логическому AS по первому Route, ответ — B2BUA или по своему Via."""
 
 from .. import runtime
-from ..services import numbers
+from ..services import numbers, translate
+from . import b2bua
 from .proxy import relay_response
 from .sip import top_route_host
 
-SERVICES = (numbers,)
+SERVICES = (translate, numbers)
 
 
 def service_for(message: str):
@@ -18,4 +19,5 @@ def route_request(message: str, peer: tuple[str, int]) -> None:
 
 
 def route_response(message: str) -> None:
-    relay_response(message)
+    if not b2bua.handle_response(message):
+        relay_response(message)

@@ -62,3 +62,18 @@ def top_route_host(message: str) -> str:
     routes = route_values(message)
     match = re.match(r"<sips?:(?:[^@>]+@)?([^:;>]+)", routes[0]) if routes else None
     return match.group(1).lower() if match else ""
+
+
+def tag_of(value: str) -> str:
+    match = re.search(r";tag=([^;>\s]+)", value)
+    return match.group(1) if match else ""
+
+
+def status_code(message: str) -> int:
+    return int(message.split(" ", 2)[1])
+
+
+def angle_uri(value: str) -> str:
+    """URI из <...> заголовка Contact/To; без скобок — до первого параметра."""
+    match = re.search(r"<([^>]+)>", value)
+    return match.group(1) if match else value.split(";", 1)[0].strip()
