@@ -56,6 +56,8 @@ log_has() {
 # Recreate both clients so their logs start at a fresh REGISTER, then wait for
 # 200 OK. Callers may export SIPUE*_PLAYBACK_FILE first to mount dialogue WAVs.
 fresh_clients() {
+    # После docker restart lab-scscf REGISTER до открытия Cx получает отказ.
+    wait_ims_ready 90 || return 1
     "${compose[@]}" up -d --no-deps --force-recreate sipue1 sipue2 >/dev/null 2>&1 || return 1
     local deadline=$((SECONDS + 40))
     while ((SECONDS < deadline)); do
