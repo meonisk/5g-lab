@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Подключается из scripts/verify-all.sh: журнал, запуск шага с таймаутом, итоговая
-# таблица, журналы контейнеров при FAIL. Сам ничего не запускает.
+# Подключается из scripts/verify-all.sh и scripts/profile.sh: журнал, запуск шага с
+# таймаутом, итоговая таблица, журналы контейнеров при FAIL. Сам ничего не запускает.
+# RUN_TITLE — заголовок итоговой таблицы (по умолчанию VERIFY-ALL).
 
 STEP_NAMES=()
 STEP_RESULTS=()
@@ -47,8 +48,16 @@ on_interrupt() {
     [[ -n $current ]] && pkill -TERM -P "$current" -x timeout 2>/dev/null
 }
 
+# Есть ли OAI rfsim (те же пути, что в scripts/rfsim.sh) и запущенный AMF ядра.
+have_5g() {
+    local build=${OAI_RAN_DIR:-$HOME/openairinterface5g}/cmake_targets/ran_build/build
+    [[ -x $build/nr-softmodem && -x $build/nr-uesoftmodem ]] || { echo "нет rfsim в $build"; return 1; }
+    docker ps --format '{{.Names}}' | grep -qx oai-amf || { echo 'нет контейнера oai-amf'; return 1; }
+}
+
 # run_step ИМЯ СЕКУНД РЕГУЛЯРКА [--tty] -- КОМАНДА...
 # PASS — код 0 и в выводе есть строка по РЕГУЛЯРКЕ (решающая строка шага);
+# SKIP — код 0 и строка «STEP SKIP: причина» (шаг сам понял, что невозможен);
 # FAIL — иначе, с причиной. --tty: команде нужен терминал (sudo в verify-5g).
 # LAST_OUT — файл вывода шага (пусто, если шаг не запускался).
 run_step() {
@@ -61,7 +70,7 @@ run_step() {
         skip_step "$name" 'прервано пользователем'
         return 1
     fi
-    local out rc line last
+    local out rc line last skipped
     out=$(mktemp "$STEP_DIR/step.XXXXXX")
     LAST_OUT=$out
     echo
@@ -80,12 +89,16 @@ run_step() {
     done
     current=''
     line=$(grep -E -- "$expect" "$out" | tail -1)
+    skipped=$(sed -n 's/^STEP SKIP: //p' "$out" | tail -1)
     # Первая строка FAIL/ERROR — обычно причина, остальные — следствия.
     last=$(grep -E '^(FAIL|ERROR)|: FAIL$' "$out" | head -1)
     if ((rc == 124 || rc == 137)); then
         fail_step "$name" "таймаут ${seconds}s"
     elif ((interrupted)); then
         fail_step "$name" "прервано (код $rc)"
+    elif ((rc == 0)) && [[ -n $skipped ]]; then
+        skip_step "$name" "$skipped"
+        return 0
     elif ((rc != 0)); then
         fail_step "$name" "код $rc${last:+; $last}; ожидалось /$expect/"
     elif [[ -z $line ]]; then
@@ -101,7 +114,7 @@ run_step() {
 print_summary() {
     local i pass=0 fail=0 skip=0
     echo
-    echo '==================== ИТОГ VERIFY-ALL ===================='
+    echo "==================== ИТОГ ${RUN_TITLE:-VERIFY-ALL} ===================="
     printf '%-3s %-5s %-30s %s\n' '#' 'RES' 'ШАГ' 'РЕШАЮЩАЯ СТРОКА / ПРИЧИНА'
     for i in "${!STEP_NAMES[@]}"; do
         printf '%-3s %-5s %-30s %s\n' "$((i + 1))" "${STEP_RESULTS[$i]}" "${STEP_NAMES[$i]}" \
@@ -113,7 +126,7 @@ print_summary() {
         esac
     done
     echo '========================================================'
-    printf 'VERIFY-ALL: %s — PASS %d, FAIL %d, SKIP %d\n' \
+    printf '%s: %s — PASS %d, FAIL %d, SKIP %d\n' "${RUN_TITLE:-VERIFY-ALL}" \
         "$([[ $fail == 0 && $interrupted == 0 ]] && echo PASS || echo FAIL)" "$pass" "$fail" "$skip"
     [[ $fail == 0 && $interrupted == 0 ]]
 }

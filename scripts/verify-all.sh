@@ -95,13 +95,6 @@ step_f1() {
     echo 'F1 OVERRIDE: SIP_AS_LEG_B_ROUTE=orig in lab-sip-as'
 }
 
-# Есть ли OAI rfsim (те же пути, что в scripts/rfsim.sh) и запущенный AMF ядра.
-have_5g() {
-    local build=${OAI_RAN_DIR:-$HOME/openairinterface5g}/cmake_targets/ran_build/build
-    [[ -x $build/nr-softmodem && -x $build/nr-uesoftmodem ]] || { echo "нет rfsim в $build"; return 1; }
-    docker ps --format '{{.Names}}' | grep -qx oai-amf || { echo 'нет контейнера oai-amf'; return 1; }
-}
-
 # Внутренний вызов шага: bash verify-all.sh __step ИМЯ [аргументы start.py].
 if [[ ${1:-} == __step ]]; then
     step=$2
