@@ -30,15 +30,20 @@ def output_voice(service_mode):
 
 
 def delivery_call(source_call_id, service_mode):
-    """Route interpreter output to the only active opposite-language leg."""
+    """Пара от SIP AS важнее; без пары — единственная нога противоположного языка (1005/1006)."""
     if service_mode not in INTERPRETER_MODES:
         return source_call_id
     opposite = "interpret_en" if service_mode == "interpret_ru" else "interpret_ru"
     with runtime.lock:
+        partner = runtime.pairs.get(source_call_id)
+        if partner is not None:
+            return partner
         candidates = [
             call_id
             for call_id, state in runtime.active_calls.items()
-            if call_id != source_call_id and state.get("service_mode") == opposite
+            if call_id != source_call_id
+            and call_id not in runtime.pairs
+            and state.get("service_mode") == opposite
         ]
     if len(candidates) != 1:
         raise RuntimeError("interpreter counterpart is not uniquely available")

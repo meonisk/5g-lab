@@ -86,3 +86,38 @@ def end_call(call_id):
     require(valid_call_id(call_id))
     # BYE идёт через ту же очередь: принятый хвост аудио обрабатывается первым.
     return enqueue({"control": "end_call", "call_id": call_id})
+
+
+PAIR_LANGUAGES = {"ru", "en"}
+
+
+@api.post("/pairs")
+def register_pair():
+    """SIP AS сообщает пару ног B2BUA: перевод каждой ноги уходит в ногу партнёра."""
+    legs = json_object(4096).get("legs")
+    require(isinstance(legs, list) and len(legs) == 2)
+    require(
+        all(
+            isinstance(leg, dict)
+            and valid_call_id(leg.get("call_id"))
+            and leg.get("language") in PAIR_LANGUAGES
+            for leg in legs
+        )
+    )
+    first, second = legs
+    require(first["call_id"] != second["call_id"] and first["language"] != second["language"])
+    with runtime.lock:
+        runtime.pairs[first["call_id"]] = second["call_id"]
+        runtime.pairs[second["call_id"]] = first["call_id"]
+    print(f"AI pair_registered calls={[first['call_id'], second['call_id']]}", flush=True)
+    return "", 202
+
+
+@api.delete("/pairs/<call_id>")
+def remove_pair(call_id):
+    require(valid_call_id(call_id))
+    with runtime.lock:
+        partner = runtime.pairs.pop(call_id, None)
+        if partner is not None and runtime.pairs.get(partner) == call_id:
+            runtime.pairs.pop(partner)
+    return "", 204

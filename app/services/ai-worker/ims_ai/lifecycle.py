@@ -88,6 +88,8 @@ def clear_call_state(call_id: str) -> None:
 
     with runtime.lock:
         runtime.active_calls.pop(call_id, None)
+        # Запись партнёра остаётся до конца его ноги: её хвост ещё может переводиться.
+        runtime.pairs.pop(call_id, None)
 
 
 def finalize_call(call_id: str) -> None:
