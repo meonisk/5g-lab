@@ -96,7 +96,9 @@ def build(folder, reference):
 
 def table(header, rows):
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
-    return lines + ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
+    return lines + [
+        "| " + " | ".join("—" if c is None else str(c) for c in row) + " |" for row in rows
+    ]
 
 
 def render_verdict(result):
@@ -170,7 +172,7 @@ def render_sweep(sweeps):
             if info.get("status") != "ok":
                 lines.append(f"- {load_name}, {model}: {info.get('reason', '')}")
         rows = [(r["model"], r["threads"], r["streaming"], r["stt_ms"], r["translation_ms"],
-                 _pct(r["accuracy"]), r["cpu_ms"], r.get("first_partial_ms") or "—")
+                 _pct(r["accuracy"]), r["cpu_ms"], r.get("first_partial_ms"))
                 for r in sweep.get("rows", [])]  # fmt: skip
         header = ("модель", "потоки", "поток.", "STT, мс", "перевод, мс", "качество, %",
                   "CPU, мс", "1-й частичный, мс")  # fmt: skip
