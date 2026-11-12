@@ -4,6 +4,7 @@ import re
 import threading
 
 from .. import runtime
+from ..core import dialogs
 from ..core.mrf import (
     media_is_anchored,
     notify_adapter,
@@ -123,5 +124,7 @@ def handle(message: str, peer: tuple[str, int]) -> None:
     if service_mode:
         terminate_for_agent(message, peer, service_mode)
         return
-    observe_proxied_dialog(message, request_line, call_id)
+    # Ногу B, созданную самим SIP AS, уже распознаёт услуга: не наблюдать дважды.
+    if not dialogs.is_own(call_id):
+        observe_proxied_dialog(message, request_line, call_id)
     forward(message, peer)

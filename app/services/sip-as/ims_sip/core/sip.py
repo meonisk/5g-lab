@@ -36,3 +36,29 @@ def transaction_branch(message: str) -> str:
     """Поддержать полное и компактное имя SIP-заголовка Via."""
     branch_match = re.search(r"(?im)^(?:Via|v)\s*:\s*[^\r\n]*branch=([^;\s]+)", message)
     return branch_match.group(1) if branch_match else str(time.time_ns())
+
+
+COMPACT = {"Call-ID": "i", "From": "f", "To": "t", "Via": "v", "Contact": "m", "Content-Type": "c"}
+
+
+def value_of(message: str, name: str) -> str:
+    """Значение заголовка только из части заголовков; компактное имя тоже подходит."""
+    head = message.split("\r\n\r\n", 1)[0]
+    return header(head, name) or (header(head, COMPACT[name]) if name in COMPACT else "")
+
+
+def request_uri(message: str) -> str:
+    return message.split("\r\n", 1)[0].split(" ")[1]
+
+
+def route_values(message: str, name: str = "Route") -> list[str]:
+    """Все значения <...> заголовка по порядку: и через запятую, и отдельными строками."""
+    head = message.split("\r\n\r\n", 1)[0]
+    return [value for line in all_headers(head, name) for value in re.findall(r"<[^>]+>", line)]
+
+
+def top_route_host(message: str) -> str:
+    """Хост первого Route: по нему S-CSCF адресует логический AS из iFC."""
+    routes = route_values(message)
+    match = re.match(r"<sips?:(?:[^@>]+@)?([^:;>]+)", routes[0]) if routes else None
+    return match.group(1).lower() if match else ""

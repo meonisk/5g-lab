@@ -6,7 +6,10 @@ from .. import runtime
 from .sip import transaction_branch
 from .transport import send
 
-OWN_ROUTE = re.compile(r"(?im)^(Route\s*:\s*)<sip:as\.[^>]+>\s*,\s*")
+# Свой Route — первый, хост <метка>.as.<домен> или as.<домен>: в одной строке со
+# следующим ISC Route через запятую либо отдельной строкой.
+OWN_ROUTE = re.compile(r"(?im)^(Route\s*:\s*)<sip:(?:[a-z0-9-]+\.)?as\.[^>]+>\s*,\s*")
+OWN_ROUTE_LINE = re.compile(r"(?im)^Route\s*:\s*<sip:(?:[a-z0-9-]+\.)?as\.[^>]+>\s*\r\n")
 OWN_VIA = re.compile(r"(?im)^(?:Via|v)\s*:\s*[^\r\n]*branch=z9hG4bK-as-([^;\s]+)\r\n")
 
 
@@ -16,9 +19,11 @@ def build_forwarded_request(message: str, branch: str) -> str:
         f"Via: SIP/2.0/UDP {runtime.bind_ip}:{runtime.bind_port};branch=z9hG4bK-as-{branch}\r\n"
     )
     # Поглощается только Route текущего AS. Следующий ISC Route возвращает
-    # запрос в S-CSCF, где продолжается обычная маршрутизация.
-    remaining_headers = OWN_ROUTE.sub(r"\1", remaining_headers, count=1)
-    return request_line + "\r\n" + own_via + remaining_headers
+    # запрос в S-CSCF, где продолжается цепочка iFC.
+    stripped = OWN_ROUTE.sub(r"\1", remaining_headers, count=1)
+    if stripped == remaining_headers:
+        stripped = OWN_ROUTE_LINE.sub("", remaining_headers, count=1)
+    return request_line + "\r\n" + own_via + stripped
 
 
 def forward(message: str, peer: tuple[str, int]) -> None:

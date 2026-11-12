@@ -4,6 +4,8 @@ import ipaddress
 import os
 import socket
 
+from .core.subscribers import language_table
+
 bind_ip = os.environ["SIP_AS_IP"]
 bind_port = int(os.environ["SIP_AS_PORT"])
 scscf = (os.environ["SCSCF_IP"], int(os.environ["SCSCF_SIP_PORT"]))
@@ -44,3 +46,8 @@ service_users = {
     "interpret_ru": interpreter_ru_user,
     "interpret_en": interpreter_en_user,
 }
+ims_domain = os.environ["IMS_DOMAIN"]
+languages = language_table(os.environ)
+default_language = os.environ.get("DEFAULT_LANGUAGE") or "ru"
+own_call_ids = set()
+record_marks = set()
