@@ -1,18 +1,10 @@
 """numbers AS: 1003–1006 завершаются на Voice Agent, остальные вызовы — прокси с observe."""
 
 import re
-import threading
 
 from .. import runtime
-from ..core import dialogs
-from ..core.mrf import (
-    media_is_anchored,
-    notify_adapter,
-    notify_voice,
-    stop_adapter,
-    stop_voice,
-    voice_agent_sdp,
-)
+from ..core import dialogs, mrf
+from ..core.mrf import media_is_anchored, voice_agent_sdp
 from ..core.proxy import forward
 from ..core.sdp import accepts_pcmu, offered_media_endpoint
 from ..core.sip import local_tag, message_call_id, request_method
@@ -25,21 +17,14 @@ def start_agent_call(message, call_id, offered_ip, offered_port, service_mode, t
     """Создать Voice/Media состояние один раз; INVITE может повторяться."""
     if call_id in runtime.agent_calls:
         return True
-    try:
-        notify_voice(call_id, offered_ip, offered_port, service_mode)
-        runtime.agent_calls[call_id] = {
-            "tag": tag,
-            "service_mode": service_mode,
-            "rtpengine_port": offered_port,
-        }
-        # Наблюдение не задерживает SIP-ответ и может отказать независимо.
-        threading.Thread(
-            target=notify_adapter, args=(message, service_mode, offered_port), daemon=True
-        ).start()
-        return True
-    except Exception as error:
-        print(f"AS voice unavailable call_id={call_id} type={type(error).__name__}", flush=True)
+    if not mrf.bind_leg(message, call_id, offered_ip, offered_port, service_mode):
         return False
+    runtime.agent_calls[call_id] = {
+        "tag": tag,
+        "service_mode": service_mode,
+        "rtpengine_port": offered_port,
+    }
+    return True
 
 
 def accept_agent_invite(message, peer, call_id, service_mode, tag) -> None:
@@ -78,8 +63,7 @@ def end_agent_call(message, peer, call_id, method, fallback_tag) -> None:
     send_local_response(message, peer, 200, "OK", to_tag=call.get("tag", fallback_tag))
     runtime.agent_calls.pop(call_id, None)
     # Очистка вспомогательных сервисов не задерживает SIP 200 OK.
-    threading.Thread(target=stop_voice, args=(call_id,), daemon=True).start()
-    threading.Thread(target=stop_adapter, args=(call_id,), daemon=True).start()
+    mrf.release(call_id)
     print(f"AS ended voice agent call_id={call_id} method={method}", flush=True)
 
 
@@ -111,9 +95,9 @@ def observe_proxied_dialog(message: str, request_line: str, call_id: str) -> Non
     """Сообщить Media Adapter о начале/завершении обычного звонка."""
     if request_line.startswith("INVITE "):
         print(f"AS observed INVITE call_id={call_id}", flush=True)
-        threading.Thread(target=notify_adapter, args=(message, "observe"), daemon=True).start()
+        mrf.stream_to_recognition(message, "observe")
     elif request_line.startswith(("BYE ", "CANCEL ")):
-        threading.Thread(target=stop_adapter, args=(call_id,), daemon=True).start()
+        mrf.stop_recognition(call_id)
 
 
 def handle(message: str, peer: tuple[str, int]) -> None:

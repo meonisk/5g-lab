@@ -51,3 +51,6 @@ languages = language_table(os.environ)
 default_language = os.environ.get("DEFAULT_LANGUAGE") or "ru"
 own_call_ids = set()
 record_marks = set()
+ai_worker_url = os.environ["AI_WORKER_URL"].rstrip("/")
+voice_status_url = os.environ["VOICE_AGENT_URL"].rstrip("/") + "/status"
+voice_max_calls = int(os.environ["VOICE_AGENT_MAX_CALLS"])
