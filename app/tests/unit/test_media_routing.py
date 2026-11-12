@@ -109,6 +109,9 @@ class MediaRouting(unittest.TestCase):
         self.assertEqual(value[b"result"], b"ok")
         self.assertNotEqual(end, len(b"d6:result2:okejunk"))
 
+    def test_record_mode_is_allowed(self):
+        self.assertIn("record", self.rtpengine.runtime.allowed_service_modes)
+
 
 if __name__ == "__main__":
     unittest.main()

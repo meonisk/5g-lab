@@ -8,6 +8,7 @@ from lab_common.http import create_api, json_object, require, valid_call_id
 
 from . import runtime, settings
 from .maintenance import expire_events
+from .recording import add_recording_legs
 
 api = create_api(__name__, runtime.control_token, settings.request_max_bytes)
 
@@ -121,3 +122,28 @@ def remove_pair(call_id):
         if partner is not None and runtime.pairs.get(partner) == call_id:
             runtime.pairs.pop(partner)
     return "", 204
+
+
+SPEAKERS = {"caller", "callee"}
+
+
+@api.post("/recordings")
+def register_recording():
+    """SIP AS (record + translate) просит писать обе ноги звонка в одну запись."""
+    data = json_object(4096)
+    session_call_id = data.get("session_call_id")
+    legs = data.get("legs")
+    require(valid_call_id(session_call_id))
+    require(isinstance(legs, list) and 1 <= len(legs) <= 2)
+    require(
+        all(
+            isinstance(leg, dict)
+            and valid_call_id(leg.get("call_id"))
+            and leg.get("speaker") in SPEAKERS
+            for leg in legs
+        )
+    )
+    with runtime.lock:
+        add_recording_legs(session_call_id, [(leg["call_id"], leg["speaker"]) for leg in legs])
+    print(f"AI recording_registered legs={len(legs)}", flush=True)
+    return "", 202

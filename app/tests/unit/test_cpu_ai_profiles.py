@@ -2,6 +2,7 @@
 
 import importlib.util
 import sys
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -102,8 +103,10 @@ class CpuTranslation(unittest.TestCase):
                 cyrillic_chars=Mock(), normalize_transcript=normalizer
             ),
             "cpu_test.recording": types.SimpleNamespace(
-                recording_session=Mock(), save_recording_turn=save
+                recording_target=lambda call_id, mode, event: (call_id, "caller"),
+                save_recording_turn=save,
             ),
+            "cpu_test.runtime": types.SimpleNamespace(recording_lock=threading.Lock()),
         }
         with patch.dict(sys.modules, mocks):
             module = load_module(

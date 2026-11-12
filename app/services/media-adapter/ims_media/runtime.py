@@ -41,6 +41,7 @@ allowed_service_modes = {
     "bilingual_test",
     "interpret_ru",
     "interpret_en",
+    "record",
 }
 sessions = {}
 counters = defaultdict(lambda: {"packets": 0, "payload_bytes": 0, "audio": bytearray()})

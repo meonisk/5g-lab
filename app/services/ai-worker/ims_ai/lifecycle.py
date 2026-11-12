@@ -8,6 +8,7 @@ import time
 
 from . import runtime, settings
 from .queueing import enqueue_utterance, wait_for_call
+from .recording import finished_recording
 from .segmentation import flush_idle_streams, process_event
 
 FINALIZED_RECORDING_MODES = {
@@ -15,6 +16,7 @@ FINALIZED_RECORDING_MODES = {
     "bilingual_test",
     "interpret_ru",
     "interpret_en",
+    "record",
 }
 
 
@@ -98,7 +100,10 @@ def finalize_call(call_id: str) -> None:
     # transcription turn on BYE because no trailing silent frames may arrive.
     flush_buffered_speech(call_id)
     wait_for_call(call_id)
-    finalize_recording(call_id)
+    # Запись пары закрывается концом последней ноги, а не первой.
+    session_call_id = finished_recording(call_id)
+    if session_call_id is not None:
+        finalize_recording(session_call_id)
     clear_call_state(call_id)
 
 

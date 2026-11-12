@@ -27,9 +27,9 @@ class Recognition:
 
 
 def requested_language(service_mode: str) -> str | None:
-    """Режим переводчика задаёт язык входной ноги; тест диалога определяет его сам."""
+    """Режим переводчика задаёт язык входной ноги; диалог и запись определяют его сами."""
     language = source_language(service_mode)
-    if language is None and service_mode != "bilingual_test":
+    if language is None and service_mode not in {"bilingual_test", "record"}:
         language = settings.language or None
     return language
 

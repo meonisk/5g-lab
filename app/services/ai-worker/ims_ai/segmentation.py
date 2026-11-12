@@ -13,7 +13,7 @@ from .queueing import enqueue_utterance
 
 PCMU_FRAME_BYTES = 160  # 20 мс при PCMU/8000.
 SUBSCRIBER_DIRECTIONS = {"caller_to_core", "caller_to_agent"}
-DIALOGUE_MODES = {"bilingual_test", "interpret_ru", "interpret_en"}
+DIALOGUE_MODES = {"bilingual_test", "interpret_ru", "interpret_en", "record"}
 
 
 def is_dialogue_mode(service_mode: str) -> bool:

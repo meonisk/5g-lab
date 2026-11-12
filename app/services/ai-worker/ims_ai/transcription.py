@@ -2,31 +2,25 @@
 
 from __future__ import annotations
 
-from . import settings
+from . import runtime, settings
 from .audio import decode_pcm8
 from .llm import (
     cyrillic_chars,
     normalize_transcript,
 )
-from .recording import recording_session, save_recording_turn
+from .recording import recording_target, save_recording_turn
 
 
 def record_transcript(ulaw, event, result, transcript, detected_language):
     service_mode = result["service_mode"]
     call_ids = event.get("call_ids") or []
     call_id = call_ids[0] if len(call_ids) == 1 else None
-    if not call_id or service_mode not in {"transcribe", "bilingual_test"}:
+    target = recording_target(call_id, service_mode, event) if call_id else None
+    if target is None:
         return
+    session_call_id, speaker = target
 
     normalized_transcript = transcript
-    if service_mode == "bilingual_test":
-        recording = recording_session(call_id)
-        source_key = event.get("source_stream_id") or str(event.get("ssrc"))
-        speaker = recording["speakers"].setdefault(
-            source_key, f"speaker_{len(recording['speakers']) + 1}"
-        )
-    else:
-        speaker = "caller"
     if transcript and settings.transcript_normalization == "raw":
         result.update({"normalization_applied": False, "transcript_kind": "raw_asr"})
     elif transcript:
@@ -64,7 +58,11 @@ def record_transcript(ulaw, event, result, transcript, detected_language):
                 f"type={type(exc).__name__} calls={call_ids}",
                 flush=True,
             )
-    saved = save_recording_turn(call_id, decode_pcm8(ulaw), normalized_transcript, result, speaker)
+    # Две ноги одного звонка пишут в один каталог из разных обработчиков.
+    with runtime.recording_lock:
+        saved = save_recording_turn(
+            session_call_id, decode_pcm8(ulaw), normalized_transcript, result, speaker
+        )
     if saved:
         result.update(
             {

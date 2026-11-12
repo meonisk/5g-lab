@@ -127,6 +127,7 @@ service_modes = {
     "bilingual_test",
     "interpret_ru",
     "interpret_en",
+    "record",
 }
 if translation_backend == "opus-mt":
     service_modes.discard("assistant")

@@ -88,3 +88,41 @@ def save_recording_turn(call_id, pcm8, transcript, result, speaker):
         "turn": state["turns"],
         "audio_bytes": audio_bytes,
     }
+
+
+def add_recording_legs(session_call_id, legs):
+    """Ноги одного звонка пишутся в одну запись; закрыть её можно после последней ноги."""
+    runtime.record_sessions.setdefault(session_call_id, set()).update(cid for cid, _ in legs)
+    for call_id, speaker in legs:
+        runtime.record_legs[call_id] = {"session_call_id": session_call_id, "speaker": speaker}
+
+
+def recording_target(call_id, service_mode, event):
+    """(ключ записи, говорящий) для реплики или None — эту ногу не записывают."""
+    leg = runtime.record_legs.get(call_id)
+    if leg is not None:
+        return leg["session_call_id"], leg["speaker"]
+    if service_mode == "transcribe":
+        return call_id, "caller"
+    if service_mode in {"bilingual_test", "record"}:
+        recording = recording_session(call_id)
+        source_key = event.get("source_stream_id") or str(event.get("ssrc"))
+        speaker = recording["speakers"].setdefault(
+            source_key, f"speaker_{len(recording['speakers']) + 1}"
+        )
+        return call_id, speaker
+    return None
+
+
+def finished_recording(call_id):
+    """Ключ записи, которую закрывает конец этой ноги; None — другие ноги ещё говорят."""
+    leg = runtime.record_legs.pop(call_id, None)
+    if leg is None:
+        return call_id
+    session_call_id = leg["session_call_id"]
+    remaining = runtime.record_sessions.get(session_call_id, set())
+    remaining.discard(call_id)
+    if remaining:
+        return None
+    runtime.record_sessions.pop(session_call_id, None)
+    return session_call_id
