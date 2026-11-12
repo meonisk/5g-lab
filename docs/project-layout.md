@@ -54,7 +54,7 @@ AI Worker, `app/services/ai-worker/ims_ai/`: `settings.py` — параметр�
 `transcription.py` и `recording.py` — запись 1004, `lifecycle.py` — хвост вызова при BYE,
 `api.py` и `app.py` — HTTP и запуск потоков.
 
-SIP AS — `app/services/sip-as/ims_sip/` (`routing.py` выбирает сценарий, `sdp.py` —
+SIP AS — `app/services/sip-as/ims_sip/` (`core/` — SIP, прокси и MRF, `services/` — логические AS, `core/sdp.py` —
 проверка SDP). Voice Agent — `app/services/voice-agent/ims_voice/` (`calls.py` — жизнь
 вызова и очередь озвучки, `media.py` — RTP). Media Adapter —
 `app/services/media-adapter/ims_media/`. Файлы `worker.py`, `server.py`, `agent.py`,

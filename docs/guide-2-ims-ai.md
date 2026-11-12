@@ -237,13 +237,13 @@ PyHSS при provisioning записывает каждому абоненту i
 а `DefaultHandling 0` продолжает вызов при недоступном AS. Поэтому обычный разговор не
 зависит от AI, а услуги AI при отказе просто не работают.
 
-SIP AS ([routing.py](../app/services/sip-as/ims_sip/routing.py)) сравнивает номер
+SIP AS ([core/dispatch.py](../app/services/sip-as/ims_sip/core/dispatch.py)) сравнивает номер
 назначения с номерами услуг. Обычный вызов он возвращает в S-CSCF и только включает
 наблюдение. Вызов на номер услуги он завершает сам и соединяет с Voice Agent.
 Внутренний формат звука AI — PCMU/8000: это протокольный контракт, одной переменной
 его не поменять. Путь речи по коду (от `app/services/`):
 
-1. `sip-as/ims_sip/routing.py` — SIP и выбор сценария.
+1. `sip-as/ims_sip/core/dispatch.py` — SIP и выбор логического AS (`services/`).
 2. `media-adapter/ims_media/` — приём RTP и отправка в AI Worker.
 3. `ai-worker/ims_ai/segmentation.py` — сборка окон в реплики по паузам.
 4. `ai-worker/ims_ai/queueing.py` — передача реплики свободному обработчику.

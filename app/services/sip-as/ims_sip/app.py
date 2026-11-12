@@ -1,7 +1,7 @@
 """Service startup; importing pipeline modules does not start worker threads."""
 
 from . import runtime
-from .routing import route_request, route_response
+from .core.dispatch import route_request, route_response
 
 
 def main():

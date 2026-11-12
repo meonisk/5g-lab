@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location(
-    "phone_sdp", ROOT / "app/services/sip-as/ims_sip/sdp.py"
+    "phone_sdp", ROOT / "app/services/sip-as/ims_sip/core/sdp.py"
 )
 SDP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SDP)

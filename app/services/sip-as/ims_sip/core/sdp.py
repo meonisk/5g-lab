@@ -1,5 +1,6 @@
-"""Admission of the PCMU media contract at the AI service boundary."""
+"""Допуск медиа-контракта PCMU на границе AI-услуг и адрес RTP из SDP."""
 
+import ipaddress
 import re
 
 
@@ -39,3 +40,17 @@ def accepts_pcmu(message: str) -> bool:
     if any(line.lower() in {"a=inactive", "a=sendonly", "a=recvonly"} for line in lines):
         return False
     return not re.search(r"(?im)^a=des:qos\s+mandatory\b", body)
+
+
+def offered_media_endpoint(message: str) -> tuple[str, int] | None:
+    """Извлечь IPv4 и RTP-порт из SDP offer или answer."""
+    connection_match = re.search(r"(?im)^c=IN IP4 ([^\s]+)", message)
+    media_match = re.search(r"(?im)^m=audio (\d+)\s+RTP/AVP", message)
+    if connection_match is None or media_match is None:
+        return None
+    try:
+        offered_ip = str(ipaddress.ip_address(connection_match.group(1)))
+        offered_port = int(media_match.group(1))
+    except ValueError:
+        return None
+    return offered_ip, offered_port

@@ -1,4 +1,7 @@
-"""Связь SIP AS с обработчиками звука. Ошибка наблюдения не прерывает звонок."""
+"""API MRF: Voice Agent (озвучка в ногу) и Media Adapter (поток на распознавание).
+
+Ошибка наблюдения не прерывает звонок; привязка ноги к Voice Agent обязательна.
+"""
 
 import re
 import time
@@ -6,8 +9,8 @@ from urllib.parse import quote
 
 from lab_common.http import request_json
 
-from . import runtime
-from .messages import header
+from .. import runtime
+from .sip import message_call_id
 
 
 def best_effort(method, url, payload=None):
@@ -26,7 +29,7 @@ def notify_adapter(message, service_mode="observe", rtpengine_port=None):
         "POST",
         runtime.adapter_url,
         {
-            "call_id": header(message, "Call-ID") or header(message, "i"),
+            "call_id": message_call_id(message),
             "observed_at": time.time(),
             "service_mode": service_mode,
             "rtpengine_port": rtpengine_port,
@@ -55,3 +58,26 @@ def notify_voice(call_id, remote_ip, remote_port, service_mode):
 
 def stop_voice(call_id):
     best_effort("DELETE", f"{runtime.voice_url}/{quote(call_id, safe='')}")
+
+
+def media_is_anchored(offered_ip: str, offered_port: int) -> bool:
+    """AI Agent принимает RTP только от настроенного пула RTPengine."""
+    return (
+        offered_ip == runtime.rtpengine_ip
+        and runtime.rtp_port_min <= offered_port <= runtime.rtp_port_max
+    )
+
+
+def voice_agent_sdp() -> str:
+    """Сформировать минимальный ответ для единственного кодека PCMU/8000."""
+    return (
+        "v=0\r\n"
+        f"o=voice-agent 1 1 IN IP4 {runtime.voice_ip}\r\n"
+        "s=IMS Voice Agent\r\n"
+        f"c=IN IP4 {runtime.voice_ip}\r\n"
+        "t=0 0\r\n"
+        f"m=audio {runtime.voice_rtp_port} RTP/AVP 0\r\n"
+        "a=rtpmap:0 PCMU/8000\r\n"
+        "a=ptime:20\r\n"
+        "a=sendrecv\r\n"
+    )
