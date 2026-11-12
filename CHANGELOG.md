@@ -9,6 +9,15 @@
 
 ## [Unreleased]
 
+- feat: `scripts/verify-all.sh` — полная проверка стенда одной командой: preflight,
+  `start.py`, абоненты, перезапуск S-CSCF и DNS, spike ISC (GO / GO-F1 / NO-GO), iFC
+  задачи 2, `verify-ims.sh`, `verify-services.sh`, регрессия и `verify-5g.sh` при
+  наличии rfsim; таймаут на шаг, таблица PASS/FAIL/SKIP и журнал
+  `local/verify-all/<UTC>.log` с журналами контейнеров при FAIL. Spike без ручных
+  шагов — `app/tests/integration/verify-isc-spike.sh` с восстановлением стенда в `trap`.
+- feat: `SIP_AS_LEG_B_ROUTE=isc|orig` в `lab.env`: Route ноги B translate AS — ISC-метка
+  ноги A или fallback F1 spike через `sip:orig@`; переменная shell при `start.py`
+  переопределяет значение на один запуск (так делает `verify-all.sh` при GO-F1).
 - feat: услуги IMS по профилю абонента по 3GPP ISC: `scripts/provision.py` собирает iFC
   из `lab.env` (`*_SERVICES`, `*_LANGUAGE`), логические AS `translate.as`, `record.as` и
   `as` в одном `lab-sip-as`, `DefaultHandling 0`. translate — B2BUA с ногой B через

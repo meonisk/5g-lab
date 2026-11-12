@@ -24,7 +24,7 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — одиннадцать файлов, описаны ниже.
+- `scripts/` — двенадцать файлов и `lib/` (общий код `verify-all.sh`), описаны ниже.
 - `docs/` — описание правок ядра партнёра (`partner-core.md`), отчёт о подключении к ядру партнёра (`partner-integration.md`), три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
   и эта карта.
 
@@ -35,6 +35,11 @@
 - `setup.sh` — установка одной командой: модели OPUS-MT для CPU-режима (один раз в
   `local/`), затем `start.py`; режим — `AI_MODE` из `lab.env` или `--mode`.
 - `verify-5g.sh` — `rfsim.sh up`, `verify-5g-ue.sh`, `rfsim.sh down` одной командой.
+- `verify-all.sh` — все проверки стенда по порядку одной командой: `start.py`, абоненты,
+  spike ISC, `verify-ims.sh`, `verify-services.sh`, регрессия, `verify-5g.sh` (если есть
+  rfsim); итог PASS/FAIL/SKIP по шагам и журнал `local/verify-all/<UTC>.log`. При GO-F1
+  spike пересоздаёт `lab-sip-as` с `SIP_AS_LEG_B_ROUTE=orig` из окружения, не меняя
+  `lab.env`. `lib/verify-all-lib.sh` — запуск шага с таймаутом, журнал, итоговая таблица.
 - `bench_5g.py` — бенчмарк задержек через 5G: путь через туннель, RTT 5G и напрямую,
   REGISTER/INVITE, переводчик по этапам; отчёт в `local/bench/`.
 - `start.py` — проверка `lab.env` и сети ядра, запуск, абоненты, ожидание готовности;
@@ -77,6 +82,8 @@ WAV уведомления). Media Adapter — `app/services/media-adapter/ims_m
 - `verify-translation.sh` — 1003: русская речь → английский перевод по RTP.
 - `verify-transcription.sh` — 1004: нормализация, запись WAV и расшифровки.
 - `verify_interpreter.py` — 1005/1006: перевод в обе стороны и задержка.
+- `verify-isc-spike.sh` — spike ISC (`spike_isc_chain.py`) без ручных шагов: ISC-метка, затем
+  fallback F1; `SPIKE DECISION: GO | GO-F1 | NO-GO`, восстановление стенда в `trap`.
 - `verify-services.sh` — услуги профиля: translate + record, `*номер`, обычный звонок, AS остановлен.
 - `verify-security.sh` — изоляция и права контейнеров, токены, журналы.
 - `verify-5g-ue.sh` — абоненты UE через OAI rfsim (`scripts/rfsim.sh`): 1003, UE2↔UE1, 1004, перевод и запись UE1 → UE2, `*номер`, AS остановлен.

@@ -19,7 +19,7 @@ git clone --branch partner-ims-ai https://github.com/meonisk/5g-lab.git
 cd 5g-lab
 scripts/core-setup.sh apply
 scripts/setup.sh
-scripts/verify-5g.sh
+scripts/verify-all.sh
 ```
 
 `core-setup.sh` один раз настраивает ядро OAI под наш IMS (NAT UPF, P-CSCF и DNS в
@@ -30,9 +30,14 @@ SMF, отключение демо-IMS OAI) — что и зачем меняе�
 
 `setup.sh` один раз готовит модели перевода OPUS-MT и запускает IMS + AI в лёгком
 режиме `compact` (без Qwen; режим задаёт `AI_MODE` в `lab.env`). Повторный запуск
-ничего не скачивает и не перезапускает работающую IMS. `verify-5g.sh` проверяет
-путь телефон → gNB → AMF/SMF/UPF → IMS → AI через OAI RF Simulator
-([туториал 5](docs/guide-5-5g-scripts.md)).
+ничего не скачивает и не перезапускает работающую IMS. `verify-all.sh` по очереди
+проверяет IMS, услуги и AI, а при наличии rfsim — и путь телефон → gNB → AMF/SMF/UPF
+→ IMS → AI (`scripts/verify-5g.sh`, [туториал 5](docs/guide-5-5g-scripts.md)).
+
+`verify-all.sh` (запуск, абоненты, spike ISC, услуги, регрессия, 5G) печатает в конце
+таблицу PASS/FAIL/SKIP по шагам, полный журнал — в `local/verify-all/<UTC>.log` (путь —
+последней строкой). Запускать от обычного пользователя в группе docker; описание шагов —
+в [карте проекта](docs/project-layout.md#скрипты).
 
 Задержки через 5G (сеть, SIP, перевод по этапам): `python3 scripts/bench_5g.py`.
 
