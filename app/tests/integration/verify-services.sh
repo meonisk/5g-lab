@@ -27,7 +27,7 @@ rtp_info() {
 wait_for() {
     local container=$1 pattern=$2 since=$4 deadline=$((SECONDS + $3))
     while ((SECONDS < deadline)); do
-        docker logs "$container" --since "$since" 2>&1 | grep -Eq -- "$pattern" && return 0
+        log_has "$container" "$pattern" "$since" && return 0
         sleep 1
     done
     return 1

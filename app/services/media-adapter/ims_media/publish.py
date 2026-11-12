@@ -171,6 +171,13 @@ def deliver_observation(observation: dict) -> None:
         )
 
 
+def touch_session(call_id: str) -> None:
+    """TTL сессии считается от последнего RTP звонка, а не от его начала."""
+    with runtime.lock:
+        if call_id in runtime.sessions:
+            runtime.sessions[call_id]["observed_at"] = time.time()
+
+
 def publish_media_windows(media_windows: dict, active_sessions: dict) -> None:
     """Связать каждое окно с одним звонком и отправить его AI Worker."""
     for stream_identity, counters in media_windows.items():
@@ -185,6 +192,7 @@ def publish_media_windows(media_windows: dict, active_sessions: dict) -> None:
             continue
 
         call_id, session = matched_session
+        touch_session(call_id)
         observation = build_observation(
             call_id,
             session,

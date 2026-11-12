@@ -43,14 +43,24 @@ hangup_clients() {
     done
 }
 
+# Есть ли строка (grep -E) в журнале контейнера; третий аргумент — --since. Вывод
+# сначала целиком читается в переменную: в `docker logs | grep -q` под pipefail grep
+# выходит на первом совпадении, docker logs получает SIGPIPE, и пайплайн «падает»
+# именно тогда, когда строка найдена (ложный FAIL на длинных журналах).
+log_has() {
+    local text
+    text=$(docker logs "$1" ${3:+--since "$3"} 2>&1)
+    grep -Eq -- "$2" <<<"$text"
+}
+
 # Recreate both clients so their logs start at a fresh REGISTER, then wait for
 # 200 OK. Callers may export SIPUE*_PLAYBACK_FILE first to mount dialogue WAVs.
 fresh_clients() {
     "${compose[@]}" up -d --no-deps --force-recreate sipue1 sipue2 >/dev/null 2>&1 || return 1
     local deadline=$((SECONDS + 40))
     while ((SECONDS < deadline)); do
-        if docker logs lab-sipue1 2>&1 | grep -q 'Response msg 200/REGISTER' &&
-            docker logs lab-sipue2 2>&1 | grep -q 'Response msg 200/REGISTER'; then
+        if log_has lab-sipue1 'Response msg 200/REGISTER' &&
+            log_has lab-sipue2 'Response msg 200/REGISTER'; then
             return 0
         fi
         sleep 1

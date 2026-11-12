@@ -156,6 +156,19 @@ class MediaRouting(unittest.TestCase):
         self.assertEqual(active["obs"]["subscriber_ports"], [30020])
         self.assertEqual(active["rec"]["subscriber_ports"], [30020, 30022])
 
+    def test_matched_rtp_extends_session_ttl(self):
+        from ims_media import publish
+
+        session = {"rtpengine_port": 30010, "service_mode": "translate", "observed_at": 1.0}
+        key = (1, 30010, 41000, 0, "caller_to_agent")
+        window = {key: {"packets": 1, "payload_bytes": 160, "audio": bytearray()}}
+        with (
+            patch.dict(publish.runtime.sessions, {"call": dict(session)}, clear=True),
+            patch.object(publish, "deliver_observation"),
+        ):
+            publish.publish_media_windows(window, {"call": session})
+            self.assertGreater(publish.runtime.sessions["call"]["observed_at"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

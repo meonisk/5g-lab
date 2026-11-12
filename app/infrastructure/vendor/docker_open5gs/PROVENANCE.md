@@ -12,3 +12,6 @@
 #   fail the image build if either bidirectional codec is unavailable.
 # - P-CSCF: add PCMU transcoding to configured AI service offers only; identifiers
 #   are validated and rendered by pcscf_init.sh. Normal destinations are unchanged.
+# - S-CSCF failure_route isc_orig_failure/isc_term_failure: NOTICE logs with the
+#   reply code (L_DBG is hidden at debug=2) and resetdsturi() before continuing to
+#   the callee, so DefaultHandling SESSION_CONTINUED never re-targets a dead AS.

@@ -32,9 +32,11 @@ ue_cmd() { timeout 3 sh -c 'printf "%b" "$1" >"$2"' control "$2" "$jail/tmp/cont
 
 # Ждём строку в журнале клиента после отметки mark.
 wait_log() {
-    local n=$1 pattern=$2 seconds=$3 offset=$4 deadline=$((SECONDS + $3))
+    local n=$1 pattern=$2 seconds=$3 offset=$4 deadline=$((SECONDS + $3)) text
     while ((SECONDS < deadline)); do
-        tail -n +"$((offset + 1))" "$(log_of "$n")" | grep -Eq -- "$pattern" && return 0
+        # Без пайпа в grep -q: под pipefail SIGPIPE писателя даёт ложный провал.
+        text=$(tail -n +"$((offset + 1))" "$(log_of "$n")")
+        grep -Eq -- "$pattern" <<<"$text" && return 0
         sleep 1
     done
     return 1
@@ -42,7 +44,18 @@ wait_log() {
 wait_docker() {
     local container=$1 pattern=$2 seconds=$3 deadline=$((SECONDS + $3))
     while ((SECONDS < deadline)); do
-        docker logs --since "$since" "$container" 2>&1 | grep -Eq -- "$pattern" && return 0
+        log_has "$container" "$pattern" "$since" && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# Оба уведомления о записи (нога A и нога B) доиграны Voice Agent.
+announcements_sent() {
+    local deadline=$((SECONDS + $1)) text
+    while ((SECONDS < deadline)); do
+        text=$(docker logs --since "$since" lab-voice-agent 2>&1)
+        (($(grep -c 'reason=announcement state=sent' <<<"$text") >= 2)) && return 0
         sleep 1
     done
     return 1
@@ -223,6 +236,9 @@ if wait_docker lab-sip-as 'AS translate answered .* languages=ru-en' 10; then
     check 'SIP AS: перевод ru-en' true
     check 'SIP AS: запись обеих ног после уведомления' \
         wait_docker lab-sip-as 'AS record started call_id=[^ ]+ legs=2' 40
+    # «record started» пишется, когда уведомления поставлены в очередь, а не сыграны:
+    # фраза UE1 не должна звучать поверх уведомления в ноге A.
+    check 'Voice Agent: уведомления сыграны в обеих ногах' announcements_sent 60
     say_once 1
     check 'Voice Agent: перевод UE1 озвучен английским голосом' \
         wait_docker lab-voice-agent "reason=llm_reply state=sent.*voice=$TTS_TRANSLATION_VOICE" 120
@@ -243,6 +259,20 @@ if ((d_failed == 0)); then
         docker logs "$container" --since "$since" 2>&1 |
             grep -vE 'stream_received|MEDIA delivered' | tail -60
     done
+    echo '----- lab-media-adapter: окна RTP по направлению и услуге -----'
+    docker logs lab-media-adapter --since "$since" 2>&1 |
+        sed -n 's/.*MEDIA delivered direction=\([^ ]*\) .* audio=\([0-9]*\) .*service=\([^ ]*\).*/\1 \3 audio=\2/p' |
+        sed -E 's/audio=[1-9][0-9]*$/audio>0/' | sort | uniq -c
+    echo '----- lab-ai-worker: принятые окна (с аудио / всего) и очередь -----'
+    received=$(docker logs lab-ai-worker --since "$since" 2>&1 | grep -c 'stream_received' || true)
+    with_audio=$(docker logs lab-ai-worker --since "$since" 2>&1 |
+        grep -cE 'stream_received .*audio=[1-9]' || true)
+    echo "stream_received=$received with_audio=$with_audio"
+    service_get lab-ai-worker AI_WORKER_PORT /events 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print({k: d.get(k) for k in ("queue_depth", "utterance_queue_depth", "pending_utterances",
+                             "buffered_streams", "active_calls", "model_error")})'
     echo '===== КОНЕЦ ДИАГНОСТИКИ D ====='
 fi
 sleep 2
