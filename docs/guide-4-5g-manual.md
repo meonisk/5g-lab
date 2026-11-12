@@ -180,12 +180,14 @@ docker logs -f --since 1m lab-voice-agent 2>&1 | grep --line-buffered -E 'reason
 перевод занимает 20–60 с. Затем `dq`: RX больше `packets=` из строки приветствия —
 значит, до UE дошёл и перевод. `h`.
 
-**Тест B. UE1 → UE2** (`UE2_MSISDN`, у нас 1002)
+**Тест B. UE2 → UE1** (`UE1_MSISDN`, у нас 1001)
 
-В PJSUA UE1: `m`, `sip:1002@<IMS_DOMAIN>`. UE2 отвечает сам (`--auto-answer`), в обоих
-терминалах `state changed to CONFIRMED`. На каждой стороне `cl` и `cc` (плеер → вызов),
-через 20 с `dq` на обеих. Результат: RX больше 500 пакетов (20 с при ptime 20 мс —
-около 1000). `h` в UE1; у UE2 — `DISCONNECTED`, BYE дошёл.
+У UE1 в профиле translate и record, поэтому обычный вызов делает UE2. В PJSUA UE2: `m`,
+`sip:1001@<IMS_DOMAIN>`. UE1 отвечает сам (`--auto-answer`), в обоих терминалах
+`state changed to CONFIRMED`. На каждой стороне `cl` и `cc` (плеер → вызов), через 20 с
+`dq` на обеих. Результат: RX больше 500 пакетов (20 с при ptime 20 мс — около 1000).
+`h` в UE2; у UE1 — `DISCONNECTED`, BYE дошёл. Звонок UE1 → UE2 идёт с переводом и
+записью — его проверяет тест D в `verify-5g-ue.sh`.
 
 **Тест C. UE2 → расшифровка** (`VOICE_TRANSCRIBER_MSISDN`, у нас 1004)
 

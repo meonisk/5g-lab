@@ -27,11 +27,19 @@ PASS: UE1: туннель oaitun_ue1 (10.46.0.3) — scripts/rfsim.sh up
 ===== A: UE1 -> переводчик 1003 =====
 PASS: Voice Agent: перевод озвучен полностью
 PASS: UE1: получил приветствие и перевод (RX 372 > 241)
-===== B: UE1 -> UE2 (1001 -> 1002) =====
+===== B: UE2 -> UE1 (1002 -> 1001) =====
 PASS: UE1: звук от собеседника (RX 1100 > 500)
 PASS: UE2: звук от собеседника (RX 1100 > 500)
 ===== C: UE2 -> расшифровка 1004 =====
 PASS: AI Worker: фраза UE2 распознана
+===== D: UE1 -> UE2: перевод ru-en и запись =====
+PASS: SIP AS: запись обеих ног после уведомления
+PASS: Voice Agent: перевод UE1 озвучен английским голосом
+PASS: AI Worker: запись закрыта
+===== E: UE2 -> *UE1: разовый перевод =====
+PASS: SIP AS: перевод en-ru
+===== F: SIP AS остановлен: UE1 -> UE2 =====
+PASS: UE1: 200/INVITE без SIP AS (DefaultHandling)
 5G UE -> IMS -> AI: PASS
 rfsim остановлен
 ```
@@ -104,7 +112,7 @@ python3 scripts/bench_5g.py --rounds 3
 только процессы с копиями из `local/rfsim/`: чужой gNB на том же хосте не трогается.
 Если до запуска уже работает любой softmodem, `up` отказывается стартовать.
 
-**[verify-5g-ue.sh](../app/tests/integration/verify-5g-ue.sh)** — шаги 6–8 и тесты A–C:
+**[verify-5g-ue.sh](../app/tests/integration/verify-5g-ue.sh)** — шаги 6–8 и тесты A–F:
 
 - PDU-сессии: туннель у каждого UE, адрес в `IMS_UE_CIDR`, маршрут `LAB_NETWORK_CIDR` в
   туннель, ping P-CSCF;
@@ -114,8 +122,12 @@ python3 scripts/bench_5g.py --rounds 3
   клавиатуры;
 - регистрация: `REGISTER 200` и контакт `IMSI@адрес туннеля` в ответе S-CSCF;
 - тест A: приветствие, `llm_reply state=sent` до 120 с, RX больше пакетов приветствия;
-- тест B: оба вызова `CONFIRMED`, через 20 с RX больше 500 у обоих, BYE дошёл;
-- тест C: `utterance_processed` с ненулевым `transcript_chars`.
+- тест B: UE2 → UE1, оба вызова `CONFIRMED`, через 20 с RX больше 500 у обоих, BYE дошёл;
+- тест C: `utterance_processed` с ненулевым `transcript_chars`;
+- тест D: UE1 → UE2 — `languages=ru-en`, `record started ... legs=2`, английский перевод
+  в ноге B, `recording_finalized` после BYE;
+- тест E: UE2 → `*UE1` — `languages=en-ru`;
+- тест F: `lab-sip-as` остановлен — UE1 → UE2 всё равно получает 200/INVITE.
 
 Номера плеера и вызова для `cc`/`cd` скрипт читает из `cl`, RX — из `dq`. В конце
 клиенты получают `ha` и `q`, остатки снимаются `pkill` по `chroot`.

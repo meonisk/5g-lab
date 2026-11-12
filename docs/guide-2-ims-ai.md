@@ -35,6 +35,7 @@ bash app/tests/integration/verify-voice-agent.sh
 bash app/tests/integration/verify-translation.sh
 bash app/tests/integration/verify-transcription.sh
 python3 app/tests/integration/verify_interpreter.py
+bash app/tests/integration/verify-services.sh
 bash app/tests/integration/verify-security.sh
 ```
 
@@ -144,15 +145,25 @@ scripts/setup.sh
 
 Номера задаются в `lab.env` (`VOICE_*_MSISDN`).
 
-- **1001, 1002** — телефоны `UE1`, `UE2`; обычный вызов без AI. **1101, 1102** —
-  тестовые клиенты.
+- **1001, 1002** — телефоны `UE1`, `UE2`; **1101, 1102** — тестовые клиенты `SIPUE1`,
+  `SIPUE2`. Услуги абонента задаёт его профиль в `lab.env` (`*_SERVICES`, `*_LANGUAGE`):
+  у `UE1` и `SIPUE1` — `translate,record` и `ru`, у `UE2` и `SIPUE2` — без услуг, `en`.
+- **translate** — звонок абоненту с другим языком идёт через MRF (Voice Agent): каждый
+  слышит перевод речи собеседника на своём языке, исходный звук между ними не
+  передаётся. Тот же язык, номер услуги или занятый MRF — звонок идёт как обычный.
+- **record** — после уведомления каждой стороне на её языке записываются обе стороны.
+- **`*номер`** — разовый перевод с любого абонента, например `*1101`.
+- **Обычный вызов** (1002 → 1001, 1102 → 1101) — без MRF; AI только наблюдает звук.
 - **1003** — перевод: русская речь звонящего возвращается ему английским голосом.
 - **1004** — запись: после звукового уведомления речь записывается и расшифровывается.
 - **1005 / 1006** — двусторонний перевод. Это два отдельных вызова к услуге: русский
   участник звонит на 1005, английский на 1006. Каждый слышит перевод речи другого на
   своём языке; исходный звук между ними не передаётся.
 
-Записывается только вызов на 1004 и только после уведомления:
+Записываются вызов на 1004 и звонки абонента с услугой `record` — только после
+уведомления. Звонок с `record` пишет обе стороны в один каталог (имя — первые 20 hex
+SHA-256 от Call-ID звонящего), строки `transcript.txt` начинаются с `[caller/<язык>]`
+или `[callee/<язык>]`:
 
 ```text
 local/private/recordings/<session-id>/
@@ -195,7 +206,7 @@ local/private/recordings/<session-id>/
 создаёт тестовых клиентов `lab-sipue1/2` и удаляет их в конце, даже при `FAIL`.
 Проверки 3–5 рассчитаны на режим `baseline`.
 
-1. **Шаги 7–8: `verify-ims-call.sh`** — вызов 1101 → 1102: INVITE через P/S-CSCF,
+1. **Шаги 7–8: `verify-ims-call.sh`** — вызов 1102 → 1101: INVITE через P/S-CSCF,
    S-CSCF вызывает SIP AS по iFC (`AS observed INVITE` в `docker logs lab-sip-as`),
    медиа обеих сторон в RTPengine, звук доходит до AI Worker. Затем останавливает AI
    Worker и проверяет, что RTP продолжает идти (fail-open), и запускает его обратно.
@@ -214,7 +225,12 @@ local/private/recordings/<session-id>/
    сторону, задержка от конца фразы до первого RTP перевода не больше
    `INTERPRETER_MAX_RESPONSE_DELAY_MS`. При первом запуске синтезирует диалог Piper в
    `local/private/interpreter/`. Отчёт — JSON.
-6. **`verify-security.sh`** — read-only rootfs, no-new-privileges, сброс capabilities,
+6. **`verify-services.sh`** — услуги профиля: `SIPUE1` (1101) → 1102 — перевод ru-en в
+   обе стороны через MRF, уведомление и запись обеих сторон; 1102 → `*1101` — разовый
+   перевод без записи; 1102 → 1101 — обычный звонок без MRF; при остановленном SIP AS
+   звонок соединяется (`DefaultHandling 0`). После изменения услуг в `lab.env`:
+   `python3 scripts/provision.py --apply && docker restart lab-scscf`.
+7. **`verify-security.sh`** — read-only rootfs, no-new-privileges, сброс capabilities,
    ограниченные журналы, токен на служебных API, Ollama только во внутренней сети,
    отсутствие IMSI и текста реплик в журналах. Звонков не делает.
 
@@ -231,15 +247,19 @@ unit-тесты из `app/tests/unit/`. Что проверяет каждый u
 
 ## 6. Как вызов попадает в AI
 
-PyHSS при provisioning записывает каждому абоненту iFC из
-[default_ifc.xml](../app/infrastructure/vendor/docker_open5gs/pyhss/default_ifc.xml):
-исходящий `INVITE` с приоритетом 30 отправляется на `sip:as.<IMS_DOMAIN>:<SIP_AS_PORT>`,
-а `DefaultHandling 0` продолжает вызов при недоступном AS. Поэтому обычный разговор не
-зависит от AI, а услуги AI при отказе просто не работают.
+`scripts/provision.py` собирает каждому абоненту iFC из его профиля в `lab.env` и
+записывает в PyHSS: translate (приоритет 10) на `sip:translate.as.<IMS_DOMAIN>`,
+`*номер` (15) — на translate всем, record (20) на `sip:record.as.<IMS_DOMAIN>`, numbers
+(30) на `sip:as.<IMS_DOMAIN>`, SMS (40). У всех правил `DefaultHandling 0`: при
+недоступном AS звонок продолжается без услуги. Все логические AS — один контейнер
+`lab-sip-as` на одном порту; S-CSCF кэширует iFC, поэтому после изменения профиля
+нужны `provision.py --apply` и `docker restart lab-scscf`.
 
-SIP AS ([core/dispatch.py](../app/services/sip-as/ims_sip/core/dispatch.py)) сравнивает номер
-назначения с номерами услуг. Обычный вызов он возвращает в S-CSCF и только включает
-наблюдение. Вызов на номер услуги он завершает сам и соединяет с Voice Agent.
+SIP AS ([core/dispatch.py](../app/services/sip-as/ims_sip/core/dispatch.py)) выбирает
+логический AS по хосту первого `Route` (`services/translate.py`, `services/record.py`,
+`services/numbers.py`). translate — B2BUA: нога A заканчивается на Voice Agent, нога B
+уходит в S-CSCF и идёт дальше по цепочке iFC. record — прокси с `Record-Route`, numbers
+наблюдает обычный вызов или сам отвечает на номер услуги и соединяет с Voice Agent.
 Внутренний формат звука AI — PCMU/8000: это протокольный контракт, одной переменной
 его не поменять. Путь речи по коду (от `app/services/`):
 
@@ -248,7 +268,7 @@ SIP AS ([core/dispatch.py](../app/services/sip-as/ims_sip/core/dispatch.py)) с�
 3. `ai-worker/ims_ai/segmentation.py` — сборка окон в реплики по паузам.
 4. `ai-worker/ims_ai/queueing.py` — передача реплики свободному обработчику.
 5. `ai-worker/ims_ai/utterances.py` — распознавание и замер времени STT.
-6. `ai-worker/ims_ai/transcription.py` — нормализация и сохранение текста (1004).
+6. `ai-worker/ims_ai/transcription.py` — нормализация и сохранение текста (1004, record).
 7. `ai-worker/ims_ai/replies.py` — перевод или ответ и доставка в нужный канал.
 8. `voice-agent/ims_voice/media.py` — озвучка и отправка PCMU.
 

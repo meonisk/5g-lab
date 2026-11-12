@@ -54,10 +54,13 @@ AI Worker, `app/services/ai-worker/ims_ai/`: `settings.py` — параметр�
 `transcription.py` и `recording.py` — запись 1004, `lifecycle.py` — хвост вызова при BYE,
 `api.py` и `app.py` — HTTP и запуск потоков.
 
-SIP AS — `app/services/sip-as/ims_sip/` (`core/` — SIP, прокси и MRF, `services/` — логические AS, `core/sdp.py` —
-проверка SDP). Voice Agent — `app/services/voice-agent/ims_voice/` (`calls.py` — жизнь
-вызова и очередь озвучки, `media.py` — RTP). Media Adapter —
-`app/services/media-adapter/ims_media/`. Файлы `worker.py`, `server.py`, `agent.py`,
+SIP AS — `app/services/sip-as/ims_sip/`: `core/` — SIP без состояния (`sip.py`),
+транспорт, SDP, прокси, B2BUA (`b2bua.py`), API MRF (`mrf.py`), языки абонентов
+(`subscribers.py`) и вход (`dispatch.py`); `services/` — логические AS `translate.py`,
+`record.py`, `numbers.py`. Voice Agent — `app/services/voice-agent/ims_voice/`
+(`calls.py` — жизнь вызова и очередь озвучки, `media.py` — RTP, `api.py` — в том числе
+WAV уведомления). Media Adapter — `app/services/media-adapter/ims_media/`
+(`rtpengine.py` — запросы и `play media`). Файлы `worker.py`, `server.py`, `agent.py`,
 `adapter.py` — короткие точки входа. Пакет `lab_common` копируется во все четыре
 образа: после его изменения пересоберите их все.
 
@@ -74,8 +77,9 @@ SIP AS — `app/services/sip-as/ims_sip/` (`core/` — SIP, прокси и MRF,
 - `verify-translation.sh` — 1003: русская речь → английский перевод по RTP.
 - `verify-transcription.sh` — 1004: нормализация, запись WAV и расшифровки.
 - `verify_interpreter.py` — 1005/1006: перевод в обе стороны и задержка.
+- `verify-services.sh` — услуги профиля: translate + record, `*номер`, обычный звонок, AS остановлен.
 - `verify-security.sh` — изоляция и права контейнеров, токены, журналы.
-- `verify-5g-ue.sh` — абоненты UE через OAI rfsim (`scripts/rfsim.sh`): 1003, UE↔UE, 1004.
+- `verify-5g-ue.sh` — абоненты UE через OAI rfsim (`scripts/rfsim.sh`): 1003, UE2↔UE1, 1004, перевод и запись UE1 → UE2, `*номер`, AS остановлен.
 - `common.sh` — общий код shell-проверок (загрузка `lab.env`, PASS/FAIL, PJSUA).
 
 Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/check.py`):
@@ -88,6 +92,18 @@ Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/che
 - `test_phone_sdp.py` — AS не соглашается на кодек, которого не было в offer.
 - `test_bench_5g.py` — разбор ping и медианы бенчмарка.
 - `test_cpu_ai_profiles.py` — направления OPUS-MT, без LLM в CPU-режимах.
+- `sip_fakes.py` — не тест: фейковые сокет, HTTP и потоки, построители SIP для тестов SIP AS.
+- `test_ifc_generation.py` — iFC из профилей `lab.env`, приоритеты, DNS логических AS.
+- `test_sip_as_numbers.py` — 1003–1006 и наблюдение обычного вызова.
+- `test_sip_as_dispatch.py` — логический AS по `Route`, языки, свои диалоги.
+- `test_sip_as_mrf.py` — API MRF: места, ноги, озвучка, пара, запись, уведомление.
+- `test_sip_as_translate.py` — нога B через S-CSCF, 180, ответ и пара перевода.
+- `test_sip_as_b2bua_teardown.py` — 486/480/408, BYE с каждой стороны, CANCEL, re-INVITE.
+- `test_sip_as_translate_bypass.py` — `*номер` и звонок без перевода.
+- `test_sip_as_record.py` — record AS: пометка, уведомление, запись пары перевода.
+- `test_ai_pairs.py` — пары ног перевода в AI Worker.
+- `test_ai_recording.py` — запись обеих сторон в один `transcript.txt`.
+- `test_announcements.py` — WAV уведомления и `play media` RTPengine.
 
 ## Правила
 

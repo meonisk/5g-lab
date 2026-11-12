@@ -9,6 +9,13 @@
 
 ## [Unreleased]
 
+- feat: услуги IMS по профилю абонента по 3GPP ISC: `scripts/provision.py` собирает iFC
+  из `lab.env` (`*_SERVICES`, `*_LANGUAGE`), логические AS `translate.as`, `record.as` и
+  `as` в одном `lab-sip-as`, `DefaultHandling 0`. translate — B2BUA с ногой B через
+  S-CSCF и переводом в обе стороны через MRF; `*номер` — разовый перевод; record —
+  уведомление каждой стороне (Voice Agent или RTPengine `play media`) и запись обеих
+  сторон в один `transcript.txt`. SIP AS разделён на `core/` и `services/`. Обычный
+  вызов в проверках — 1102 → 1101 и UE2 → UE1; новая проверка `verify-services.sh`.
 - docs: `docs/partner-integration.md` — отчёт о подключении IMS + AI к ядру партнёра:
   пути абонентов (SIPUE напрямую, UE через 5G), изменения, проблемы и решения,
   результаты проверок и бенчмарка 11.11.2026, открытые вопросы.

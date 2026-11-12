@@ -28,16 +28,17 @@ docker logs lab-sipue1 2>&1 | grep 'Response msg 200/REGISTER'
 Результат: строка `200/REGISTER` у клиента 1101 (у `lab-sipue2` — так же, 1102). Если
 её нет сразу, подождите несколько секунд: клиент регистрируется после старта.
 
-**3. Звонок 1101 → 1102**
+**3. Звонок 1102 → 1101**
 
 ```bash
-docker exec lab-sipue1 sh -c 'printf "m\nsip:1102@%s\n" "$IMS_DOMAIN" > /tmp/pjsua-control'
+docker exec lab-sipue2 sh -c 'printf "m\nsip:1101@%s\n" "$IMS_DOMAIN" > /tmp/pjsua-control'
 sleep 10
-docker logs --tail 40 lab-sipue2
-docker exec lab-sipue1 sh -c 'printf "ha\n" > /tmp/pjsua-control'
+docker logs --tail 40 lab-sipue1
+docker exec lab-sipue2 sh -c 'printf "ha\n" > /tmp/pjsua-control'
 ```
 
-Результат: у `lab-sipue2` входящий вызов с автоответом `200`. Другие команды PJSUA —
+Результат: у `lab-sipue1` входящий вызов с автоответом `200`. Это обычный вызов: у 1102
+нет услуг в профиле (звонок с 1101 на 1102 идёт через translate AS, туториал 2). Другие команды PJSUA —
 [раздел 3](#3-тестовые-клиенты-pjsua).
 
 **4. Убрать тестовых клиентов**
