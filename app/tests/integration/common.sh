@@ -82,3 +82,15 @@ wait_call_id() {
     done
     printf '%s' "$call_id"
 }
+
+# После docker restart lab-scscf: ждать открытого Cx I/S-CSCF к HSS (тот же разбор
+# cdp.list_peers, что в scripts/start.py). Аргумент — предел ожидания в секундах.
+wait_ims_ready() {
+    local deadline=$((SECONDS + ${1:-90}))
+    while ((SECONDS < deadline)); do
+        python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import provision, start
+raise SystemExit(0 if start.ims_peers_ready(provision.read_env()) else 1)' "$root" && return 0
+        sleep 2
+    done
+    return 1
+}
