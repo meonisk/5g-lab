@@ -98,13 +98,17 @@ class FakeHttp:
         self.calls = []
         self.fail = set()
         self.voice_calls = {}
+        self.voice_max_calls = None
 
     def __call__(self, method, url, json=None, headers=None, timeout=None, trust_env=None):
         self.calls.append((method, url, json))
         if any(part in url for part in self.fail):
             raise httpx.ConnectError("unit test: service down")
         if method == "GET" and url.endswith("/status"):
-            return FakeResponse({"calls": dict(self.voice_calls)})
+            status = {"calls": dict(self.voice_calls)}
+            if self.voice_max_calls is not None:
+                status["max_calls"] = self.voice_max_calls
+            return FakeResponse(status)
         return FakeResponse(None)
 
     def posted(self, fragment):

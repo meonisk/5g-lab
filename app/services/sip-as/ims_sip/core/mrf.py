@@ -96,7 +96,10 @@ def free_slots() -> int:
     except Exception as exc:
         print(f"AS mrf status unavailable type={type(exc).__name__}", flush=True)
         return 0
-    return max(0, runtime.voice_max_calls - len((status or {}).get("calls", {})))
+    status = status or {}
+    # Предел — из профиля Voice Agent (compact: 2); lab.env SIP AS только запасной.
+    limit = status.get("max_calls", runtime.voice_max_calls)
+    return max(0, limit - len(status.get("calls", {})))
 
 
 def bind_leg(message, call_id, remote_ip, remote_port, service_mode) -> bool:

@@ -23,6 +23,10 @@ check() {
 # Print the final verdict line and exit with its status. Test clients exist only
 # for the duration of a gate: they are removed here, not left on the stand.
 finish() {
+    # Сначала BYE: удалённый клиент не завершает вызов, и Voice Agent держит место
+    # до истечения таймаута, а следующая проверка видит «стенд занят».
+    hangup_clients
+    wait_no_ai_calls 15 || true
     "${compose[@]}" rm -sf sipue1 sipue2 >/dev/null 2>&1 || true
     printf '%s: %s\n' "$1" "$([[ $fail == 0 ]] && echo PASS || echo FAIL)"
     exit "$fail"
@@ -65,6 +69,28 @@ request = urllib.request.Request(
     headers={"Authorization": "Bearer " + token},
 )
 print(urllib.request.urlopen(request, timeout=3).read().decode())' "$2" "$3"
+}
+
+# Ждать, пока в Voice Agent не останется активных вызовов. Аргумент — предел в секундах.
+wait_no_ai_calls() {
+    local deadline=$((SECONDS + ${1:-30})) count
+    while ((SECONDS < deadline)); do
+        count=$(service_get lab-voice-agent VOICE_AGENT_HTTP_PORT /status 2>/dev/null |
+            python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("calls", {})))' 2>/dev/null)
+        [[ $count == 0 ]] && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# LLM (Ollama) есть только в baseline; в compact/minimal контейнера нет, а
+# нормализация расшифровки — raw. Проверки LLM тогда пропускаются, а не падают.
+llm_enabled() {
+    [[ $(docker inspect -f '{{.State.Running}}' lab-llm-worker 2>/dev/null) == true ]]
+}
+
+skip() {
+    printf 'SKIP: %s\n' "$1"
 }
 
 # JSON field from stdin, default 0/empty; keeps the gates free of jq.

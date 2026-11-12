@@ -14,6 +14,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
 spike=$root/app/tests/integration/spike_isc_chain.py
 container=lab-spike-isc
+spike_in=/lab/app/tests/integration/spike_isc_chain.py
 
 cleanup() {
     # Восстановление не прерывается повторным Ctrl-C: игнор наследуют и docker/python.
@@ -50,11 +51,18 @@ attempt() {
     local mode=$1 since logs leg a
     echo "===== spike: нога B через $mode ====="
     docker rm -f "$container" >/dev/null 2>&1 || true
-    docker run -d --rm --name "$container" --network "$CORE_NETWORK_NAME" --ip "$SIP_AS_IP" \
+    # Без --rm: если spike упадёт, его вывод остаётся для docker logs. Путь в контейнере
+    # той же глубины, что в репозитории: скрипт считает ROOT от своего пути.
+    docker run -d --name "$container" --network "$CORE_NETWORK_NAME" --ip "$SIP_AS_IP" \
         -e SIP_AS_IP -e SIP_AS_PORT -e SCSCF_IP -e SCSCF_SIP_PORT -e IMS_DOMAIN \
         -e "SPIKE_LEG_B_ROUTE=$mode" \
-        -v "$spike:/spike.py:ro" --entrypoint python lab-sip-as /spike.py serve >/dev/null ||
+        -v "$spike:$spike_in:ro" --entrypoint python lab-sip-as "$spike_in" serve >/dev/null ||
         decide 'ERROR — spike-контейнер не запустился' 2
+    sleep 1
+    if [[ $(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null) != true ]]; then
+        docker logs "$container" 2>&1 | tail -20
+        decide 'ERROR — spike-контейнер завершился сразу после запуска' 2
+    fi
     fresh_clients || decide 'ERROR — SIPUE1/SIPUE2 не зарегистрировались' 2
     since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     pjsua lab-sipue1 "m\nsip:${SIPUE2_MSISDN}@${IMS_DOMAIN}\n"

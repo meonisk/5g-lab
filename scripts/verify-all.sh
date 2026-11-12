@@ -195,13 +195,23 @@ else
         skip_step verify-services "$spike_reason"
     fi
 
+    # Незавершённый вызов предыдущего шага занимает место Voice Agent (compact: 2):
+    # следующий шаг видит «стенд занят» или переводимый звонок идёт без перевода.
+    settle_calls() {
+        ((interrupted)) && return
+        bash -c 'source "$1/common.sh" && wait_no_ai_calls 60' settle "$tests" ||
+            say 'ВНИМАНИЕ: в Voice Agent остались активные вызовы после 60 с ожидания'
+    }
+
     for entry in "${regression[@]}"; do
         IFS='|' read -r name seconds expect command <<<"$entry"
+        settle_calls
         # shellcheck disable=SC2086 # команда из таблицы выше, пути без пробелов
         run_step "$name" "$seconds" "$expect" -- $command
     done
 
     if ((fivegee)); then
+        settle_calls
         run_step verify-5g 1800 '^5G UE -> IMS -> AI: PASS$' --tty -- "$root/scripts/verify-5g.sh"
     else
         skip_step verify-5g "нет стенда 5G: $reason"

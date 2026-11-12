@@ -13,6 +13,12 @@ class MrfApi(SipCase):
         self.http.voice_calls = {"c1": {}, "c2": {}}
         self.assertEqual(mrf.free_slots(), int(ENV["VOICE_AGENT_MAX_CALLS"]) - 2)
 
+    def test_free_slots_use_voice_agent_limit(self):
+        # Предел задаёт профиль Voice Agent (compact: 2), а не lab.env SIP AS.
+        self.http.voice_max_calls = 2
+        self.http.voice_calls = {"c1": {}}
+        self.assertEqual(mrf.free_slots(), 1)
+
     def test_free_slots_zero_when_voice_agent_down(self):
         self.http.fail.add("voice.test")
         self.assertEqual(mrf.free_slots(), 0)

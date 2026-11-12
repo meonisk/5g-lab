@@ -30,7 +30,8 @@ from .transport import send, send_local_response
 
 CONTACT_USER = "b2bua"
 BRANCH_PREFIX = "z9hG4bK-b2b-"
-OWN_VIA = re.compile(r"(?im)^(?:Via|v)\s*:[^\r\n]*branch=(z9hG4bK-b2b-[^;\s]+)")
+TOP_VIA = re.compile(r"(?im)^(?:Via|v)\s*:([^\r\n,]*)")
+OWN_BRANCH = re.compile(r"branch=(z9hG4bK-b2b-[^;\s]+)")
 
 
 @dataclass
@@ -220,7 +221,10 @@ def ack_failure(call: Call, response: str) -> None:
 
 def handle_response(message: str) -> bool:
     """Ответ на INVITE ноги B или на свой запрос в диалоге; False — ответ не B2BUA."""
-    match = OWN_VIA.search(message)
+    # Только верхний Via: ответ ноги B, идущий через record AS (тот же процесс),
+    # несёт Via B2BUA ниже и возвращается прокси-путём в S-CSCF.
+    top = TOP_VIA.search(message)
+    match = OWN_BRANCH.search(top.group(1)) if top else None
     if match is None:
         return False
     branch = match.group(1)

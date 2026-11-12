@@ -218,15 +218,22 @@ offset1=$(mark 1)
 offset2=$(mark 2)
 ue_cmd 1 "m\nsip:$UE2_MSISDN@$IMS_DOMAIN\n"
 check 'UE1: 200/INVITE (нога A translate AS)' wait_log 1 'Response msg 200/INVITE' 40 "$offset1"
-check 'SIP AS: перевод ru-en' wait_docker lab-sip-as 'AS translate answered .* languages=ru-en' 10
-check 'SIP AS: запись обеих ног после уведомления' \
-    wait_docker lab-sip-as 'AS record started call_id=[^ ]+ legs=2' 40
-say_once 1
-check 'Voice Agent: перевод UE1 озвучен английским голосом' \
-    wait_docker lab-voice-agent "reason=llm_reply state=sent.*voice=$TTS_TRANSLATION_VOICE" 120
-ue_cmd 1 'ha\n'
-check 'UE2: BYE ноги B дошёл' wait_log 2 'DISCONNECTED' 15 "$offset2"
-check 'AI Worker: запись закрыта' wait_docker lab-ai-worker 'AI recording_finalized session=' 30
+# Без перевода остальные ожидания D (~4 мин) заведомо FAIL: сразу к E.
+if wait_docker lab-sip-as 'AS translate answered .* languages=ru-en' 10; then
+    check 'SIP AS: перевод ru-en' true
+    check 'SIP AS: запись обеих ног после уведомления' \
+        wait_docker lab-sip-as 'AS record started call_id=[^ ]+ legs=2' 40
+    say_once 1
+    check 'Voice Agent: перевод UE1 озвучен английским голосом' \
+        wait_docker lab-voice-agent "reason=llm_reply state=sent.*voice=$TTS_TRANSLATION_VOICE" 120
+    ue_cmd 1 'ha\n'
+    check 'UE2: BYE ноги B дошёл' wait_log 2 'DISCONNECTED' 15 "$offset2"
+    check 'AI Worker: запись закрыта' wait_docker lab-ai-worker 'AI recording_finalized session=' 30
+else
+    check 'SIP AS: перевод ru-en' false
+    echo 'INFO: перевод не установлен, остальные проверки D пропущены'
+    ue_cmd 1 'ha\n'
+fi
 sleep 2
 
 echo "===== E: UE2 -> *UE1: разовый перевод ====="

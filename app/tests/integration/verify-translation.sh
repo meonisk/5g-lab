@@ -15,8 +15,12 @@ trap cleanup EXIT
 events=$(service_get lab-ai-worker AI_WORKER_PORT /events)
 check 'AI Worker готов (STT загружен)' test "$(json_field status <<<"$events")" = ok
 check 'распознавание: faster-whisper' test "$(json_field backend <<<"$events")" = faster-whisper
-check 'Ollama содержит закреплённый GGUF' grep -q "sha256-${LLM_GGUF_SHA256}" \
-    <<<"$(docker exec lab-llm-worker ollama show "$LLM_MODEL" --modelfile 2>/dev/null)"
+if llm_enabled; then
+    check 'Ollama содержит закреплённый GGUF' grep -q "sha256-${LLM_GGUF_SHA256}" \
+        <<<"$(docker exec lab-llm-worker ollama show "$LLM_MODEL" --modelfile 2>/dev/null)"
+else
+    skip 'Ollama: LLM не запущен (режим AI без LLM, перевод OPUS-MT)'
+fi
 check 'тестовые клиенты зарегистрированы' fresh_clients
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)

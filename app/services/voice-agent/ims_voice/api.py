@@ -24,6 +24,7 @@ def status():
         return jsonify(
             status="ok",
             mode="TERMINATE",
+            max_calls=runtime.max_calls,
             calls=runtime.calls,
             events=runtime.events,
             reply_queue_depths={

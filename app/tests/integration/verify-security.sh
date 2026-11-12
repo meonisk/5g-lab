@@ -13,7 +13,11 @@ inspect_equals() {
     test "$actual" = "$expected"
 }
 
-for container in lab-sip-as lab-media-adapter lab-ai-worker lab-voice-agent lab-llm-worker; do
+# lab-llm-worker есть только в режиме с LLM (baseline).
+llm=()
+if llm_enabled; then llm=(lab-llm-worker); else skip 'lab-llm-worker: LLM не запущен'; fi
+
+for container in lab-sip-as lab-media-adapter lab-ai-worker lab-voice-agent "${llm[@]}"; do
     check "$container root filesystem is read-only" inspect_equals "$container" '{{.HostConfig.ReadonlyRootfs}}' true
     check "$container has no-new-privileges" sh -c \
         "docker inspect --format '{{json .HostConfig.SecurityOpt}}' '$container' | grep -q 'no-new-privileges'"
@@ -25,7 +29,7 @@ done
 check 'PyHSS file logs are transient tmpfs' sh -c \
     "docker inspect --format '{{json .HostConfig.Tmpfs}}' lab-pyhss | grep -q '/pyhss/log'"
 
-for container in lab-sip-as lab-ai-worker lab-voice-agent lab-llm-worker; do
+for container in lab-sip-as lab-ai-worker lab-voice-agent "${llm[@]}"; do
     check "$container drops every Linux capability" sh -c \
         "docker inspect --format '{{json .HostConfig.CapDrop}}' '$container' | grep -q '\"ALL\"'"
 done
@@ -51,11 +55,13 @@ except urllib.error.HTTPError as exc:
 check 'AI transcript endpoint rejects missing bearer token' test "$ai_unauthorized" = 401
 check 'AI model state is isolated in its dedicated volume' sh -c \
     "docker inspect --format '{{json .Mounts}}' lab-ai-worker | grep -q '\"Destination\":\"$AI_MODEL_CACHE\".*\"RW\":true'"
-check 'LLM model state is isolated in its dedicated volume' sh -c \
-    "docker inspect --format '{{json .Mounts}}' lab-llm-worker | grep -q '\"Destination\":\"/root/.ollama\".*\"RW\":true'"
-check 'LLM is attached only to its internal backend network' sh -c \
-    "docker inspect --format '{{json .NetworkSettings.Networks}}' lab-llm-worker | grep -q 'lab-ai-backend' && ! docker inspect --format '{{json .NetworkSettings.Networks}}' lab-llm-worker | grep -q '$CORE_NETWORK_NAME'"
-check 'LLM publishes no host port' inspect_equals lab-llm-worker '{{json .HostConfig.PortBindings}}' '{}'
+if ((${#llm[@]})); then
+    check 'LLM model state is isolated in its dedicated volume' sh -c \
+        "docker inspect --format '{{json .Mounts}}' lab-llm-worker | grep -q '\"Destination\":\"/root/.ollama\".*\"RW\":true'"
+    check 'LLM is attached only to its internal backend network' sh -c \
+        "docker inspect --format '{{json .NetworkSettings.Networks}}' lab-llm-worker | grep -q 'lab-ai-backend' && ! docker inspect --format '{{json .NetworkSettings.Networks}}' lab-llm-worker | grep -q '$CORE_NETWORK_NAME'"
+    check 'LLM publishes no host port' inspect_equals lab-llm-worker '{{json .HostConfig.PortBindings}}' '{}'
+fi
 
 token=$(docker exec lab-sip-as sh -c 'cat "$SERVICE_CONTROL_TOKEN_FILE"')
 authorized=$(docker exec lab-sip-as wget -qO- --header="Authorization: Bearer $token" \

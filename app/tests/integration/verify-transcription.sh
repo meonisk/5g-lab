@@ -13,8 +13,10 @@ trap cleanup EXIT
 
 check 'запись включена (RECORDING_ENABLED=1)' test "$RECORDING_ENABLED" = 1
 
+llm=0
+llm_enabled && llm=1
 # Синтетическая фраза с заиканиями: промпт обязан убрать мусор и сохранить факты.
-probe=$(docker exec lab-ai-worker python -c '
+((llm)) && probe=$(docker exec lab-ai-worker python -c '
 import json, os, re, urllib.request
 source = "А... ну... я, я хотел, хотел сказать, что, э-э, встреча будет в пять часов. Но... а... лучше в шесть."
 body = json.dumps({"model": os.environ["LLM_MODEL"], "stream": False, "messages": [
@@ -25,8 +27,12 @@ request = urllib.request.Request(os.environ["LLM_URL"], body, {"Content-Type": "
 reply = json.load(urllib.request.urlopen(request, timeout=float(os.environ["LLM_TIMEOUT_SECONDS"])))["message"]["content"]
 dirty = re.search(r"(?iu)а\.\.\.|но\.\.\.|э-э|\bну\b|\bя\s*,\s*я\b|\bхотел\s*,\s*хотел\b", reply)
 print(json.dumps({"clean": not dirty, "meaning": all(w in reply.casefold() for w in ("встреча", "пять", "шесть"))}))')
-check 'нормализация убрала междометия и повторы' test "$(json_field clean <<<"$probe")" = True
-check 'нормализация сохранила факты' test "$(json_field meaning <<<"$probe")" = True
+if ((llm)); then
+    check 'нормализация убрала междометия и повторы' test "$(json_field clean <<<"$probe")" = True
+    check 'нормализация сохранила факты' test "$(json_field meaning <<<"$probe")" = True
+else
+    skip 'нормализация LLM: LLM не запущен, расшифровка сохраняется как есть (raw)'
+fi
 
 check 'тестовые клиенты зарегистрированы' fresh_clients
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -66,9 +72,12 @@ session=$(field recording_session_id)
 check 'создана приватная сессия записи' test -n "$session"
 check 'распознан русский текст' test "$(field transcript_cyrillic_chars)" -gt 0
 check 'язык записи — ru' test "$(field detected_language)" = ru
-check 'LLM нормализовала расшифровку' test "$(field normalization_applied)" = True
-check 'нормализация — закреплённой моделью' test "$(field normalization_llm_model)" = "$LLM_MODEL"
-check 'нормализованный текст непустой и русский' test "$(field normalized_transcript_cyrillic_chars)" -gt 0
+if ((llm)); then
+    check 'LLM нормализовала расшифровку' test "$(field normalization_applied)" = True
+    check 'нормализация — закреплённой моделью' test "$(field normalization_llm_model)" = "$LLM_MODEL"
+    check 'нормализованный текст непустой и русский' \
+        test "$(field normalized_transcript_cyrillic_chars)" -gt 0
+fi
 
 pjsua lab-sipue1 'ha\n'
 # Каталог записи принадлежит uid 65532 (AI Worker): читаем его изнутри контейнера.
