@@ -24,7 +24,8 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — двенадцать файлов и `lib/` (общий код `verify-all.sh`), описаны ниже.
+- `scripts/` — тринадцать файлов, `lib/` (общий код `verify-all.sh`, `profile.sh` и
+  `bench_5g.py`) и `profile/` (модули `profile.sh`), описаны ниже.
 - `docs/` — описание правок ядра партнёра (`partner-core.md`), отчёт о подключении к ядру партнёра (`partner-integration.md`), три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
   и эта карта.
 
@@ -41,7 +42,15 @@
   spike пересоздаёт `lab-sip-as` с `SIP_AS_LEG_B_ROUTE=orig` из окружения, не меняя
   `lab.env`. `lib/verify-all-lib.sh` — запуск шага с таймаутом, журнал, итоговая таблица.
 - `bench_5g.py` — бенчмарк задержек через 5G: путь через туннель, RTT 5G и напрямую,
-  REGISTER/INVITE, переводчик по этапам; отчёт в `local/bench/`.
+  REGISTER/INVITE, переводчик по этапам; отчёт в `local/bench/`. Клиент PJSUA в
+  namespace UE и события сервисов — `lib/ue5g.py`, статистика и этапы — `lib/latency.py`.
+- `profile.sh` — профилирование одной командой: CPU узлов и этапы перевода в сценариях
+  S1–S5, перебор настроек AI в одноразовом контейнере, итог «≤ 2 с»; `local/profile/<UTC>/`
+  с `report.md` и `report.json` ([как читать](guide-5-5g-scripts.md#часть-4-как-читать-отчёт-профилирования)).
+  `--rounds N`, `--quick`, `--no-sweep`, `--no-scenarios`. Модули `profile/`:
+  `cpu_sampler.py` (cgroup и `/proc`), `scenarios.py` (S1–S5), `sweep.py` и
+  `sweep_worker.py` (перебор; второй — внутри образа AI Worker), `quality.py` (WER, PCMU),
+  `verdict.py` (оценка и узкое место), `report.py` (отчёт).
 - `start.py` — проверка `lab.env` и сети ядра, запуск, абоненты, ожидание готовности;
   `--check`, `--ims-only`, `--mode baseline|balanced|compact|minimal` (по умолчанию `AI_MODE`).
 - `provision.py` — абоненты в PyHSS (вызывается из `start.py`, можно отдельно).
@@ -98,6 +107,12 @@ Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/che
 - `test_phrase_boundaries.py` — целые фразы, независимые вызовы, хвост при BYE.
 - `test_phone_sdp.py` — AS не соглашается на кодек, которого не было в offer.
 - `test_bench_5g.py` — разбор ping и медианы бенчмарка.
+- `test_latency.py` — перцентили, этапы перевода из событий, порты PJSUA из `cl`.
+- `test_profile_cpu.py` — счётчики cgroup v1/v2, `/proc`, занятые ядра, лимит `cpu.max`.
+- `test_profile_quality.py` — WER по словам, μ-law и передискретизация в PCMU 8 кГц.
+- `test_profile_verdict.py` — оценка задержки, правило «≤ 2 с и −10 п.п.», узкое место.
+- `test_profile_sweep.py` — план перебора, условия контейнера сервиса, сводка замеров.
+- `test_profile_report.py` — `report.json` и `report.md` из файлов прогона.
 - `test_cpu_ai_profiles.py` — направления OPUS-MT, без LLM в CPU-режимах.
 - `sip_fakes.py` — не тест: фейковые сокет, HTTP и потоки, построители SIP для тестов SIP AS.
 - `test_ifc_generation.py` — iFC из профилей `lab.env`, приоритеты, DNS логических AS.

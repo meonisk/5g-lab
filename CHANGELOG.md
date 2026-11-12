@@ -9,6 +9,18 @@
 
 ## [Unreleased]
 
+- feat: `scripts/profile.sh` — профилирование стенда одной командой: CPU каждого узла
+  (контейнеры по cgroup, процессы rfsim по `/proc`, хост) и задержка перевода по этапам в
+  сценариях S1–S5 (простой, rfsim, звонок SIPUE1 и UE1 на переводчик, два переводимых
+  звонка), перебор настроек AI (модель Whisper, потоки STT, потоковый режим, пауза) в
+  одноразовом контейнере из образа AI Worker с его лимитами и моделями, качество
+  `1 − WER`, итог: узкое место и до трёх конфигураций ≤ 2 с при rfsim. Отчёт
+  `local/profile/<UTC>/report.md` и `report.json`; rfsim возвращается в прежнее
+  состояние, клиенты и временные контейнеры удаляются в `trap`.
+- refactor: клиент PJSUA в namespace UE и события сервисов вынесены из `bench_5g.py` в
+  `scripts/lib/ue5g.py`, статистика и этапы — в `scripts/lib/latency.py`; вывод
+  бенчмарка не изменился. `have_5g` и итог шагов `verify-all-lib.sh` общие с
+  `profile.sh`.
 - feat: `scripts/verify-all.sh` — полная проверка стенда одной командой: preflight,
   `start.py`, абоненты, перезапуск S-CSCF и DNS, spike ISC (GO / GO-F1 / NO-GO), iFC
   задачи 2, `verify-ims.sh`, `verify-services.sh`, регрессия и `verify-5g.sh` при

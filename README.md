@@ -40,6 +40,8 @@ SMF, отключение демо-IMS OAI) — что и зачем меняе�
 в [карте проекта](docs/project-layout.md#скрипты).
 
 Задержки через 5G (сеть, SIP, перевод по этапам): `python3 scripts/bench_5g.py`.
+Профиль CPU и задержек перевода с итогом «что нужно для ≤ 2 с»: `scripts/profile.sh` —
+отчёт в `local/profile/<UTC>/report.md`, [как читать](docs/guide-5-5g-scripts.md#часть-4-как-читать-отчёт-профилирования).
 
 Режим с Qwen: `scripts/setup.sh --mode baseline`; обратно — `scripts/setup.sh`.
 Только проверка конфигурации: `python3 scripts/start.py --check`.
