@@ -2,9 +2,10 @@
 # Вызовы через 5G, а не из сети ядра: PJSUA запускается внутри namespace UE OAI
 # (scripts/rfsim.sh up) и ходит в IMS через туннель oaitun, gNB и UPF. Проверяет
 # PDU-сессию в пуле IMS, REGISTER абонентов UE1/UE2 с адресом туннеля, перевод
-# 1003 для UE1, вызов UE1 -> UE2 со звуком в обе стороны и расшифровку 1004
-# для UE2. Аутентификация — SIP Digest, IMS AKA и IPsec здесь не проверяются.
-# Нужны sudo (ip netns, chroot) и образ lab-pjsua; запускать от пользователя.
+# 1003 для UE1, обычный вызов UE2 -> UE1 со звуком в обе стороны, расшифровку 1004
+# для UE2, услуги профиля UE1 (перевод и запись UE1 -> UE2), «*номер» UE2 -> *UE1 и
+# звонок при остановленном SIP AS. Аутентификация — SIP Digest, IMS AKA и IPsec
+# здесь не проверяются. Нужны sudo (ip netns, chroot) и образ lab-pjsua.
 set -uo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
@@ -51,6 +52,7 @@ stop_clients() {
     for n in 1 2; do ue_cmd "$n" 'ha\nq\n' 2>/dev/null || true; done
     sleep 1
     sudo pkill -f -- "[c]hroot $jail" 2>/dev/null || true
+    docker start lab-sip-as >/dev/null 2>&1 || true  # тест F мог упасть с остановленным AS
 }
 trap stop_clients EXIT
 
@@ -182,12 +184,12 @@ check "UE1: получил приветствие и перевод (RX ${rx:-0}
 ue_cmd 1 'ha\n'
 sleep 2
 
-echo "===== B: UE1 -> UE2 ($UE1_MSISDN -> $UE2_MSISDN) ====="
+echo "===== B: UE2 -> UE1 ($UE2_MSISDN -> $UE1_MSISDN) ====="
 offset1=$(mark 1)
 offset2=$(mark 2)
-ue_cmd 1 "m\nsip:$UE2_MSISDN@$IMS_DOMAIN\n"
-check 'UE1: 200/INVITE от UE2' wait_log 1 'Response msg 200/INVITE' 30 "$offset1"
-check 'UE2: вызов принят' wait_log 2 'state changed to CONFIRMED' 10 "$offset2"
+ue_cmd 2 "m\nsip:$UE1_MSISDN@$IMS_DOMAIN\n"
+check 'UE2: 200/INVITE от UE1' wait_log 2 'Response msg 200/INVITE' 30 "$offset2"
+check 'UE1: вызов принят' wait_log 1 'state changed to CONFIRMED' 10 "$offset1"
 connect_player 1
 connect_player 2
 sleep 20
@@ -196,8 +198,8 @@ for n in 1 2; do
     rx=$(rx_packets "$n")
     check "UE$n: звук от собеседника (RX ${rx:-0} > 500)" test "${rx:-0}" -gt 500
 done
-ue_cmd 1 'ha\n'
-check 'UE2: BYE дошёл' wait_log 2 'DISCONNECTED' 15 "$offset2"
+ue_cmd 2 'ha\n'
+check 'UE1: BYE дошёл' wait_log 1 'DISCONNECTED' 15 "$offset1"
 
 echo "===== C: UE2 -> расшифровка $VOICE_TRANSCRIBER_MSISDN ====="
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -208,5 +210,42 @@ sleep 6
 say_once 2
 check 'AI Worker: фраза UE2 распознана' wait_docker lab-ai-worker 'utterance_processed .*transcript_chars=[1-9]' 90
 ue_cmd 2 'ha\n'
+
+sleep 2
+echo "===== D: UE1 -> UE2: перевод $UE1_LANGUAGE-$UE2_LANGUAGE и запись ====="
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+offset1=$(mark 1)
+offset2=$(mark 2)
+ue_cmd 1 "m\nsip:$UE2_MSISDN@$IMS_DOMAIN\n"
+check 'UE1: 200/INVITE (нога A translate AS)' wait_log 1 'Response msg 200/INVITE' 40 "$offset1"
+check 'SIP AS: перевод ru-en' wait_docker lab-sip-as 'AS translate answered .* languages=ru-en' 10
+check 'SIP AS: запись обеих ног после уведомления' \
+    wait_docker lab-sip-as 'AS record started call_id=[^ ]+ legs=2' 40
+say_once 1
+check 'Voice Agent: перевод UE1 озвучен английским голосом' \
+    wait_docker lab-voice-agent "reason=llm_reply state=sent.*voice=$TTS_TRANSLATION_VOICE" 120
+ue_cmd 1 'ha\n'
+check 'UE2: BYE ноги B дошёл' wait_log 2 'DISCONNECTED' 15 "$offset2"
+check 'AI Worker: запись закрыта' wait_docker lab-ai-worker 'AI recording_finalized session=' 30
+sleep 2
+
+echo "===== E: UE2 -> *UE1: разовый перевод ====="
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+offset1=$(mark 1)
+offset2=$(mark 2)
+ue_cmd 2 "m\nsip:*$UE1_MSISDN@$IMS_DOMAIN\n"
+check 'UE2: 200/INVITE' wait_log 2 'Response msg 200/INVITE' 40 "$offset2"
+check 'SIP AS: перевод en-ru' wait_docker lab-sip-as 'AS translate answered .* languages=en-ru' 10
+ue_cmd 2 'ha\n'
+check 'UE1: BYE дошёл' wait_log 1 'DISCONNECTED' 15 "$offset1"
+sleep 2
+
+echo '===== F: SIP AS остановлен: UE1 -> UE2 ====='
+docker stop -t 1 lab-sip-as >/dev/null
+offset1=$(mark 1)
+ue_cmd 1 "m\nsip:$UE2_MSISDN@$IMS_DOMAIN\n"
+check 'UE1: 200/INVITE без SIP AS (DefaultHandling)' wait_log 1 'Response msg 200/INVITE' 60 "$offset1"
+ue_cmd 1 'ha\n'
+docker start lab-sip-as >/dev/null
 
 finish '5G UE -> IMS -> AI'
