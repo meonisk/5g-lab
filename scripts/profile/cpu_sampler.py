@@ -104,14 +104,17 @@ class Sampler(threading.Thread):
         self.clk_tck = os.sysconf("SC_CLK_TCK")
         self.ncpu = os.cpu_count()
         self._halt = threading.Event()
+        self.errors = []
 
     def discover(self):
         names = subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True,
                                text=True, check=False).stdout.split()  # fmt: skip
+        # Один docker inspect на все контейнеры: обновление не сбивает ритм отсчётов.
+        rows = subprocess.run(["docker", "inspect", "-f", "{{.Name}} {{.State.Pid}}", *names],
+                              capture_output=True, text=True, check=False).stdout  # fmt: skip
         counters = {}
-        for name in names:
-            pid = subprocess.run(["docker", "inspect", "-f", "{{.State.Pid}}", name],
-                                 capture_output=True, text=True, check=False).stdout.strip()  # fmt: skip
+        for line in rows.splitlines() if names else []:
+            name, _, pid = line.strip().lstrip("/").partition(" ")
             found = cgroup_counter(read(f"/proc/{pid}/cgroup") or "") if pid.isdigit() else None
             if found:
                 counters[name] = found
@@ -140,10 +143,15 @@ class Sampler(threading.Thread):
         self.discover()
         previous, discovered = self.snapshot(), time.monotonic()
         while not self._halt.wait(self.interval):
-            if time.monotonic() - discovered >= self.refresh:
-                self.discover()
-                discovered = time.monotonic()
-            current = self.snapshot()
+            # Сбой одного отсчёта (процесс исчез посреди чтения) не останавливает замер.
+            try:
+                if time.monotonic() - discovered >= self.refresh:
+                    self.discover()
+                    discovered = time.monotonic()
+                current = self.snapshot()
+            except (OSError, ValueError, IndexError) as error:
+                self.errors.append(f"{type(error).__name__}: {error}")
+                continue
             self.rows.append(cores_between(previous, current))
             previous = current
 
@@ -157,4 +165,5 @@ class Sampler(threading.Thread):
             "cgroup": self.cgroup_version,
             "limits": {k: v for k, v in self.limits.items() if v},
             "nodes": summarize(self.rows),
+            "errors": self.errors[:5],
         }

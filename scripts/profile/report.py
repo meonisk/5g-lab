@@ -113,11 +113,17 @@ def render_verdict(result):
     load_name = "при работающем rfsim" if choice["load"] == "rfsim" else "при простое"
     lines.append(f"- Варианты ≤ {choice['limit_ms']} мс {load_name}, качество не хуже compact "
                  f"более чем на {choice['margin_pp']:g} п.п.:")  # fmt: skip
-    context, source = result["context"], result["source"] or "нет звонка"
-    lines.append(f"- Оценка = пауза + STT и перевод из перебора + синтез {context['tts_ms']} мс "
-                 f"и очередь {context['queue_ms']} мс (медианы {source}).")  # fmt: skip
+    context = result["context"]
+    if result["source"]:
+        lines.append(f"- Оценка = пауза + STT и перевод из перебора + синтез {context['tts_ms']} мс"
+                     f" и очередь {context['queue_ms']} мс (медианы {result['source']}).")  # fmt: skip
+    else:
+        lines.append("- Оценка = пауза + STT и перевод из перебора; синтез и очередь не измерены "
+                     "(нет сценария со звонком) — оценка занижена.")  # fmt: skip
     if choice["note"]:
         lines.append(f"- Примечание: {choice['note']}.")
+    if not choice["candidates"]:
+        return lines + ["", "**перебор не дал вариантов — оценить настройки нельзя.**", ""]
     if not choice["fits"]:
         return lines + ["", "**ни одна конфигурация не укладывается в 2000 мс.**", ""]
     rows = [(c["model"], c["threads"], c["silence_ms"], c["estimate_ms"], _pct(c["accuracy"]),

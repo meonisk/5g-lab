@@ -73,7 +73,12 @@ class Build(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty:
             result = report.build(Path(empty), {"model": "base", "threads": 2})
         self.assertIsNone(result["verdict"]["source"])
-        self.assertIn("## Итог", report.render(result))
+        text = report.render(result)
+        self.assertIn("## Итог", text)
+        # Без перебора и звонка нечего оценивать: это не то же самое, что «не укладывается».
+        self.assertIn("перебор не дал вариантов", text)
+        self.assertIn("синтез и очередь не измерены", text)
+        self.assertNotIn("None", text)
 
 
 if __name__ == "__main__":
