@@ -1,11 +1,21 @@
-"""translate AS: B2BUA с переводом. Нога A — звонящий <-> MRF, нога B — MRF <-> вызываемый."""
+"""translate AS: B2BUA с переводом или прозрачный прокси, если переводить нечего или нечем.
+
+Нога A — звонящий <-> MRF, нога B — MRF <-> вызываемый. Без перевода звонок идёт
+дальше по цепочке iFC как обычный: звонящий не получает 503.
+"""
+
+import re
 
 from .. import runtime
-from ..core import b2bua, mrf, proxy
+from ..core import b2bua, dialogs, mrf, proxy
+from ..core.mrf import media_is_anchored
+from ..core.sdp import accepts_pcmu, offered_media_endpoint
 from ..core.sip import local_tag, message_call_id, request_method, tag_of, value_of
 from ..core.subscribers import language_for, served_user, target_user
 
 HOST = "translate.as"
+LEGS_PER_CALL = 2  # нога A и нога B занимают два места Voice Agent
+STAR = re.compile(r"^(\S+ (?:sips?|tel):)\*")
 
 
 def strip_star(user: str) -> str:
@@ -17,10 +27,37 @@ def caller_language(message: str) -> str:
     return language_for(served_user(message), runtime.languages, runtime.default_language)
 
 
-def on_invite(message: str, peer: tuple[str, int]) -> None:
+def bypass_reason(message: str) -> str | None:
+    """Почему звонок идёт без перевода; None — переводить."""
+    if dialogs.is_own(message_call_id(message)):
+        return "own_leg"
     callee = strip_star(target_user(message))
-    callee_language = language_for(callee, runtime.languages, runtime.default_language)
-    languages = (caller_language(message), callee_language)
+    if callee in runtime.service_targets:
+        return "service_number"
+    if callee not in runtime.languages:
+        return "unknown_callee"
+    if caller_language(message) == runtime.languages[callee]:
+        return "same_language"
+    endpoint = offered_media_endpoint(message)
+    if endpoint is None or not accepts_pcmu(message) or not media_is_anchored(*endpoint):
+        return "media"
+    if mrf.free_slots() < LEGS_PER_CALL:
+        return "no_mrf"
+    return None
+
+
+def bypass(message: str, peer: tuple[str, int], reason: str) -> None:
+    print(f"AS translate bypass call_id={message_call_id(message)} reason={reason}", flush=True)
+    proxy.forward(STAR.sub(r"\1", message, count=1), peer)
+
+
+def on_invite(message: str, peer: tuple[str, int]) -> None:
+    reason = bypass_reason(message)
+    if reason is not None:
+        bypass(message, peer, reason)
+        return
+    callee = strip_star(target_user(message))
+    languages = (caller_language(message), runtime.languages[callee])
     request_uri = f"sip:{callee}@{runtime.ims_domain}"
     b2bua.start(message, peer, request_uri, languages, on_answer, on_bye)
 
