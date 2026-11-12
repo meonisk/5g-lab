@@ -54,6 +54,8 @@ services:
       MEDIA_ADAPTER_URL: http://${RTPENGINE_IP}:${MEDIA_ADAPTER_PORT}
       VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
       AI_WORKER_URL: http://${AI_WORKER_IP}:${AI_WORKER_PORT}
+      # Интерполяция: переменная shell важнее --env-file lab.env (переопределение на прогон).
+      SIP_AS_LEG_B_ROUTE: ${SIP_AS_LEG_B_ROUTE:-isc}
     depends_on:
       scscf: {condition: service_started}
       media-adapter: {condition: service_started}

@@ -6,6 +6,15 @@ import socket
 
 from .core.subscribers import language_table
 
+
+def leg_b_route_mode(value: str | None) -> str:
+    """isc — нога B с ISC-меткой ноги A; orig — fallback F1 spike: цепочка заново."""
+    mode = value or "isc"
+    if mode not in ("isc", "orig"):
+        raise ValueError(f"SIP_AS_LEG_B_ROUTE={mode}: допустимы isc или orig")
+    return mode
+
+
 bind_ip = os.environ["SIP_AS_IP"]
 bind_port = int(os.environ["SIP_AS_PORT"])
 scscf = (os.environ["SCSCF_IP"], int(os.environ["SCSCF_SIP_PORT"]))
@@ -47,6 +56,7 @@ service_users = {
     "interpret_en": interpreter_en_user,
 }
 ims_domain = os.environ["IMS_DOMAIN"]
+leg_b_route = leg_b_route_mode(os.environ.get("SIP_AS_LEG_B_ROUTE"))
 languages = language_table(os.environ)
 default_language = os.environ.get("DEFAULT_LANGUAGE") or "ru"
 own_call_ids = set()

@@ -2,6 +2,7 @@
 
 import re
 import unittest
+from unittest.mock import patch
 
 from sip_fakes import (
     CALLEE,
@@ -70,6 +71,28 @@ class LegB(TranslateCase):
         self.assertRegex(leg_b, r"(?m)^Route: <sip:iscmark@scscf\.")
         self.assertNotIn("translate.as.", leg_b)
         self.assertIn(f"P-Asserted-Identity: <sip:{CALLER}@{DOMAIN}>", leg_b)
+
+    def test_leg_b_route_isc_keeps_isc_mark(self):
+        with patch.object(b2bua.runtime, "leg_b_route", "isc"):
+            leg_b = self.start_call(call_id="tr-isc")
+        self.assertRegex(leg_b, r"(?m)^Route: <sip:iscmark@scscf\.")
+        self.assertNotIn("sip:orig@", leg_b)
+
+    def test_leg_b_route_orig_restarts_chain_at_scscf(self):
+        # Fallback F1 spike (SIP_AS_LEG_B_ROUTE=orig): S-CSCF начинает цепочку заново.
+        route = f"<sip:orig@scscf.{DOMAIN}:{SCSCF[1]};lr>"
+        with patch.object(b2bua.runtime, "leg_b_route", "orig"):
+            leg_b = self.start_call(call_id="tr-orig")
+        self.assertRegex(leg_b, rf"(?m)^Route: {re.escape(route)}\r?$")
+        self.assertNotIn("iscmark", leg_b)
+
+    def test_leg_b_route_setting_accepts_only_isc_or_orig(self):
+        mode = b2bua.runtime.leg_b_route_mode
+        self.assertEqual(mode(None), "isc")
+        self.assertEqual(mode(""), "isc")
+        self.assertEqual(mode("orig"), "orig")
+        with self.assertRaises(ValueError):
+            mode("term")
 
     def test_leg_b_offers_voice_agent_media(self):
         leg_b = self.start_call()

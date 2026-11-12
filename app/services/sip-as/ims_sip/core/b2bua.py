@@ -76,7 +76,14 @@ def contact() -> str:
 
 
 def leg_b_routes(a_request: str) -> list[str]:
-    """ISC Route ноги A без своего: S-CSCF продолжит цепочку iFC со следующего приоритета."""
+    """Route ноги B по SIP_AS_LEG_B_ROUTE.
+
+    isc — ISC Route ноги A без своего: S-CSCF продолжит цепочку iFC со следующего
+    приоритета. orig — fallback F1 spike: S-CSCF начинает цепочку заново через
+    sip:orig@, translate пропускает свою ногу B (dialogs.is_own).
+    """
+    if runtime.leg_b_route == "orig":
+        return [f"<sip:orig@scscf.{runtime.ims_domain}:{runtime.scscf[1]};lr>"]
     return route_values(a_request)[1:]
 
 
