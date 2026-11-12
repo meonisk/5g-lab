@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Шаги 4–6 обычного вызова: INVITE lab-sipue1 -> lab-sipue2 через P/S-CSCF,
-# S-CSCF вызывает SIP AS по iFC, RTPengine держит медиа обеих сторон, Media
-# Adapter передаёт звук в AI Worker. При остановленном AI Worker RTP продолжается
+# Шаги 4–6 обычного вызова: INVITE lab-sipue2 -> lab-sipue1 через P/S-CSCF (у SIPUE2
+# нет услуг в lab.env, у SIPUE1 — translate,record только для исходящих), S-CSCF
+# вызывает SIP AS по iFC, RTPengine держит медиа обеих сторон, Media Adapter
+# передаёт звук в AI Worker. При остановленном AI Worker RTP продолжается
 # (fail-open). На время проверки AI Worker останавливается: не запускайте во
 # время чужих звонков через AI.
 # Без -e: сбой одной команды даёт строку FAIL, а не обрыв без итога.
@@ -25,12 +26,12 @@ packet_sum() {
 
 check 'тестовые клиенты зарегистрированы' fresh_clients
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-pjsua lab-sipue1 "m\nsip:${SIPUE2_IMSI}@${IMS_DOMAIN}\n"
+pjsua lab-sipue2 "m\nsip:${SIPUE1_IMSI}@${IMS_DOMAIN}\n"
 call_id=$(wait_call_id '.*AS observed INVITE call_id=\([^ ]*\).*' "$since")
 sleep 4
 
-caller_logs=$(docker logs lab-sipue1 --since "$since" 2>&1)
-callee_logs=$(docker logs lab-sipue2 --since "$since" 2>&1)
+caller_logs=$(docker logs lab-sipue2 --since "$since" 2>&1)
+callee_logs=$(docker logs lab-sipue1 --since "$since" 2>&1)
 check 'вызывающий получил 200/INVITE' grep -q 'Response msg 200/INVITE' <<<"$caller_logs"
 check 'вызываемый получил INVITE через IMS' grep -q 'Request msg INVITE' <<<"$callee_logs"
 check 'S-CSCF вызвал SIP AS по iFC (ISC)' test -n "$call_id"

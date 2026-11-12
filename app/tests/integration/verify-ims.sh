@@ -6,7 +6,7 @@ set -uo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
 echo '===== IMS DNS ====='
-for entry in "pcscf $PCSCF_IP" "icscf $ICSCF_IP" "scscf $SCSCF_IP" "hss $PYHSS_IP" "as $SIP_AS_IP"; do
+for entry in "pcscf $PCSCF_IP" "icscf $ICSCF_IP" "scscf $SCSCF_IP" "hss $PYHSS_IP" "as $SIP_AS_IP" "translate.as $SIP_AS_IP" "record.as $SIP_AS_IP"; do
     read -r name expected <<<"$entry"
     check "dnsmasq: $name.$IMS_DOMAIN -> $expected" \
         docker exec lab-dns sh -c "nslookup '$name.$IMS_DOMAIN' '$LOOPBACK_IP' | grep -Fq '$expected'"

@@ -287,10 +287,11 @@ def sip_rounds(clients, settings, rounds):
     register = [c.between_ms(r"TX .*Request msg REGISTER", r"Response msg 200/REGISTER", 0, 60)
                 for c in clients]  # fmt: skip
     ringing, answered = [], []
-    caller = clients[0]
+    # UE1 подписан на translate,record: замер SIP без услуг — вызов UE2 -> UE1.
+    caller = clients[1]
     for _ in range(rounds):
         offset = caller.mark()
-        caller.send(f"m\nsip:{settings['UE2_MSISDN']}@{settings['IMS_DOMAIN']}\n")
+        caller.send(f"m\nsip:{settings['UE1_MSISDN']}@{settings['IMS_DOMAIN']}\n")
         invite = r"TX .*Request msg INVITE"
         answered.append(caller.between_ms(invite, r"Response msg 200/INVITE", offset))
         # С --auto-answer=200 вызываемый может ответить сразу, без 180: тогда пропуск.

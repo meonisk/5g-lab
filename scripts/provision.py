@@ -14,6 +14,47 @@ LAB_ENV = ROOT / "app/config/lab.env"
 PROFILES = ("UE1", "UE2", "SIPUE1", "SIPUE2")
 KEY_FIELDS = ("ki", "opc", "amf")
 
+# Услуга: (хост логического AS в SIP AS, приоритет iFC). Номер 15 — «*номер» →
+# translate: после translate (10), поэтому нога B без «*» его не включит повторно.
+SERVICES = {"translate": ("translate.as", 10), "record": ("record.as", 20)}
+STAR_HOST, STAR_PRIORITY = "translate.as", 15
+NUMBERS_HOST, NUMBERS_PRIORITY = "as", 30
+SMS_PRIORITY = 40  # был 20 в default_ifc.xml; уступил record
+LANGUAGES = ("ru", "en")
+SESSION_CONTINUED = 0  # DefaultHandling: AS недоступен — звонок идёт без услуги
+
+IFC_HEAD = """<?xml version="1.0" encoding="UTF-8"?>
+<!-- Сгенерировано scripts/provision.py из lab.env; PyHSS подставляет iFC_vars (Jinja2). -->
+<IMSSubscription>
+    <PrivateID>{{ iFC_vars['imsi'] }}@ims.mnc{{ iFC_vars['mnc'] }}.mcc{{ iFC_vars['mcc'] }}.3gppnetwork.org</PrivateID>
+    <ServiceProfile>
+        <PublicIdentity>
+            <Identity>sip:{{ iFC_vars['msisdn'] }}@ims.mnc{{ iFC_vars['mnc'] }}.mcc{{ iFC_vars['mcc'] }}.3gppnetwork.org</Identity>
+            <Extension>
+                <IdentityType>0</IdentityType>
+                <Extension>
+                    <AliasIdentityGroupID>1</AliasIdentityGroupID>
+                </Extension>
+            </Extension>
+        </PublicIdentity>
+        <PublicIdentity>
+            <Identity>tel:{{ iFC_vars['msisdn'] }}</Identity>
+            <Extension>
+                <IdentityType>0</IdentityType>
+                <Extension>
+                    <AliasIdentityGroupID>1</AliasIdentityGroupID>
+                </Extension>
+            </Extension>
+        </PublicIdentity>
+        <PublicIdentity>
+            <Identity>sip:{{ iFC_vars['imsi'] }}@ims.mnc{{ iFC_vars['mnc'] }}.mcc{{ iFC_vars['mcc'] }}.3gppnetwork.org</Identity>
+            <Extension>
+                <IdentityType>0</IdentityType>
+            </Extension>
+        </PublicIdentity>
+"""
+IFC_TAIL = "    </ServiceProfile>\n</IMSSubscription>\n"
+
 # Выполняется внутри lab-pyhss: REST PyHSS не отдаёт ki/opc, поэтому для сверки
 # ключей существующей записи читаем одну строку AuC напрямую из её MySQL.
 AUC_QUERY = """
@@ -25,6 +66,89 @@ cursor = connection.cursor()
 cursor.execute("SELECT auc_id, ki, opc, amf FROM auc WHERE imsi = %s", (sys.argv[1],))
 print(json.dumps(cursor.fetchall(), default=str))
 """
+
+
+def spt(group, condition, negated=0):
+    return (
+        "                <SPT>\n"
+        f"                    <ConditionNegated>{negated}</ConditionNegated>\n"
+        f"                    <Group>{group}</Group>\n"
+        f"                    {condition}\n"
+        "                </SPT>\n"
+    )
+
+
+ORIGINATING_INVITE = spt(0, "<Method>INVITE</Method>") + spt(1, "<SessionCase>0</SessionCase>")
+STAR_SPT = spt(2, r"<RequestURI>^(sip|tel):\*</RequestURI>")
+SMS_SPTS = (
+    spt(0, "<Method>MESSAGE</Method>")
+    + spt(1, "<SIPHeader><Header>Server</Header></SIPHeader>", negated=1)
+    + spt(2, "<SessionCase>0</SessionCase>")
+)
+
+
+def criteria(priority, server, triggers):
+    return (
+        "        <InitialFilterCriteria>\n"
+        f"            <Priority>{priority}</Priority>\n"
+        "            <TriggerPoint>\n"
+        "                <ConditionTypeCNF>1</ConditionTypeCNF>\n"
+        f"{triggers}"
+        "            </TriggerPoint>\n"
+        "            <ApplicationServer>\n"
+        f"                <ServerName>{server}</ServerName>\n"
+        f"                <DefaultHandling>{SESSION_CONTINUED}</DefaultHandling>\n"
+        "            </ApplicationServer>\n"
+        "        </InitialFilterCriteria>\n"
+    )
+
+
+def as_server(settings, host):
+    return f"sip:{host}.{settings['IMS_DOMAIN']}:{settings['SIP_AS_PORT']};transport=udp"
+
+
+def ifc_xml(settings, services):
+    """iFC абонента: его услуги, «*номер» → translate и numbers — всем, SMS как прежде."""
+    rules = [
+        (STAR_PRIORITY, STAR_HOST, ORIGINATING_INVITE + STAR_SPT),
+        (NUMBERS_PRIORITY, NUMBERS_HOST, ORIGINATING_INVITE),
+    ]
+    rules += [(SERVICES[name][1], SERVICES[name][0], ORIGINATING_INVITE) for name in services]
+    body = "".join(criteria(p, as_server(settings, host), t) for p, host, t in sorted(rules))
+    sms = criteria(SMS_PRIORITY, f"sip:smsc.{settings['IMS_DOMAIN']}:5060", SMS_SPTS)
+    return IFC_HEAD + body + sms + IFC_TAIL
+
+
+def subscriber_profile(settings, prefix):
+    """Услуги и язык абонента; ошибка в lab.env — до любого запроса к HSS."""
+    raw = settings.get(f"{prefix}_SERVICES", "")
+    services = [name.strip() for name in raw.split(",") if name.strip()]
+    unknown = [name for name in services if name not in SERVICES]
+    if unknown:
+        raise ValueError(
+            f"{prefix}_SERVICES: неизвестные услуги {', '.join(unknown)}; "
+            f"допустимы {', '.join(SERVICES)}"
+        )
+    language = settings.get(f"{prefix}_LANGUAGE") or settings.get("DEFAULT_LANGUAGE") or "ru"
+    if language not in LANGUAGES:
+        raise ValueError(f"{prefix}_LANGUAGE={language}: допустимы {', '.join(LANGUAGES)}")
+    return services, language
+
+
+def install_ifc(name, xml):
+    """Кладёт iFC рядом с default_ifc.xml в lab-pyhss; start.py пересоздаёт его каждый запуск."""
+    path = f"/pyhss/ifc-{name}.xml"
+    result = subprocess.run(
+        ["docker", "exec", "-i", "lab-pyhss", "sh", "-c", 'cat > "$1"', "_", path],
+        input=xml,
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(f"{name}: не удалось записать {path} в lab-pyhss")
+    return f"ifc-{name}.xml"
 
 
 def read_env(path=LAB_ENV):
@@ -54,6 +178,7 @@ def subscribers(settings):
         for field, length in zip(KEY_FIELDS, (32, 32, 4), strict=True):
             if not re.fullmatch(rf"[0-9a-fA-F]{{{length}}}", entry[field]):
                 raise ValueError(f"{prefix}: {field} должен содержать {length} hex-символов")
+        entry["services"], entry["language"] = subscriber_profile(settings, prefix)
         result.append(entry)
     if len({entry["imsi"] for entry in result}) != len(result):
         raise ValueError("IMSI телефонов и тестовых клиентов должны различаться")
@@ -186,12 +311,12 @@ def provision(settings, replace_keys=False):
         }
         upsert(hss, "subscriber", "subscriber_id", entry, subscriber)
 
-        # default_ifc.xml отправляет исходящие INVITE на SIP AS (ISC); от него
-        # зависит, попадёт ли вызов в AI. Остальные поля привязывают S-CSCF.
+        # iFC собирается из услуг абонента в lab.env и кладётся в lab-pyhss; S-CSCF
+        # получает его при следующей регистрации абонента (SAR).
         ims = {
             "imsi": entry["imsi"],
             "msisdn": entry["msisdn"],
-            "ifc_path": "default_ifc.xml",
+            "ifc_path": install_ifc(entry["name"], ifc_xml(settings, entry["services"])),
             "sh_template_path": "default_sh_user_data.xml",
             "scscf": f"sip:scscf.{domain}:{settings['SCSCF_SIP_PORT']}",
             "scscf_realm": domain,
@@ -213,7 +338,11 @@ def main():
     settings = read_env()
     if not args.apply:
         for entry in subscribers(settings):
-            print(f"{entry['name']}: IMSI {entry['imsi']}, MSISDN {entry['msisdn']} (dry-run)")
+            services = ",".join(entry["services"]) or "-"
+            print(
+                f"{entry['name']}: IMSI {entry['imsi']}, MSISDN {entry['msisdn']}, "
+                f"услуги {services}, язык {entry['language']} (dry-run)"
+            )
         return
     provision(settings, args.replace_keys)
 
