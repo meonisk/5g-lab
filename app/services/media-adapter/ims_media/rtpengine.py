@@ -82,3 +82,47 @@ def resolve_subscriber_port(call_id):
     except (OSError, ValueError, IndexError, KeyError, UnicodeError, TypeError) as exc:
         print(f"MEDIA RTPengine query failed type={type(exc).__name__}", flush=True)
     return None
+
+
+def _encode(value):
+    """bencode для NG: int, str/bytes, list, dict (ключи по возрастанию)."""
+    if isinstance(value, int):
+        return b"i%de" % value
+    if isinstance(value, str):
+        value = value.encode()
+    if isinstance(value, bytes):
+        return str(len(value)).encode("ascii") + b":" + value
+    if isinstance(value, list):
+        return b"l" + b"".join(_encode(item) for item in value) + b"e"
+    if isinstance(value, dict):
+        items = sorted((k.encode() if isinstance(k, str) else k, v) for k, v in value.items())
+        return b"d" + b"".join(_encode(k) + _encode(v) for k, v in items) + b"e"
+    raise TypeError(f"bencode: unsupported {type(value).__name__}")
+
+
+def _command(payload):
+    """Одна команда NG со своим cookie; ответ без result=ok — ошибка."""
+    cookie = ("media-adapter-" + secrets.token_hex(8)).encode("ascii")
+    control = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    control.settimeout(runtime.rtpengine_query_timeout)
+    try:
+        address = (runtime.rtpengine_ip, runtime.rtpengine_ng_port)
+        control.sendto(cookie + b" " + _encode(payload), address)
+        response = control.recv(65535)
+    finally:
+        control.close()
+    prefix = cookie + b" "
+    if not response.startswith(prefix):
+        raise ValueError("RTPengine returned a mismatched control cookie")
+    decoded, end = _decode(response, len(prefix))
+    if end != len(response) or decoded.get(b"result") != b"ok":
+        raise ValueError(f"RTPengine {payload['command']} failed")
+    return decoded
+
+
+def play_media(call_id, from_tag, blob):
+    """Сыграть WAV в звонок RTPengine стороне с этим SIP tag (уведомление о записи)."""
+    response = _command(
+        {"command": "play media", "call-id": call_id, "from-tag": from_tag, "blob": blob}
+    )
+    return response.get(b"duration")

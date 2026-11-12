@@ -3,6 +3,7 @@
 import hashlib
 import math
 import os
+import struct
 import subprocess
 import tempfile
 
@@ -87,3 +88,22 @@ def synthesize_espeak(text, voice, destination):
         check=True,
         timeout=30,
     )
+
+
+def ulaw_wav(payload: bytes) -> bytes:
+    """Обернуть PCMU в WAV (формат 7, G.711 µ-law): так его играет RTPengine play media."""
+    fmt = struct.pack("<HHIIHHH", 7, 1, 8000, 8000, 1, 8, 0)
+    padding = b"\0" if len(payload) % 2 else b""
+    body = (
+        b"WAVE"
+        + b"fmt "
+        + struct.pack("<I", len(fmt))
+        + fmt
+        + b"fact"
+        + struct.pack("<II", 4, len(payload))
+        + b"data"
+        + struct.pack("<I", len(payload))
+        + payload
+        + padding
+    )
+    return b"RIFF" + struct.pack("<I", len(body)) + body

@@ -25,6 +25,7 @@ class MediaRouting(unittest.TestCase):
         env.update(
             SERVICE_CONTROL_TOKEN_FILE=str(token),
             AI_WORKER_URL="http://localhost:8092",
+            VOICE_AGENT_URL="http://localhost:8093",
         )
         cls.environment = patch.dict(os.environ, env)
         cls.environment.start()

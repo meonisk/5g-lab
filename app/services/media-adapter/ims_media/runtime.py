@@ -16,6 +16,7 @@ session_ttl = float(os.environ["MEDIA_SESSION_TTL_SECONDS"])
 audio_max_bytes = int(os.environ["MEDIA_AUDIO_MAX_BYTES"])
 worker_base_url = os.environ["AI_WORKER_URL"].rstrip("/")
 worker_url = worker_base_url + "/observe"
+voice_agent_url = os.environ["VOICE_AGENT_URL"].rstrip("/")
 voice_agent_ip = str(ipaddress.ip_address(os.environ["VOICE_AGENT_IP"]))
 ims_ue_network = ipaddress.ip_network(os.environ["IMS_UE_CIDR"])
 # Абонент — телефон из пула UE или тестовый клиент PJSUA: тесты ставят клиентов

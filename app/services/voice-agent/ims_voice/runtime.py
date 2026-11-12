@@ -42,6 +42,8 @@ allowed_service_modes = {
     "interpret_en",
 }
 reply_max_chars = int(os.environ["VOICE_AGENT_REPLY_MAX_CHARS"])
+# 6 с PCMU: WAV уведомления уходит в RTPengine одной UDP-датаграммой NG.
+announcement_max_bytes = 48000
 llm_mode = os.environ["VOICE_AGENT_LLM_MODE"] == "1"
 vad_rms = int(os.environ["VOICE_AGENT_VAD_RMS"])
 audible_rms = int(os.environ["TTS_AUDIBLE_RMS"])

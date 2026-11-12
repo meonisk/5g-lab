@@ -75,6 +75,7 @@ services:
     env_file: [app/config/lab.env]
     environment:
       AI_WORKER_URL: http://${AI_WORKER_IP}:${AI_WORKER_PORT}
+      VOICE_AGENT_URL: http://${VOICE_AGENT_IP}:${VOICE_AGENT_HTTP_PORT}
     network_mode: service:rtpengine
     cap_add: [NET_RAW]
     depends_on:

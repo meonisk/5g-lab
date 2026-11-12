@@ -1,12 +1,15 @@
 """Сессии наблюдения: Call-ID и порты без SIP-идентичностей абонентов."""
 
+import base64
+import re
 import threading
 from urllib.parse import quote
 
-from flask import jsonify
+from flask import abort, jsonify
 from lab_common.http import create_api, json_object, request_json, require, valid_call_id
 
 from . import runtime
+from .rtpengine import play_media
 
 api = create_api(__name__, runtime.control_token)
 
@@ -78,4 +81,46 @@ def end_session(call_id):
     if removed:
         threading.Thread(target=end_worker_call, args=(call_id,), daemon=True).start()
     print(f"MEDIA session_ended call_id={call_id} existed={removed is not None}", flush=True)
+    return "", 204
+
+
+TAG = re.compile(r"^[A-Za-z0-9_.+~-]{1,64}$")
+
+
+def fetch_announcement(text, voice):
+    """WAV уведомления синтезирует Voice Agent: голоса и TTS живут только там."""
+    data = request_json(
+        "POST",
+        runtime.voice_agent_url + "/announcements",
+        payload={"text": text, "voice": voice},
+        token=runtime.control_token,
+        timeout=30,
+    )
+    return base64.b64decode(data["wav_base64"])
+
+
+@api.post("/sessions/<call_id>/announce")
+def announce(call_id):
+    """Уведомление о записи каждой стороне звонка без MRF: RTPengine play media по SIP tag."""
+    require(valid_call_id(call_id))
+    parties = json_object(8192).get("parties")
+    require(isinstance(parties, list) and 1 <= len(parties) <= 2)
+    require(
+        all(
+            isinstance(party, dict)
+            and isinstance(party.get("tag"), str)
+            and TAG.fullmatch(party["tag"]) is not None
+            and isinstance(party.get("text"), str)
+            and isinstance(party.get("voice"), str)
+            for party in parties
+        )
+    )
+    try:
+        for party in parties:
+            wav = fetch_announcement(party["text"], party["voice"])
+            play_media(call_id, party["tag"], wav)
+    except Exception as exc:
+        print(f"MEDIA announce_failed call_id={call_id} type={type(exc).__name__}", flush=True)
+        abort(502)
+    print(f"MEDIA announced call_id={call_id} parties={len(parties)}", flush=True)
     return "", 204
