@@ -108,7 +108,7 @@ def handle(message: str, peer: tuple[str, int]) -> None:
     if service_mode:
         terminate_for_agent(message, peer, service_mode)
         return
-    # Ногу B, созданную самим SIP AS, уже распознаёт услуга: не наблюдать дважды.
-    if not dialogs.is_own(call_id):
+    # Ногу B (B2BUA) и звонок под записью уже распознаёт услуга: не наблюдать дважды.
+    if not (dialogs.is_own(call_id) or dialogs.is_marked_record(call_id)):
         observe_proxied_dialog(message, request_line, call_id)
     forward(message, peer)

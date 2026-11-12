@@ -1,9 +1,9 @@
-"""Прокси-путь логического AS: свой Via, снятие своего Route, возврат ответа по Via."""
+"""Прокси-путь логического AS: свой Via, снятие своего Route, Record-Route, хук ответа."""
 
 import re
 
 from .. import runtime
-from .sip import transaction_branch
+from .sip import cseq_method, status_code, transaction_branch
 from .transport import send
 
 # Свой Route — первый, хост <метка>.as.<домен> или as.<домен>: в одной строке со
@@ -13,11 +13,15 @@ OWN_ROUTE_LINE = re.compile(r"(?im)^Route\s*:\s*<sip:(?:[a-z0-9-]+\.)?as\.[^>]+>
 OWN_VIA = re.compile(r"(?im)^(?:Via|v)\s*:\s*[^\r\n]*branch=z9hG4bK-as-([^;\s]+)\r\n")
 
 
-def build_forwarded_request(message: str, branch: str) -> str:
+def build_forwarded_request(message: str, branch: str, record_route: str = "") -> str:
     request_line, remaining_headers = message.split("\r\n", 1)
     own_via = (
         f"Via: SIP/2.0/UDP {runtime.bind_ip}:{runtime.bind_port};branch=z9hG4bK-as-{branch}\r\n"
     )
+    if record_route:
+        # Логический AS остаётся в пути диалога: BYE придёт к нему и закроет услугу.
+        host = f"{record_route}.{runtime.ims_domain}:{runtime.bind_port}"
+        own_via += f"Record-Route: <sip:{host};transport=udp;lr>\r\n"
     # Поглощается только Route текущего AS. Следующий ISC Route возвращает
     # запрос в S-CSCF, где продолжается цепочка iFC.
     stripped = OWN_ROUTE.sub(r"\1", remaining_headers, count=1)
@@ -26,11 +30,13 @@ def build_forwarded_request(message: str, branch: str) -> str:
     return request_line + "\r\n" + own_via + stripped
 
 
-def forward(message: str, peer: tuple[str, int]) -> None:
-    """Вернуть запрос в S-CSCF; ответ найдёт отправителя по branch своего Via."""
+def forward(message: str, peer: tuple[str, int], *, record_route: str = "", on_answer=None):
+    """Вернуть запрос в S-CSCF; on_answer(response) — на финальный ответ на INVITE."""
     branch = transaction_branch(message)
     runtime.transactions[branch] = peer
-    send(build_forwarded_request(message, branch), runtime.scscf)
+    if on_answer is not None:
+        runtime.answer_hooks[branch] = on_answer
+    send(build_forwarded_request(message, branch, record_route), runtime.scscf)
 
 
 def relay_response(message: str) -> None:
@@ -49,4 +55,9 @@ def relay_response(message: str) -> None:
         f"to {destination_peer[0]}:{destination_peer[1]}",
         flush=True,
     )
-    send(OWN_VIA.sub("", message, count=1), destination_peer)
+    response = OWN_VIA.sub("", message, count=1)
+    send(response, destination_peer)
+    if status_code(message) >= 200 and cseq_method(message) == "INVITE":
+        hook = runtime.answer_hooks.pop(branch, None)
+        if hook is not None:
+            hook(response)

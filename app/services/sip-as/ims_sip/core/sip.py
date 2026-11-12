@@ -77,3 +77,8 @@ def angle_uri(value: str) -> str:
     """URI из <...> заголовка Contact/To; без скобок — до первого параметра."""
     match = re.search(r"<([^>]+)>", value)
     return match.group(1) if match else value.split(";", 1)[0].strip()
+
+
+def cseq_method(message: str) -> str:
+    value = header(message.split("\r\n\r\n", 1)[0], "CSeq")
+    return value.split()[-1].upper() if value else ""

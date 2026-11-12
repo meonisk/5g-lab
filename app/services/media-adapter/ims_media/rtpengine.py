@@ -60,8 +60,9 @@ def _query(call_id):
     return decoded
 
 
-def resolve_subscriber_port(call_id):
-    """Return the even relay port whose remote endpoint is in the IMS UE pool."""
+def resolve_subscriber_ports(call_id):
+    """Even relay ports of every call side whose remote endpoint is an IMS subscriber."""
+    ports = []
     try:
         response = _query(call_id)
         for tag in response.get(b"tags", {}).values():
@@ -78,10 +79,16 @@ def resolve_subscriber_port(call_id):
                         and runtime.port_min <= port <= runtime.port_max
                         and port % 2 == 0
                     ):
-                        return port
+                        ports.append(port)
     except (OSError, ValueError, IndexError, KeyError, UnicodeError, TypeError) as exc:
         print(f"MEDIA RTPengine query failed type={type(exc).__name__}", flush=True)
-    return None
+    return ports
+
+
+def resolve_subscriber_port(call_id):
+    """Return the first even relay port whose remote endpoint is in the IMS UE pool."""
+    ports = resolve_subscriber_ports(call_id)
+    return ports[0] if ports else None
 
 
 def _encode(value):

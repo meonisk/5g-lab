@@ -9,7 +9,7 @@ from lab_common.http import request_json
 
 from . import runtime
 from .api import end_worker_call
-from .rtpengine import resolve_subscriber_port
+from .rtpengine import resolve_subscriber_ports
 
 
 def match_session(
@@ -30,10 +30,11 @@ def match_session(
     if direction != "caller_to_core":
         return None
 
+    # Запись (record) слушает все стороны звонка, остальные режимы — одну.
     matching_sessions = [
         (call_id, session)
         for call_id, session in active_sessions.items()
-        if session.get("subscriber_port") == destination_port
+        if destination_port in session.get("subscriber_ports", (session.get("subscriber_port"),))
     ]
     if len(matching_sessions) == 1:
         return matching_sessions[0]
@@ -49,27 +50,29 @@ def match_session(
 
 
 def refresh_subscriber_ports(active_sessions: dict) -> None:
-    """Один раз получить у RTPengine порт абонентской стороны каждого звонка."""
+    """Один раз получить у RTPengine порты абонентских сторон каждого звонка."""
     for call_id, current_session in list(active_sessions.items()):
         is_terminated_call = current_session.get("rtpengine_port") is not None
         already_resolved = current_session.get("subscriber_port") is not None
         if not is_terminated_call or already_resolved:
             continue
 
-        subscriber_port = resolve_subscriber_port(call_id)
-        if subscriber_port is None:
+        ports = resolve_subscriber_ports(call_id)
+        if not ports:
             continue
+        if current_session.get("service_mode") != "record":
+            ports = ports[:1]
 
         resolved_session = dict(current_session)
-        resolved_session["subscriber_port"] = subscriber_port
+        resolved_session.update(subscriber_port=ports[0], subscriber_ports=ports)
         active_sessions[call_id] = resolved_session
 
         with runtime.lock:
             if call_id in runtime.sessions:
-                runtime.sessions[call_id]["subscriber_port"] = subscriber_port
+                runtime.sessions[call_id].update(subscriber_port=ports[0], subscriber_ports=ports)
 
         print(
-            f"MEDIA mapped call_id={call_id} subscriber_port={subscriber_port}",
+            f"MEDIA mapped call_id={call_id} subscriber_port={ports[0]} sides={len(ports)}",
             flush=True,
         )
 

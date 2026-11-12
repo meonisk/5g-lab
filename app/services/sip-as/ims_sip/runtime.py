@@ -56,3 +56,9 @@ voice_status_url = os.environ["VOICE_AGENT_URL"].rstrip("/") + "/status"
 voice_max_calls = int(os.environ["VOICE_AGENT_MAX_CALLS"])
 b2bua_calls = {}
 b2bua_branches = {}
+answer_hooks = {}
+record_invites = {}
+announcements = {
+    "ru": (os.environ["RECORDING_ANNOUNCEMENT_RU"], os.environ["TTS_VOICE"]),
+    "en": (os.environ["RECORDING_ANNOUNCEMENT_EN"], os.environ["TTS_TRANSLATION_VOICE"]),
+}

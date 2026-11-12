@@ -113,6 +113,49 @@ class MediaRouting(unittest.TestCase):
     def test_record_mode_is_allowed(self):
         self.assertIn("record", self.rtpengine.runtime.allowed_service_modes)
 
+    def test_record_session_matches_both_subscriber_sides(self):
+        active = {
+            "rec": {
+                "rtpengine_port": 30010,
+                "subscriber_port": 30020,
+                "subscriber_ports": [30020, 30022],
+                "service_mode": "record",
+            },
+            "other": {"rtpengine_port": 30030, "subscriber_port": 30040},
+        }
+        self.assertEqual(self.match_session(4000, 30022, "caller_to_core", active)[0], "rec")
+        self.assertEqual(self.match_session(4002, 30020, "caller_to_core", active)[0], "rec")
+
+    def test_query_returns_every_subscriber_side(self):
+        hosts = self.rtpengine.runtime.ims_ue_network.hosts()
+        tags = {}
+        for name, port in ((b"caller", 30020), (b"callee", 30022)):
+            stream = {
+                b"local port": port,
+                b"flags": [b"RTP"],
+                b"endpoint": {b"address": str(next(hosts)).encode("ascii")},
+            }
+            tags[name] = {b"medias": [{b"type": b"audio", b"streams": [stream]}]}
+        reply = {b"result": b"ok", b"tags": tags}
+        with patch.object(self.rtpengine, "_query", return_value=reply):
+            self.assertEqual(self.rtpengine.resolve_subscriber_ports("call"), [30020, 30022])
+            self.assertEqual(self.rtpengine.resolve_subscriber_port("call"), 30020)
+
+    def test_observe_keeps_single_subscriber_side(self):
+        from ims_media import publish
+
+        active = {
+            "obs": {"rtpengine_port": 30010, "service_mode": "observe"},
+            "rec": {"rtpengine_port": 30012, "service_mode": "record"},
+        }
+        with (
+            patch.object(publish, "resolve_subscriber_ports", return_value=[30020, 30022]),
+            patch.dict(publish.runtime.sessions, {}, clear=True),
+        ):
+            publish.refresh_subscriber_ports(active)
+        self.assertEqual(active["obs"]["subscriber_ports"], [30020])
+        self.assertEqual(active["rec"]["subscriber_ports"], [30020, 30022])
+
 
 if __name__ == "__main__":
     unittest.main()

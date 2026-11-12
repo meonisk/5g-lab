@@ -5,6 +5,7 @@
 """
 
 import re
+import threading
 
 from .. import runtime
 from ..core import b2bua, dialogs, mrf, proxy
@@ -77,7 +78,22 @@ def on_answer(call: b2bua.Call, response: str) -> bool:
         f"AS translate answered call_id={a.call_id} leg_b={b.call_id} languages={lang_a}-{lang_b}",
         flush=True,
     )
+    # record AS (приоритет 20) пометил ногу B, когда она шла по цепочке iFC.
+    if dialogs.is_marked_record(b.call_id):
+        threading.Thread(target=start_pair_recording, args=(call,), daemon=True).start()
     return True
+
+
+def start_pair_recording(call: b2bua.Call) -> None:
+    """Уведомление каждой стороне голосом MRF, затем запись обеих ног в одну сессию AI."""
+    legs = ((call.a.call_id, call.languages[0]), (call.b.call_id, call.languages[1]))
+    for call_id, language in legs:
+        text, voice = runtime.announcements[language]
+        if not mrf.play(call_id, text, voice):
+            print(f"AS record skipped call_id={call.a.call_id} reason=announcement", flush=True)
+            return
+    mrf.record_pair(call.a.call_id, [(call.a.call_id, "caller"), (call.b.call_id, "callee")])
+    print(f"AS record started call_id={call.a.call_id} legs=2", flush=True)
 
 
 def on_bye(call: b2bua.Call) -> None:
