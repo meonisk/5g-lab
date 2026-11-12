@@ -1,7 +1,7 @@
 """UDP-отправка и локальные SIP-ответы логических AS."""
 
 from .. import runtime
-from .sip import all_headers, header, message_call_id
+from .sip import all_headers, header, message_call_id, request_method
 
 
 def local_response(request, status, reason, body="", to_tag="", contact_user=None):
@@ -18,12 +18,11 @@ def local_response(request, status, reason, body="", to_tag="", contact_user=Non
         f"Call-ID: {message_call_id(request)}",
         f"CSeq: {header(request, 'CSeq')}",
     ]
-    if status == 200 and request.startswith("INVITE "):
+    if status == 200 and request_method(request) in {"INVITE", "UPDATE"}:
         user = contact_user or runtime.voice_user
-        lines += [
-            f"Contact: <sip:{user}@{runtime.bind_ip}:{runtime.bind_port};transport=udp>",
-            "Content-Type: application/sdp",
-        ]
+        lines.append(f"Contact: <sip:{user}@{runtime.bind_ip}:{runtime.bind_port};transport=udp>")
+    if body:
+        lines.append("Content-Type: application/sdp")
     lines.append(f"Content-Length: {len(body.encode())}")
     return "\r\n".join(lines) + "\r\n\r\n" + body
 

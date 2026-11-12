@@ -2,7 +2,7 @@
 
 from .. import runtime
 from ..core import b2bua, mrf, proxy
-from ..core.sip import request_method, tag_of, value_of
+from ..core.sip import local_tag, message_call_id, request_method, tag_of, value_of
 from ..core.subscribers import language_for, served_user, target_user
 
 HOST = "translate.as"
@@ -53,7 +53,14 @@ def on_bye(call: b2bua.Call) -> None:
 
 
 def handle(message: str, peer: tuple[str, int]) -> None:
-    if request_method(message) == "INVITE" and not tag_of(value_of(message, "To")):
+    call_id = message_call_id(message)
+    method = request_method(message)
+    to_tag = tag_of(value_of(message, "To"))
+    if b2bua.find(call_id) is not None:
+        b2bua.handle_request(message, peer)
+    elif method == "INVITE" and not to_tag:
         on_invite(message, peer)
-        return
-    proxy.forward(message, peer)
+    elif method == "ACK" and to_tag == local_tag(call_id):
+        return  # ACK на наш не-2xx ответ ноге A: транзакция уже завершена
+    else:
+        proxy.forward(message, peer)

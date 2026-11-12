@@ -19,9 +19,11 @@ from .sip import (
     angle_uri,
     local_tag,
     message_call_id,
+    request_method,
     route_values,
     status_code,
     tag_of,
+    transaction_branch,
     value_of,
 )
 from .transport import send, send_local_response
@@ -295,3 +297,61 @@ def end(call: Call) -> None:
         runtime.b2bua_branches.pop(call.b_branch, None)
     dialogs.forget(call.b.call_id)
     call.on_bye(call)
+
+
+def same_transaction(message: str, request: str) -> bool:
+    return transaction_branch(message) == transaction_branch(request)
+
+
+def cancel_b(call: Call) -> None:
+    """CANCEL ноги B: те же Request-URI, Via, Route, From, To и Call-ID, что у INVITE."""
+    head = call.b_invite.split("\r\n\r\n", 1)[0].split("\r\n")
+    names = r"(Via|Max-Forwards|Route|From|To|Call-ID)\s*:"
+    keep = [line for line in head[1:] if re.match(names, line)]
+    lines = [
+        f"CANCEL {head[0].split(' ')[1]} SIP/2.0",
+        *keep,
+        "CSeq: 1 CANCEL",
+        "Content-Length: 0",
+    ]
+    send("\r\n".join(lines) + "\r\n\r\n", runtime.scscf)
+
+
+def handle_request(message: str, peer: tuple[str, int]) -> None:
+    """Запрос в диалоге ноги A или B: ответить на своей ноге, другой — только BYE/CANCEL."""
+    call_id = message_call_id(message)
+    call = find(call_id)
+    method = request_method(message)
+    leg = call.a if call_id == call.a.call_id else call.b
+    if method == "ACK":
+        return
+    if method == "INVITE" and leg is call.a and same_transaction(message, call.a_invite):
+        send_local_response(message, peer, 100, "Trying")  # повтор INVITE ноги A
+        return
+    if method in {"INVITE", "UPDATE"}:
+        # Удержание и session timer: MRF остаётся точкой медиа, другая нога не трогается.
+        send_local_response(
+            message,
+            peer,
+            200,
+            "OK",
+            body=voice_agent_sdp(),
+            to_tag=leg.local_tag,
+            contact_user=CONTACT_USER,
+        )
+        print(f"AS b2bua refreshed {method} call_id={call_id}", flush=True)
+        return
+    send_local_response(message, peer, 200, "OK", to_tag=leg.local_tag)
+    if method == "CANCEL" and leg is call.a and not call.answered:
+        reply_a(call, 487, "Request Terminated")
+        if not call.b_final:
+            cancel_b(call)
+        print(f"AS b2bua cancelled call_id={call.a.call_id}", flush=True)
+        end(call)
+    elif method == "BYE":
+        other = call.b if leg is call.a else call.a
+        if call.answered:
+            send_in_dialog(call, other, "BYE")
+        side = "a" if leg is call.a else "b"
+        print(f"AS b2bua ended call_id={call.a.call_id} by={side}", flush=True)
+        end(call)
