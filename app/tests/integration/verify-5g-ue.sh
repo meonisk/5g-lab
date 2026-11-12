@@ -234,6 +234,17 @@ else
     echo 'INFO: перевод не установлен, остальные проверки D пропущены'
     ue_cmd 1 'ha\n'
 fi
+d_failed=$(docker logs lab-voice-agent --since "$since" 2>&1 | grep -c 'reason=llm_reply state=sent')
+if ((d_failed == 0)); then
+    # Почему нет перевода: события AI/Voice/Media без потока пакетов (без текста реплик).
+    echo "===== ДИАГНОСТИКА D с $since ====="
+    for container in lab-ai-worker lab-voice-agent lab-media-adapter lab-sip-as; do
+        echo "----- $container -----"
+        docker logs "$container" --since "$since" 2>&1 |
+            grep -vE 'stream_received|MEDIA delivered' | tail -60
+    done
+    echo '===== КОНЕЦ ДИАГНОСТИКИ D ====='
+fi
 sleep 2
 
 echo "===== E: UE2 -> *UE1: разовый перевод ====="
@@ -249,9 +260,21 @@ sleep 2
 
 echo '===== F: SIP AS остановлен: UE1 -> UE2 ====='
 docker stop -t 1 lab-sip-as >/dev/null
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 offset1=$(mark 1)
 ue_cmd 1 "m\nsip:$UE2_MSISDN@$IMS_DOMAIN\n"
-check 'UE1: 200/INVITE без SIP AS (DefaultHandling)' wait_log 1 'Response msg 200/INVITE' 60 "$offset1"
+if ! wait_log 1 'Response msg 200/INVITE' 60 "$offset1"; then
+    check 'UE1: 200/INVITE без SIP AS (DefaultHandling)' false
+    echo "===== ДИАГНОСТИКА F с $since ====="
+    echo '----- UE1: ответы на INVITE -----'
+    tail -n +"$((offset1 + 1))" "$(log_of 1)" | grep -E '(TX|RX) [0-9]+ bytes|state changed' | tail -40
+    echo '----- lab-scscf: маршрутизация и ISC -----'
+    docker logs lab-scscf --since "$since" 2>&1 |
+        grep -E 'NOTICE|WARNING|ERROR|ISC_|isc_|Faked|failure' | tail -120
+    echo '===== КОНЕЦ ДИАГНОСТИКИ F ====='
+else
+    check 'UE1: 200/INVITE без SIP AS (DefaultHandling)' true
+fi
 ue_cmd 1 'ha\n'
 docker start lab-sip-as >/dev/null
 

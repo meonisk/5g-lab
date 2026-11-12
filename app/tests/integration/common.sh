@@ -71,16 +71,39 @@ request = urllib.request.Request(
 print(urllib.request.urlopen(request, timeout=3).read().decode())' "$2" "$3"
 }
 
-# Ждать, пока в Voice Agent не останется активных вызовов. Аргумент — предел в секундах.
+# Ждать, пока не останется вызовов в Voice Agent и сессий в Media Adapter (сессия без
+# BYE живёт MEDIA_SESSION_TTL_SECONDS после последнего RTP). Аргумент — предел в секундах.
 wait_no_ai_calls() {
-    local deadline=$((SECONDS + ${1:-30})) count
+    local deadline=$((SECONDS + ${1:-30})) calls sessions
+    count_of() {
+        python3 -c 'import json,sys; print(len(json.load(sys.stdin).get(sys.argv[1], {})))' "$1" \
+            2>/dev/null
+    }
     while ((SECONDS < deadline)); do
-        count=$(service_get lab-voice-agent VOICE_AGENT_HTTP_PORT /status 2>/dev/null |
-            python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("calls", {})))' 2>/dev/null)
-        [[ $count == 0 ]] && return 0
+        calls=$(service_get lab-voice-agent VOICE_AGENT_HTTP_PORT /status 2>/dev/null | count_of calls)
+        sessions=$(service_get lab-media-adapter MEDIA_ADAPTER_PORT /sessions 2>/dev/null |
+            count_of sessions)
+        [[ $calls == 0 && $sessions == 0 ]] && return 0
         sleep 1
     done
     return 1
+}
+
+# При FAIL, до удаления клиентов: SIP-обмен SIPUE, решения S-CSCF и SIP AS с момента $1.
+sip_diag() {
+    local since=$1 client
+    echo "===== ДИАГНОСТИКА SIP с $since ====="
+    for client in lab-sipue1 lab-sipue2; do
+        echo "----- $client: сообщения и состояния вызовов -----"
+        docker logs "$client" --since "$since" 2>&1 |
+            grep -E '(TX|RX) [0-9]+ bytes|state changed|DISCONNECTED|^([Cc]all-I[Dd]|i):' | tail -120
+    done
+    echo '----- lab-scscf: маршрутизация и ISC -----'
+    docker logs lab-scscf --since "$since" 2>&1 |
+        grep -E 'NOTICE|WARNING|ERROR|ISC_|isc_|Faked|failure' | tail -120
+    echo '----- lab-sip-as -----'
+    docker logs lab-sip-as --since "$since" 2>&1 | tail -80
+    echo '===== КОНЕЦ ДИАГНОСТИКИ ====='
 }
 
 # LLM (Ollama) есть только в baseline; в compact/minimal контейнера нет, а

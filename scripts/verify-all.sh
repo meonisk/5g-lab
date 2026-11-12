@@ -199,8 +199,9 @@ else
     # следующий шаг видит «стенд занят» или переводимый звонок идёт без перевода.
     settle_calls() {
         ((interrupted)) && return
-        bash -c 'source "$1/common.sh" && wait_no_ai_calls 60' settle "$tests" ||
-            say 'ВНИМАНИЕ: в Voice Agent остались активные вызовы после 60 с ожидания'
+        # 150 с: сессия Media Adapter без BYE истекает через MEDIA_SESSION_TTL_SECONDS (120).
+        bash -c 'source "$1/common.sh" && wait_no_ai_calls 150' settle "$tests" ||
+            say 'ВНИМАНИЕ: остались вызовы Voice Agent или сессии Media Adapter после 150 с'
     }
 
     for entry in "${regression[@]}"; do

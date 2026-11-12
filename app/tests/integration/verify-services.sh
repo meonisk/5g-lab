@@ -58,6 +58,7 @@ echo "===== 1: SIPUE1 ($SIPUE1_LANGUAGE) -> SIPUE2 ($SIPUE2_LANGUAGE): translate
 export SIPUE1_PLAYBACK_FILE=$INTERPRETER_DIALOGUE_UE1_FILE
 export SIPUE2_PLAYBACK_FILE=$INTERPRETER_DIALOGUE_UE2_FILE SIPUE_AUTO_CONFERENCE=0
 check 'тестовые клиенты зарегистрированы (WAV диалога)' fresh_clients
+run_since=$(now)
 since=$(now)
 since_epoch=$(date +%s)
 pjsua lab-sipue1 "m\nsip:${SIPUE2_IMSI}@${IMS_DOMAIN}\n"
@@ -67,7 +68,9 @@ printf 'INFO: leg_a=%s leg_b=%s\n' "$a" "$b"
 check 'translate AS принял ногу A и создал ногу B' test -n "$a" -a -n "$b"
 check 'record AS пометил ногу B (via=translate)' \
     wait_for lab-sip-as "AS record marked call_id=$b via=translate" 15 "$since"
-check 'SIPUE2 получил INVITE ноги B' wait_for lab-sipue2 "^(Call-ID|i): $b" 15 "$since"
+# Call-ID ноги B уникален (b2b-<hex>): достаточно найти его в журнале SIPUE2, без
+# привязки к написанию заголовка (Call-ID / Call-Id / i).
+check 'SIPUE2 получил INVITE ноги B' wait_for lab-sipue2 "${b:-нет-ноги-B}" 15 "$since"
 check 'SIPUE1 получил 200/INVITE' wait_for lab-sipue1 'Response msg 200/INVITE' 30 "$since"
 check 'перевод ru-en' wait_for lab-sip-as "AS translate answered call_id=$a leg_b=$b languages=ru-en" \
     10 "$since"
@@ -148,4 +151,5 @@ pjsua lab-sipue1 'ha\n'
 docker start lab-sip-as >/dev/null
 as_stopped=0
 
+((fail)) && sip_diag "$run_since"
 finish 'IMS SERVICES: TRANSLATE + RECORD + STAR + PLAIN + AS DOWN'
