@@ -15,3 +15,6 @@
 # - S-CSCF failure_route isc_orig_failure/isc_term_failure: NOTICE logs with the
 #   reply code (L_DBG is hidden at debug=2) and resetdsturi() before continuing to
 #   the callee, so DefaultHandling SESSION_CONTINUED never re-targets a dead AS.
+#   route[orig] arms t_on_failure("isc_orig_failure") before t_newtran() (set after
+#   the ISC relay it never reached the transaction) and marks $avp(isc_orig_as),
+#   so failures of the callee itself are not re-run through the iFC chain.
