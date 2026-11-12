@@ -102,6 +102,17 @@ def run(*command, timeout=600):
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+def espeak(folder, name, text, settings):
+    """WAV фразы голосом тестовых клиентов (espeak-ng образа lab-pjsua) в folder/name."""
+    result = run("docker", "run", "--rm", "--network", "none", "--user",
+                 f"{os.getuid()}:{os.getgid()}", "-v", f"{folder}:/out", "--entrypoint",
+                 "espeak-ng", "lab-pjsua", "-v", settings["TTS_VOICE"], "-s", settings["TTS_RATE"],
+                 "-w", f"/out/{name}", text)  # fmt: skip
+    if result.returncode:
+        raise RuntimeError(f"espeak-ng в lab-pjsua: {result.stderr.strip()[-300:]}")
+    return folder / name
+
+
 def prepare_phrases(folder, settings):
     """Эталонные фразы: SIP_UE_TEST_UTTERANCE и русские реплики фикстуры диалога."""
     dialogue = json.loads(DIALOGUE.read_text(encoding="utf-8"))
@@ -110,13 +121,7 @@ def prepare_phrases(folder, settings):
     for number, text in enumerate(texts, 1):
         name = f"p{number}"
         if not (folder / f"{name}.ulaw").is_file():
-            result = run("docker", "run", "--rm", "--network", "none", "--user",
-                         f"{os.getuid()}:{os.getgid()}", "-v", f"{folder}:/out",
-                         "--entrypoint", "espeak-ng", "lab-pjsua", "-v", settings["TTS_VOICE"],
-                         "-s", settings["TTS_RATE"], "-w", f"/out/{name}.wav", text)  # fmt: skip
-            if result.returncode:
-                raise RuntimeError(f"espeak-ng в lab-pjsua: {result.stderr.strip()[-300:]}")
-            audio, _ = wav_to_pcmu(folder / f"{name}.wav")
+            audio, _ = wav_to_pcmu(espeak(folder, f"{name}.wav", text, settings))
             (folder / f"{name}.ulaw").write_bytes(audio)
         seconds = (folder / f"{name}.ulaw").stat().st_size / 8000
         phrases.append({"id": name, "file": f"{name}.ulaw", "text": text, "seconds": seconds})
