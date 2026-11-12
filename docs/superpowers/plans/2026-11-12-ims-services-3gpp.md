@@ -355,10 +355,10 @@ verdict() { if "${@:2}"; then echo "PASS: $1"; else echo "FAIL: $1"; fi; }
 verdict 'нога B создана spike1' test -n "$leg"
 verdict 'нога B прошла spike2 (приоритет 25)' grep -q "^SPIKE2 INVITE call_id=$leg\$" <<<"$logs"
 verdict 'нога B прошла as (приоритет 30)' grep -q "^AS INVITE call_id=$leg\$" <<<"$logs"
-verdict 'Call-ID звонящего не прошёл дальше spike1' sh -c "! grep -q '^SPIKE2 INVITE call_id=$a\$' <<<\"\$0\"" "$logs"
-verdict 'S-CSCF обработал ногу B' sh -c "docker logs lab-scscf --since $since 2>&1 | grep -q 'SCSCF: INVITE .*, $leg)'"
-verdict 'SIPUE2 получил INVITE ноги B' sh -c "docker logs lab-sipue2 --since $since 2>&1 | grep -qiE '^(Call-ID|i): *$leg'"
-verdict 'SIPUE1 получил 200/INVITE' sh -c "docker logs lab-sipue1 --since $since 2>&1 | grep -q 'Response msg 200/INVITE'"
+verdict 'Call-ID звонящего не прошёл дальше spike1' bash -c "! grep -q '^SPIKE2 INVITE call_id=$a\$' <<<\"\$0\"" "$logs"
+verdict 'S-CSCF обработал ногу B' bash -c "docker logs lab-scscf --since $since 2>&1 | grep -q 'SCSCF: INVITE .*, $leg)'"
+verdict 'SIPUE2 получил INVITE ноги B' bash -c "docker logs lab-sipue2 --since $since 2>&1 | grep -qiE '^(Call-ID|i): *$leg'"
+verdict 'SIPUE1 получил 200/INVITE' bash -c "docker logs lab-sipue1 --since $since 2>&1 | grep -q 'Response msg 200/INVITE'"
 if grep -q "^SPIKE1 INVITE call_id=$leg\$" <<<"$logs"; then
   echo 'INFO: S-CSCF начал цепочку заново для ноги B (spike1 видел её)'
 else
@@ -390,8 +390,12 @@ record AS для BYE); если нет — запись без перевода 
 docker rm -f lab-spike-isc
 docker start lab-sip-as
 python3 app/tests/integration/spike_isc_chain.py restore
+# S-CSCF держит spike-iFC в кэше профиля: сбросить перезапуском.
+docker restart lab-scscf
 "${compose[@]}" rm -sf sipue1 sipue2
 ```
+
+Шаги 4 и 5 выполняются в одной сессии bash (Step 5 использует `compose` из Step 4).
 
 Expected: `SPIKE iFC removed: SIPUE1 uses default_ifc.xml`.
 
@@ -6130,8 +6134,8 @@ PASS: SIP AS: перевод en-ru
 PASS: UE1: 200/INVITE без SIP AS (DefaultHandling)
 ```
 
-там же строку `**[verify-5g-ue.sh](../app/tests/integration/verify-5g-ue.sh)** — шаги 6–8 и тесты A–C:`
-заменить на `**[verify-5g-ue.sh](../app/tests/integration/verify-5g-ue.sh)** — шаги 6–8 и тесты A–F:`,
+там же в строке со ссылкой на `verify-5g-ue.sh` (`— шаги 6–8 и тесты A–C:`) заменить
+`тесты A–C` на `тесты A–F`,
 а строки ``- тест B: …`` и ``- тест C: …`` — на:
 
 ```markdown
