@@ -24,3 +24,7 @@
 #   After that the request continues to the callee; no failure route is re-armed.
 #   Before that t_relay the route re-assigns $ru = $ru: the R-URI was consumed by
 #   the AS branches, and t_relay failed with "no branches for forwarding".
+#   The continued request still carries the failed AS Route and ISC mark (ims_isc
+#   lumps of the original request), returns via I-CSCF and would re-enter the iFC
+#   chain. isc_orig_failure adds X-Lab-ISC-Continued; route[orig] then drops it,
+#   the Route headers and dst_uri, and goes straight to FINAL_ORIG.
