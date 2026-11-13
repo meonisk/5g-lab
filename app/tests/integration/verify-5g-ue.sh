@@ -259,6 +259,8 @@ if ((d_failed == 0)); then
         docker logs "$container" --since "$since" 2>&1 |
             grep -vE 'stream_received|MEDIA delivered' | tail -60
     done
+    echo "----- UE1: конференц-мост при say_once (player=${player:-нет} call=${call:-нет}) -----"
+    tail -n +"$((offset1 + 1))" "$(log_of 1)" | grep -E '^Port #|[Cc]onnect' | tail -20
     echo '----- lab-media-adapter: окна RTP по направлению и услуге -----'
     docker logs lab-media-adapter --since "$since" 2>&1 |
         sed -n 's/.*MEDIA delivered direction=\([^ ]*\) .* audio=\([0-9]*\) .*service=\([^ ]*\).*/\1 \3 audio=\2/p' |

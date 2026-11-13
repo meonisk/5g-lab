@@ -29,6 +29,15 @@ def flush_buffered_speech(call_id: str) -> None:
     for buffer_key in matching_buffer_keys:
         buffered_stream = runtime.buffers.pop(buffer_key)
         buffered_event = buffered_stream.get("event") or {}
+        # Без текста и идентификаторов: слышал ли VAD речь в этом потоке вообще.
+        print(
+            f"AI stream_summary service={buffered_event.get('service_mode')} "
+            f"direction={buffered_event.get('direction')} "
+            f"frames={buffered_stream.get('frames_total', 0)} "
+            f"voiced={buffered_stream.get('frames_voiced', 0)} "
+            f"peak_rms={buffered_stream.get('peak_rms', 0)} vad_rms={settings.vad_rms}",
+            flush=True,
+        )
         has_complete_speech = (
             buffered_stream["in_speech"]
             and buffered_stream["speech_bytes"] >= settings.min_utterance_bytes

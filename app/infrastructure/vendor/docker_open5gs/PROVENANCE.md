@@ -18,3 +18,7 @@
 #   route[orig] arms t_on_failure("isc_orig_failure") before t_newtran() (set after
 #   the ISC relay it never reached the transaction) and marks $avp(isc_orig_as),
 #   so failures of the callee itself are not re-run through the iFC chain.
+#   isc_orig_failure tries the next AS once ($avp(isc_orig_retry)): ims_isc reads
+#   the chain mark from the original request's lumps in every failure route, so a
+#   second failure would pick the same AS again until tm runs out of branches.
+#   After that the request continues to the callee; no failure route is re-armed.

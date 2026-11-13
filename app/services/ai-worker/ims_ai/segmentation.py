@@ -153,7 +153,12 @@ def remember_latest_event(state: dict, event: dict, received_at: float, now: flo
 
 def append_frame(state: dict, frame: bytes) -> None:
     """Обновить VAD-состояние одним 20-миллисекундным кадром."""
-    frame_has_voice = frame_rms(frame) >= settings.vad_rms
+    rms = frame_rms(frame)
+    frame_has_voice = rms >= settings.vad_rms
+    # Итог потока для диагностики (только числа): reset_phrase эти ключи не трогает.
+    state["frames_total"] = state.get("frames_total", 0) + 1
+    state["frames_voiced"] = state.get("frames_voiced", 0) + frame_has_voice
+    state["peak_rms"] = max(state.get("peak_rms", 0), rms)
 
     if frame_has_voice:
         if not state["in_speech"]:
