@@ -22,3 +22,5 @@
 #   the chain mark from the original request's lumps in every failure route, so a
 #   second failure would pick the same AS again until tm runs out of branches.
 #   After that the request continues to the callee; no failure route is re-armed.
+#   Before that t_relay the route re-assigns $ru = $ru: the R-URI was consumed by
+#   the AS branches, and t_relay failed with "no branches for forwarding".

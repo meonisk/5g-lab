@@ -85,19 +85,26 @@ prepare_jail() {
         set -- $node
         [[ -c $jail/dev/$1 ]] || { sudo rm -f "$jail/dev/$1"; sudo mknod -m 666 "$jail/dev/$1" c 1 "$2"; }
     done
-    # Фраза и 20 с тишины: плеер PJSUA играет по кругу, а агенту нужна пауза,
-    # чтобы закончить реплику и ответить, не будучи перебитым.
+    # Два проигрывателя. phrase-pause.wav (фраза + 20 с тишины) звучит по кругу в
+    # B. phrase-once.wav (фраза с 0,5 с тишины по краям) — для say_once: плеер
+    # PJSUA продолжает с места отключения, поэтому say_once держит его подключённым
+    # ровно на длину файла, и следующий say_once снова начинает с начала (раньше
+    # общий плеер после A и B стоял посреди паузы — UE1 в D молчал). Тишина по
+    # краям поглощает задержку команд FIFO.
     sudo chroot "$jail" espeak-ng -v "$TTS_VOICE" -s "$TTS_RATE" -w /tmp/phrase.wav "$phrase" &&
         sudo python3 - "$jail/tmp" <<'EOF'
 import sys, wave
 folder = sys.argv[1]
 with wave.open(f"{folder}/phrase.wav", "rb") as source:
     params, audio = source.getparams(), source.readframes(source.getnframes())
-with wave.open(f"{folder}/phrase-pause.wav", "wb") as target:
-    target.setparams(params)
-    target.writeframes(audio + bytes(params.sampwidth * params.framerate * 20))
+second = params.sampwidth * params.nchannels * params.framerate
+pad = bytes(second // 2)
+for name, frames in (("pause", audio + bytes(second * 20)), ("once", pad + audio + pad)):
+    with wave.open(f"{folder}/phrase-{name}.wav", "wb") as target:
+        target.setparams(params)
+        target.writeframes(frames)
 with open(f"{folder}/phrase.seconds", "w") as seconds:
-    seconds.write(str(len(audio) // (params.sampwidth * params.framerate) + 1))
+    seconds.write(f"{len(pad + audio + pad) / second:.3f}")
 EOF
 }
 
@@ -113,28 +120,29 @@ start_client() {
     nohup sudo ip netns exec "ue$n" chroot "$jail" bash -c 'exec 3<>"$0"; exec stdbuf -oL -eL pjsua "$@" <&3' \
         "/tmp/control-ue$n" --log-level=4 --app-log-level=4 --null-audio --no-tcp --no-vad --auto-update-nat=0 \
         --clock-rate=8000 --snd-clock-rate=8000 --dis-codec='*' --add-codec="$SIP_UE_CODEC" \
-        --auto-answer=200 --play-file=/tmp/phrase-pause.wav \
+        --auto-answer=200 --play-file=/tmp/phrase-pause.wav --play-file=/tmp/phrase-once.wav \
         --id "sip:$imsi@$IMS_DOMAIN" --registrar "sip:$IMS_DOMAIN" \
         --proxy "sip:$PCSCF_IP:$PCSCF_SIP_PORT;transport=udp;lr" --realm "$IMS_DOMAIN" \
         --username "$imsi@$IMS_DOMAIN" --password "${!key_name}" \
         --ip-addr="$address" --bound-addr="$address" >"$(log_of "$n")" 2>&1 &
 }
 
-# Порты конференц-моста: проигрыватель WAV подаётся в последний вызов.
+# Порты конференц-моста: проигрыватель WAV ($2: pause или once) подаётся в
+# последний вызов.
 connect_player() {
-    local n=$1 offset rows
+    local n=$1 file=phrase-${2:-pause}.wav offset rows
     offset=$(mark "$n")
     ue_cmd "$n" 'cl\n'
     sleep 1
     rows=$(tail -n +"$((offset + 1))" "$(log_of "$n")" | grep -E '^Port #')
-    player=$(grep '\.wav' <<<"$rows" | sed -E 's/^Port #0*([0-9]+).*/\1/' | tail -1)
+    player=$(grep -F "$file" <<<"$rows" | sed -E 's/^Port #0*([0-9]+).*/\1/' | tail -1)
     call=$(grep -E '\] +sip:' <<<"$rows" | sed -E 's/^Port #0*([0-9]+).*/\1/' | tail -1)
     [[ -n $player && -n $call ]] && ue_cmd "$n" "cc\n$player\n$call\n"
 }
 
 # Фраза звучит один раз: повтор по кругу перебивал бы медленный ответ агента.
 say_once() {
-    connect_player "$1"
+    connect_player "$1" once
     sleep "$(cat "$jail/tmp/phrase.seconds")"
     [[ -n ${player:-} && -n ${call:-} ]] && ue_cmd "$1" "cd\n$player\n$call\n"
 }
