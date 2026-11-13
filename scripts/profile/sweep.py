@@ -4,7 +4,9 @@
 
 Образ, лимиты CPU и памяти, переменные и тома моделей берутся у работающего
 lab-ai-worker (docker inspect): в любом режиме AI перебор идёт в тех же условиях, что
-сервис. Фразы — espeak-ng из образа lab-pjsua (как у тестовых клиентов), PCMU 8 кГц.
+сервис. Фразы — голос Piper из образа Voice Agent (как в тесте диалога), PCMU 8 кГц:
+espeak-ng тестовых клиентов Whisper распознаёт плохо, и замер STT уходит в мусор.
+Недостающие tiny/base/small сначала докачиваются в кэш сервиса (fetch_models).
 Результат — DIR/sweep-<load>.json; последняя строка — SWEEP <load>: DONE | SKIP.
 """
 
@@ -17,7 +19,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "scripts/lib"), str(ROOT / "scripts")]
+sys.path[:0] = [str(ROOT / "scripts/lib"), str(ROOT / "scripts"), str(ROOT / "app/tests/fixtures")]
+from dialogue import phrase_wavs  # noqa: E402
 from provision import read_env  # noqa: E402
 from quality import accuracy, wav_to_pcmu  # noqa: E402
 
@@ -25,6 +28,17 @@ MODELS = ("tiny", "base", "small")
 SERVICE = "lab-ai-worker"
 WORKER = ROOT / "scripts/profile/sweep_worker.py"
 DIALOGUE = ROOT / "app/tests/fixtures/interpreter-dialogue-v2.json"
+# Загрузка как у models.load_model() сервиса: снимок models--Systran--faster-whisper-<size>.
+FETCH = """import sys
+from faster_whisper.utils import download_model
+cache = sys.argv[1]
+for size, revision in zip(sys.argv[2::2], sys.argv[3::2]):
+    try:
+        download_model(size, cache_dir=cache, revision=revision)
+        print(f"модель {size}: в кэше", flush=True)
+    except Exception as error:
+        print(f"модель {size}: не скачана ({type(error).__name__})", flush=True)
+"""
 
 
 def plan_threads(nproc, service_threads, quick):
@@ -102,30 +116,39 @@ def run(*command, timeout=600):
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def espeak(folder, name, text, settings):
-    """WAV фразы голосом тестовых клиентов (espeak-ng образа lab-pjsua) в folder/name."""
-    result = run("docker", "run", "--rm", "--network", "none", "--user",
-                 f"{os.getuid()}:{os.getgid()}", "-v", f"{folder}:/out", "--entrypoint",
-                 "espeak-ng", "lab-pjsua", "-v", settings["TTS_VOICE"], "-s", settings["TTS_RATE"],
-                 "-w", f"/out/{name}", text)  # fmt: skip
-    if result.returncode:
-        raise RuntimeError(f"espeak-ng в lab-pjsua: {result.stderr.strip()[-300:]}")
-    return folder / name
-
-
 def prepare_phrases(folder, settings):
-    """Эталонные фразы: SIP_UE_TEST_UTTERANCE и русские реплики фикстуры диалога."""
+    """Эталонные фразы: SIP_UE_TEST_UTTERANCE и русские реплики фикстуры диалога (Piper)."""
     dialogue = json.loads(DIALOGUE.read_text(encoding="utf-8"))
     texts = [settings["SIP_UE_TEST_UTTERANCE"], *dialogue["tracks"]["ue1"]["turns"]]
-    phrases = []
-    for number, text in enumerate(texts, 1):
-        name = f"p{number}"
-        if not (folder / f"{name}.ulaw").is_file():
-            audio, _ = wav_to_pcmu(espeak(folder, f"{name}.wav", text, settings))
-            (folder / f"{name}.ulaw").write_bytes(audio)
-        seconds = (folder / f"{name}.ulaw").stat().st_size / 8000
-        phrases.append({"id": name, "file": f"{name}.ulaw", "text": text, "seconds": seconds})
-    return phrases
+    if not all((folder / f"p{n}.ulaw").is_file() for n in range(1, len(texts) + 1)):
+        for number, wav in enumerate(phrase_wavs(texts, folder), 1):
+            (folder / f"p{number}.ulaw").write_bytes(wav_to_pcmu(wav)[0])
+    return [{"id": f"p{n}", "file": f"p{n}.ulaw", "text": text,
+             "seconds": (folder / f"p{n}.ulaw").stat().st_size / 8000}
+            for n, text in enumerate(texts, 1)]  # fmt: skip
+
+
+def fetch_models(spec, models):
+    """Закреплённые tiny/base/small в кэш сервиса: как при старте AI Worker, с сетью.
+
+    Перебор идёт без сети; модель, которой нет в кэше, он пропускает. Ошибка загрузки —
+    не обрыв профиля: модель останется SKIP с причиной.
+    """
+    env = dict(item.split("=", 1) for item in spec["env"])
+    cache = env.get("AI_MODEL_CACHE")
+    mount = next((m for m in spec["mounts"] if f"dst={cache}," in m), None)
+    if not cache or not mount:
+        return
+    arguments = [item for pair in models.items() for item in pair]
+    try:
+        result = run("docker", "run", "--rm", "--user", "65532:65532", "--cap-drop", "ALL",
+                     "-e", "HOME=/tmp", "-e", f"HF_HUB_DISABLE_XET={env.get('HF_HUB_DISABLE_XET', '1')}",
+                     "--mount", mount.replace(",readonly", ""), "--entrypoint", "python",
+                     spec["image"], "-c", FETCH, cache, *arguments, timeout=1800)  # fmt: skip
+    except subprocess.TimeoutExpired:
+        print("WARN: загрузка моделей Whisper не уложилась в 30 мин", flush=True)
+        return
+    print(result.stdout + result.stderr[-1500:], end="", flush=True)
 
 
 def finish(path, data, line):
@@ -155,6 +178,7 @@ def main():
     folder.mkdir(parents=True, exist_ok=True)
     phrases = prepare_phrases(folder, settings)
     profiles = json.loads((ROOT / "app/config/ai-profiles.json").read_text(encoding="utf-8"))
+    fetch_models(spec, model_revisions(profiles, settings))
     nproc = os.cpu_count()
     plan = {
         "phrases": phrases,

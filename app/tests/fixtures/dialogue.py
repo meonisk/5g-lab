@@ -1,5 +1,7 @@
 """Синтетический диалог RU/EN для verify_interpreter.py: два WAV и manifest.
 
+phrase_wavs() — отдельные русские фразы тем же голосом для профилирования.
+
 На хосте скрипт запускает сам себя в образе lab-voice-agent (там Piper и голоса
 с закреплёнными SHA-256); результат пишется в local/private/interpreter.
 """
@@ -122,18 +124,29 @@ def render(design_path, output_path):
     )
 
 
-def generate():
-    """На хосте: синтез без сети, файлы принадлежат текущему пользователю."""
-    OUTPUT.mkdir(parents=True, exist_ok=True)
+def render_phrases(texts_path, output_path):
+    """Выполняется внутри lab-voice-agent: p1.wav, p2.wav... — по фразе, 0,5 с тишины по краям."""
+    texts = json.loads(texts_path.read_text(encoding="utf-8"))
+    model = load_voice("PIPER")
+    scale = float(os.environ["PIPER_LENGTH_SCALE"])
+    for number, text in enumerate(texts, 1):
+        with wave.open(str(output_path / f"p{number}.wav"), "wb") as destination:
+            destination.setparams((1, SAMPLE_WIDTH, SAMPLE_RATE, 0, "NONE", "not compressed"))
+            destination.writeframes(silence(500) + speech_bytes(model, text, scale) + silence(500))
+
+
+def run_inside(source, output, mode):
+    """На хосте: синтез в образе Voice Agent без сети, файлы принадлежат текущему пользователю."""
+    output.mkdir(parents=True, exist_ok=True)
     command = ["docker", "run", "--rm", "--network", "none", "--cpus", "1", "--memory", "512m"]
     command += ["--user", f"{os.getuid()}:{os.getgid()}"]
     command += ["--env-file", str(ROOT / "app/config/lab.env")]
-    for source, target, mode in (
-        (DESIGN, "/fixture/design.json", ",readonly"),
-        (OUTPUT, "/fixture/output", ""),
+    for path, target, readonly in (
+        (source, "/fixture/design.json", ",readonly"),
+        (output, "/fixture/output", ""),
         (HERE, "/fixture/dialogue.py", ",readonly"),
     ):
-        command += ["--mount", f"type=bind,src={source},dst={target}{mode}"]
+        command += ["--mount", f"type=bind,src={path},dst={target}{readonly}"]
     # CPU-режимы собирают тот же Voice Agent под другим именем образа.
     images = ("lab-voice-agent", "lab-voice-agent-cpu")
     image = next(
@@ -146,8 +159,20 @@ def generate():
         ),
         images[0],
     )
-    command += ["--entrypoint", "python", image, "/fixture/dialogue.py", "--inside"]
-    subprocess.run(command, check=True)
+    command += ["--entrypoint", "python", image, "/fixture/dialogue.py", mode]
+    subprocess.run(command, check=True, timeout=600)
+
+
+def generate():
+    run_inside(DESIGN, OUTPUT, "--inside")
+
+
+def phrase_wavs(texts, folder):
+    """Русские фразы голосом Piper (как реплики диалога): WAV PCM16 8 кГц folder/p1.wav..."""
+    source = Path(folder) / "phrases.json"
+    source.write_text(json.dumps(list(texts), ensure_ascii=False), encoding="utf-8")
+    run_inside(source, Path(folder), "--phrases")
+    return [Path(folder) / f"p{number}.wav" for number in range(1, len(texts) + 1)]
 
 
 def verified_fixture():
@@ -172,5 +197,7 @@ def verified_fixture():
 if __name__ == "__main__":
     if sys.argv[1:] == ["--inside"]:
         render(Path("/fixture/design.json"), Path("/fixture/output"))
+    elif sys.argv[1:] == ["--phrases"]:
+        render_phrases(Path("/fixture/design.json"), Path("/fixture/output"))
     else:
         print(json.dumps(verified_fixture()["tracks"], indent=2))

@@ -6,7 +6,7 @@
 Состояние rfsim задаёт scripts/profile.sh (S1, S3 — без него; S2, S4, S5 — с ним).
 S3 — SIPUE1 из сети ядра на 1003, S4 — UE1 через 5G на 1003 (как bench_5g.py), S5 —
 UE1 -> UE2 через translate B2BUA и одновременно SIPUE1 на 1003. Фраза одна и та же:
-ue5g.PHRASE голосом тестовых клиентов и 20 с тишины. Результат — DIR/scenarios/S?.json;
+ue5g.PHRASE голосом Piper (как в тесте диалога) и 20 с тишины. Результат — DIR/scenarios/S?.json;
 последняя строка — SCENARIO S?: DONE или STEP SKIP: причина.
 """
 
@@ -21,11 +21,16 @@ import wave
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "scripts/lib"), str(ROOT / "scripts"), str(ROOT / "scripts/profile")]
+sys.path[:0] = [
+    str(ROOT / "scripts/lib"),
+    str(ROOT / "scripts"),
+    str(ROOT / "scripts/profile"),
+    str(ROOT / "app/tests/fixtures"),
+]
 from cpu_sampler import Sampler  # noqa: E402
+from dialogue import phrase_wavs  # noqa: E402
 from latency import conference_ports, stage_row, vad_wait_ms  # noqa: E402
 from provision import LAB_ENV, read_env  # noqa: E402
-from sweep import espeak  # noqa: E402
 from ue5g import (  # noqa: E402
     PHRASE,
     Client,
@@ -70,7 +75,8 @@ def logs(container, since=None):
 
 def phrase_wav(folder, settings):
     """Фраза и 20 с тишины в /fixtures клиента SIPUE (тот же звук, что у UE в jail)."""
-    source = espeak(folder, "phrase.wav", PHRASE, settings)
+    del settings
+    source = phrase_wavs([PHRASE], folder)[0]
     with wave.open(str(source), "rb") as raw:
         params, audio = raw.getparams(), raw.readframes(raw.getnframes())
     padded = folder / PLAYBACK

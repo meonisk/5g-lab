@@ -9,6 +9,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import wave
 from pathlib import Path
@@ -16,6 +17,9 @@ from pathlib import Path
 from latency import conference_ports
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(ROOT / "app/tests/fixtures"))
+from dialogue import phrase_wavs  # noqa: E402
+
 WORK = ROOT / "local/rfsim"
 JAIL = WORK / "pjsua-root"
 PHRASE = "Добрый день. Как у вас дела?"
@@ -76,11 +80,13 @@ def prepare_jail():
 
 
 def prepare_phrase(settings):
-    """Фраза и 20 с тишины: плеер играет по кругу, агенту нужна пауза для ответа."""
-    voice, rate = settings["TTS_VOICE"], settings["TTS_RATE"]
-    sh("sudo", "chroot", str(JAIL), "espeak-ng", "-v", voice, "-s", rate, "-w",
-       "/tmp/bench.wav", PHRASE)  # fmt: skip
-    with wave.open(str(JAIL / "tmp/bench.wav"), "rb") as source:
+    """Фраза голосом Piper и 20 с тишины: плеер играет по кругу, агенту нужна пауза.
+
+    Не espeak-ng тестовых клиентов: его Whisper распознаёт плохо и долго, задержка STT
+    в замере была бы не та, что на живой речи. settings — для совместимости вызовов.
+    """
+    del settings
+    with wave.open(str(phrase_wavs([PHRASE], WORK / "phrase")[0]), "rb") as source:
         params, audio = source.getparams(), source.readframes(source.getnframes())
     padded = WORK / "bench-pause.wav"
     with wave.open(str(padded), "wb") as target:
