@@ -18,7 +18,8 @@ from . import runtime
 from .audio import backend_for, synthesize
 from .media import begin_playback, elapsed_ms, finish_playback, send_rtp_frames
 
-CATCH_UP_REASONS = {"llm_reply"}
+# Переводы и ответы AI: каждый раз синтезируются заново (не из кэша) и могут ускоряться.
+LIVE_REASONS = {"llm_reply"}
 
 
 @dataclass
@@ -37,8 +38,9 @@ def prepare_audio(text, reason, voice, reply_id=None, catch_up=False):
     if voice not in runtime.allowed_tts_voices:
         return None
     started_ns = time.perf_counter_ns()
-    factor = runtime.catchup_length_factor if catch_up and reason in CATCH_UP_REASONS else 1.0
-    payload = synthesize(text, voice, factor)
+    live = reason in LIVE_REASONS
+    factor = runtime.catchup_length_factor if catch_up and live else 1.0
+    payload = synthesize(text, voice, factor, keep=not live)
     return PreparedAudio(payload, reason, voice, reply_id, elapsed_ms(started_ns), factor,
                          started_ns)  # fmt: skip
 

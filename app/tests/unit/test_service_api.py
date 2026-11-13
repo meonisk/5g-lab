@@ -154,7 +154,8 @@ class ServiceApi(unittest.TestCase):
         runtime.calls["pipe-call"] = {"tts_active": False}
         runtime.reply_queues["pipe-call"] = pending
 
-        def synthesize(text, _voice, factor):
+        def synthesize(text, _voice, factor, keep):
+            self.assertFalse(keep, "перевод не должен браться из кэша озвучек")
             events.append(("synth", text, factor, time.monotonic()))
             return b"\xff" * 160
 
@@ -194,6 +195,22 @@ class ServiceApi(unittest.TestCase):
         with patch.object(playout, "synthesize", return_value=b"") as synthesize:
             playout.prepare_audio("hi", "greeting", runtime.tts_voice, None, catch_up=True)
         self.assertEqual(synthesize.call_args.args[2], 1.0)
+        self.assertTrue(synthesize.call_args.kwargs["keep"])
+
+    def test_translation_is_synthesized_every_time(self):
+        """Одинаковый перевод синтезируется заново, приветствие — один раз."""
+        from ims_voice import audio
+
+        calls = []
+
+        def render(text, voice, factor, raw_path):
+            calls.append(text)
+            Path(raw_path).write_bytes(b"\xff" * 8)
+
+        with patch.object(audio, "render", render):
+            for _ in range(2):
+                self.assertEqual(audio.synthesize("перевод", "ru", keep=False), b"\xff" * 8)
+        self.assertEqual(calls, ["перевод", "перевод"])
 
 
 if __name__ == "__main__":

@@ -32,8 +32,19 @@ def ulaw_rms(payload):
     return int(math.sqrt(sum(ulaw_sample(value) ** 2 for value in payload) / len(payload)))
 
 
-def synthesize(text, voice, length_factor=1.0):
-    """PCMU 8 кГц; length_factor < 1 — речь быстрее (только Piper)."""
+def synthesize(text, voice, length_factor=1.0, keep=True):
+    """PCMU 8 кГц; length_factor < 1 — речь быстрее (только Piper).
+
+    keep=True — неизменные фразы (приветствие, уведомление): звук хранится в /tmp и
+    повторно не синтезируется. Перевод и ответ (keep=False) синтезируются каждый раз:
+    задержка услуги — честная, и /tmp не растёт от текстов разговоров.
+    """
+    if not keep:
+        with tempfile.TemporaryDirectory() as folder:
+            raw_path = os.path.join(folder, "speech.ulaw")
+            render(text, voice, length_factor, raw_path)
+            with open(raw_path, "rb") as source:
+                return source.read()
     identity = (
         backend_for(voice),
         voice,
@@ -45,34 +56,38 @@ def synthesize(text, voice, length_factor=1.0):
     key = hashlib.sha256(repr(identity).encode()).hexdigest()[:16]
     raw_path = f"/tmp/{key}.ulaw"
     if not os.path.exists(raw_path):
-        with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
-            if backend_for(voice) == "piper":
-                from .neural_voice import synthesize_neural
-
-                synthesize_neural(text, voice, wav.name, length_factor)
-            else:
-                synthesize_espeak(text, voice, wav.name)
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-loglevel",
-                    "error",
-                    "-y",
-                    "-i",
-                    wav.name,
-                    "-ar",
-                    "8000",
-                    "-ac",
-                    "1",
-                    "-f",
-                    "mulaw",
-                    raw_path,
-                ],
-                check=True,
-                timeout=30,
-            )
+        render(text, voice, length_factor, raw_path)
     with open(raw_path, "rb") as source:
         return source.read()
+
+
+def render(text, voice, length_factor, raw_path):
+    with tempfile.NamedTemporaryFile(suffix=".wav") as wav:
+        if backend_for(voice) == "piper":
+            from .neural_voice import synthesize_neural
+
+            synthesize_neural(text, voice, wav.name, length_factor)
+        else:
+            synthesize_espeak(text, voice, wav.name)
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                wav.name,
+                "-ar",
+                "8000",
+                "-ac",
+                "1",
+                "-f",
+                "mulaw",
+                raw_path,
+            ],
+            check=True,
+            timeout=30,
+        )
 
 
 def synthesize_espeak(text, voice, destination):
