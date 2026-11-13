@@ -55,6 +55,9 @@ connect_playback() {
 in_worker() { docker exec lab-ai-worker sh -c "$1"; }
 
 echo "===== 1: SIPUE1 ($SIPUE1_LANGUAGE) -> SIPUE2 ($SIPUE2_LANGUAGE): translate + record ====="
+# WAV диалога создаёт dialogue.py (один раз, по сценарию из fixtures). Без этого
+# на чистом стенде клиенты не стартуют: «playback fixture is missing».
+check 'WAV диалога RU/EN готовы' python3 "$root/app/tests/fixtures/dialogue.py"
 export SIPUE1_PLAYBACK_FILE=$INTERPRETER_DIALOGUE_UE1_FILE
 export SIPUE2_PLAYBACK_FILE=$INTERPRETER_DIALOGUE_UE2_FILE SIPUE_AUTO_CONFERENCE=0
 check 'тестовые клиенты зарегистрированы (WAV диалога)' fresh_clients

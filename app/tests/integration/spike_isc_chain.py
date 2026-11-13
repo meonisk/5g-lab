@@ -81,8 +81,7 @@ def install():
     xml = spike_ifc(provision.read_env())
     result = subprocess.run(
         ["docker", "exec", "-i", "lab-pyhss", "sh", "-c", 'cat > "$1"', "_", f"/pyhss/{SPIKE_IFC}"],
-        input=xml,
-        text=True,
+        input=xml.encode("utf-8"),
         capture_output=True,
         timeout=20,
         check=False,

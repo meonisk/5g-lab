@@ -145,11 +145,13 @@ class Provisioning(unittest.TestCase):
     def test_install_writes_next_to_default_template(self):
         with patch.object(provision.subprocess, "run") as run:
             run.return_value.returncode = 0
-            self.assertEqual(provision.install_ifc("UE1", "<xml/>"), "ifc-UE1.xml")
+            self.assertEqual(provision.install_ifc("UE1", "<!-- услуги --><xml/>"), "ifc-UE1.xml")
         command = run.call_args.args[0]
         self.assertEqual(command[:4], ["docker", "exec", "-i", "lab-pyhss"])
         self.assertEqual(command[-1], "/pyhss/ifc-UE1.xml")
-        self.assertEqual(run.call_args.kwargs["input"], "<xml/>")
+        # Байты UTF-8 при любой кодировке ОС: cp1251 ломал SAR в PyHSS.
+        self.assertEqual(run.call_args.kwargs["input"], "<!-- услуги --><xml/>".encode("utf-8"))
+        self.assertNotIn("text", run.call_args.kwargs)
 
     def test_dns_names_point_to_sip_as(self):
         conf = (ROOT / "app/infrastructure/configs/dns/ims-dnsmasq.conf").read_text(

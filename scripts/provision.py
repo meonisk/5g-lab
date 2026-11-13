@@ -140,8 +140,9 @@ def install_ifc(name, xml):
     path = f"/pyhss/ifc-{name}.xml"
     result = subprocess.run(
         ["docker", "exec", "-i", "lab-pyhss", "sh", "-c", 'cat > "$1"', "_", path],
-        input=xml,
-        text=True,
+        # XML объявлен UTF-8; без явной кодировки Windows пишет cp1251, и PyHSS
+        # падает на SAR (UnicodeDecodeError) — регистрация получает 408.
+        input=xml.encode("utf-8"),
         capture_output=True,
         timeout=20,
         check=False,
