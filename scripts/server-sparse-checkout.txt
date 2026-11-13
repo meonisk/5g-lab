@@ -1,0 +1,5 @@
+/app/
+/scripts/
+/docker-compose.yml
+/.gitattributes
+/.gitignore

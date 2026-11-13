@@ -24,7 +24,7 @@
   `voice-agent/` и общая HTTP-обвязка `lab_common/`.
 - `app/tests/unit/` — быстрые проверки без Docker; `app/tests/integration/` — проверки
   работающего стенда; `app/tests/fixtures/` — синтетический диалог для теста перевода.
-- `scripts/` — тринадцать файлов, `lib/` (общий код `verify-all.sh`, `profile.sh` и
+- `scripts/` — четырнадцать файлов, `lib/` (общий код `verify-all.sh`, `profile.sh` и
   `bench_5g.py`) и `profile/` (модули `profile.sh`), описаны ниже.
 - `docs/` — описание правок ядра партнёра (`partner-core.md`), отчёт о подключении к ядру партнёра (`partner-integration.md`), три туториала стенда, два туториала проверки через 5G, схема `ims-ai.svg`
   и эта карта.
@@ -58,6 +58,9 @@
 - `check.py` — offline-проверки перед коммитом.
 - `rfsim.sh` — gNB и два UE OAI в RF Simulator для проверки через 5G (`up`, `down`, `status`).
 - `dns-ims-run.sh`, `sip-ue-run.sh` — entrypoint контейнеров DNS и PJSUA.
+- `server-sparse-checkout.txt` — что выкладывать на сервер стенда: код, конфиги, тесты и
+  скрипты; документация остаётся в git. Один раз на сервере:
+  `git sparse-checkout set --no-cone --stdin < scripts/server-sparse-checkout.txt`.
 
 ## Где менять поведение AI
 
