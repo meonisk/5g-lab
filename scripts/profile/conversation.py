@@ -259,6 +259,9 @@ def markdown(report):
         row("озвучено полностью / прервано", lambda x: f"{x['voiced']} / {x['interrupted']}"),
         row("точность распознавания", lambda x: f"{x['accuracy']:.0%}"),
         row("задержка, медиана / макс, мс", lambda x: span(x["lag_ms"])),
+        row("из них медианы: пауза / STT / перевод / синтез, мс",
+            lambda x: " / ".join(cell(x["stages_ms"][k]) for k in
+                                 ("pause", "stt", "translation", "synthesis"))),
         row(f"фраз не дольше {TARGET_MS} мс", lambda x: f"{x['within_target']} из "
                                                     f"{len(x['lag_by_phrase_ms'])}"),
         row("рост задержки к концу, мс", lambda x: x["lag_growth_ms"]),
@@ -276,6 +279,9 @@ def markdown(report):
 def talk(path, settings, timeline):
     """Звонок с переводом, оба собеседника говорят, затем отбой: (ноги, озвучки, фразы)."""
     tts = {}
+    # Voice Agent хранит готовые озвучки по тексту: повторный прогон с теми же переводами
+    # показал бы синтез 0 мс. Замер — как у нового разговора.
+    sh("docker", "exec", "lab-voice-agent", "sh", "-c", "rm -f /tmp/*.ulaw", check=False)
     path.start()
     started = time.time()
     path.dial()

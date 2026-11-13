@@ -45,6 +45,14 @@ class ConversationLog(unittest.TestCase):
         self.assertEqual(data["tail_s"], 3.3)
         self.assertEqual(log.problems({"ru→en": data}, 0.7), [])
 
+    def test_stages_explain_the_lag(self):
+        data = log.direction_metrics([phrase(llm_processing_ms=120)], TTS, SENTENCES)
+        self.assertEqual(
+            data["stages_ms"], {"pause": 600, "stt": 800, "translation": 120, "synthesis": 300}
+        )
+        missing = log.direction_metrics([phrase(reply_id=None)], TTS, SENTENCES)
+        self.assertEqual(set(missing["stages_ms"].values()), {None})
+
     def test_untranslated_and_interrupted_are_problems(self):
         interrupted = {"r1": {**TTS["r1"], "event": "tts_interrupted"}}
         data = log.direction_metrics([phrase(), phrase(reply_id=None, translation=None)],

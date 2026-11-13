@@ -74,7 +74,28 @@ def direction_metrics(phrases, tts, sentences):
         "tail_s": round(max(ends) - speech_end, 1) if ends else None,
         "reply_audio_s": round(sum(t.get("rtp_playout_ms", 0) for _, t in pairs) / 1000, 1),
         "queue_wait_max_ms": round(max((p.get("queue_wait_ms") or 0 for p in phrases), default=0)),
+        "stages_ms": stages(heard),
     }
+
+
+def stages(heard):
+    """Медианы этапов по озвученным фразам: из чего складывается задержка."""
+
+    def pause(p):
+        ready, last = p.get("sentence_ready_at"), p.get("last_voice_packet_at")
+        return (ready - last) * 1000 if ready and last else None
+
+    picks = {
+        "pause": lambda p, t: pause(p),
+        "stt": lambda p, t: p.get("stt_processing_ms"),
+        "translation": lambda p, t: p.get("llm_processing_ms"),
+        "synthesis": lambda p, t: t.get("synthesis_ms"),
+    }
+    medians = {}
+    for name, pick in picks.items():
+        found = summary([pick(p, t) for p, t in heard])
+        medians[name] = round(found["median"]) if found else None
+    return medians
 
 
 def problems(directions, min_accuracy):
