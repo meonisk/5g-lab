@@ -1,6 +1,7 @@
 """AI Worker: запись обеих ног перевода в одну сессию и режим record (как у 1004)."""
 
 import hashlib
+import json
 import os
 import sys
 import tempfile
@@ -30,6 +31,8 @@ class Recording(unittest.TestCase):
             from ims_ai import (
                 api,
                 lifecycle,
+                recording,
+                replies,
                 runtime,
                 segmentation,
                 settings,
@@ -38,7 +41,7 @@ class Recording(unittest.TestCase):
             )
         cls.lifecycle, cls.runtime, cls.settings = lifecycle, runtime, settings
         cls.segmentation, cls.transcription = segmentation, transcription
-        cls.utterances = utterances
+        cls.utterances, cls.recording, cls.replies = utterances, recording, replies
         cls.client = api.api.test_client()
         cls.headers = {"Authorization": f"Bearer {runtime.control_token}"}
 
@@ -140,6 +143,32 @@ class Recording(unittest.TestCase):
         self.assertTrue(self.segmentation.is_dialogue_mode("record"))
         self.assertIn("record", self.lifecycle.FINALIZED_RECORDING_MODES)
         self.assertIsNone(self.utterances.requested_language("record"))
+
+    def test_turn_timeline_keeps_texts_and_times(self):
+        self.register_pair()
+        event = {"call_ids": ["leg-a"], "source_stream_id": "s1"}
+        result = {"service_mode": "interpret_ru", "audio_duration_seconds": 0.02,
+                  "audio_sha256": "0" * 64, "detected_language": "ru",
+                  "last_voice_packet_at": 10.5, "reply_id": "r1"}  # fmt: skip
+        self.transcription.record_transcript(b"\xff" * 160, event, result, "Привет", "ru")
+        self.recording.save_turn_timeline(result, "Привет", "Hello")
+        path = self.session_dir("leg-a") / "timeline.jsonl"
+        line = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual((line["transcript"], line["translation"]), ("Привет", "Hello"))
+        self.assertEqual((line["last_voice_packet_at"], line["reply_id"]), (10.5, "r1"))
+        self.assertEqual(line["recording_turn"], 1)
+
+    def test_turn_timeline_only_for_recorded_calls(self):
+        self.recording.save_turn_timeline({"service_mode": "interpret_ru"}, "Привет", "Hello")
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_interpreter_is_not_cut_after_agent_reply_limit(self):
+        self.runtime.reply_counts["leg-a"] = self.settings.max_replies_per_call
+        self.addCleanup(self.runtime.reply_counts.clear)
+        self.assertFalse(self.replies.may_reply("leg-a", "Привет", "translate"))
+        self.assertTrue(self.replies.may_reply("leg-a", "Привет", "interpret_ru"))
+        self.runtime.reply_counts["leg-a"] = self.settings.interpreter_max_replies
+        self.assertFalse(self.replies.may_reply("leg-a", "Привет", "interpret_ru"))
 
     def test_transcribe_still_records_caller(self):
         self.turn("t-1", "transcribe", "Привет", "ru")

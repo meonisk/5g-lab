@@ -13,6 +13,7 @@ from .audio import decode_audio
 from .interpretation import source_language
 from .llm import cyrillic_chars
 from .maintenance import expire_events
+from .recording import save_turn_timeline
 from .replies import reply_to_utterance
 from .transcription import record_transcript
 
@@ -200,13 +201,15 @@ def process_utterance(
         recognition.transcript,
         recognition.detected_language,
     )
-    reply_to_utterance(
+    translation = reply_to_utterance(
         event,
         result,
         recognition.transcript,
         queued_at,
     )
     store_completed_result(result, ai_started_at, queued_at)
+    with runtime.recording_lock:
+        save_turn_timeline(result, recognition.transcript, translation)
 
     print(
         f"AI utterance_processed backend={result['backend_id']} "

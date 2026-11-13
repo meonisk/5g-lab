@@ -19,6 +19,8 @@ buffer_max = int(os.environ["AI_STREAM_BUFFER_MAX"])
 buffer_ttl = int(os.environ["AI_STREAM_BUFFER_TTL_SECONDS"])
 
 max_replies_per_call = int(os.environ["AI_MAX_REPLIES_PER_CALL"])
+# Перевод — по фразе на каждую реплику абонента: предел только от зацикливания.
+interpreter_max_replies = int(os.environ["AI_INTERPRETER_MAX_REPLIES_PER_CALL"])
 
 history_turns = int(os.environ["AI_CONVERSATION_HISTORY_TURNS"])
 

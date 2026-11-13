@@ -1,6 +1,7 @@
 """Синтетический диалог RU/EN для verify_interpreter.py: два WAV и manifest.
 
-phrase_wavs() — отдельные русские фразы тем же голосом для профилирования.
+phrase_wavs() — отдельные русские фразы тем же голосом для профилирования;
+conversation_wavs() — длинный разговор в обычном темпе (scripts/profile/conversation.py).
 
 На хосте скрипт запускает сам себя в образе lab-voice-agent (там Piper и голоса
 с закреплёнными SHA-256); результат пишется в local/private/interpreter.
@@ -21,6 +22,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve()
 ROOT = HERE.parents[3] if len(HERE.parents) > 3 else HERE.parent
 DESIGN = ROOT / "app/tests/fixtures/interpreter-dialogue-v2.json"
+CONVERSATION = ROOT / "app/tests/fixtures/conversation-long-v1.json"
 OUTPUT = ROOT / "local/private/interpreter"
 SAMPLE_RATE = 8000
 SAMPLE_WIDTH = 2
@@ -135,6 +137,44 @@ def render_phrases(texts_path, output_path):
             destination.writeframes(silence(500) + speech_bytes(model, text, scale) + silence(500))
 
 
+def render_conversation(design_path, output_path):
+    """Выполняется внутри lab-voice-agent: общий таймлайн двух собеседников.
+
+    conversation-ue1.wav и conversation-ue2.wav одной длины: пока говорит один, у
+    другого тишина. timeline.json — начало и конец каждого предложения в мс от начала WAV.
+    """
+    design = json.loads(design_path.read_text(encoding="utf-8"))
+    per_ms = SAMPLE_RATE * SAMPLE_WIDTH // 1000
+    models, sentences = {}, []
+    tracks = {name: bytearray() for name in design["speakers"]}
+    cursor = design["leading_silence_ms"]
+    for turn in design["turns"]:
+        language = design["speakers"][turn["speaker"]]
+        prefix = "PIPER" if language.startswith("ru") else "PIPER_EN"
+        model = models.setdefault(prefix, load_voice(prefix))
+        scale = float(os.environ[f"{prefix}_LENGTH_SCALE"])
+        track = tracks[turn["speaker"]]
+        track.extend(silence(cursor - len(track) // per_ms))
+        for index, text in enumerate(turn["sentences"]):
+            if index:
+                track.extend(silence(design["sentence_pause_ms"]))
+            start = len(track) // per_ms
+            track.extend(speech_bytes(model, text, scale))
+            sentences.append({"speaker": turn["speaker"], "language": language, "text": text,
+                              "start_ms": start, "end_ms": len(track) // per_ms})  # fmt: skip
+        cursor = len(track) // per_ms + design["turn_gap_ms"]
+    duration = cursor - design["turn_gap_ms"] + design["trailing_silence_ms"]
+    for name, track in tracks.items():
+        track.extend(silence(duration - len(track) // per_ms))
+        with wave.open(str(output_path / f"conversation-{name}.wav"), "wb") as destination:
+            destination.setparams((1, SAMPLE_WIDTH, SAMPLE_RATE, 0, "NONE", "not compressed"))
+            destination.writeframes(bytes(track))
+    timeline = {"fixture_id": design["fixture_id"], "duration_ms": duration, "sentences": sentences}
+    (output_path / "timeline.json").write_text(
+        json.dumps(timeline, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
 def run_inside(source, output, mode):
     """На хосте: синтез в образе Voice Agent без сети, файлы принадлежат текущему пользователю."""
     output.mkdir(parents=True, exist_ok=True)
@@ -177,6 +217,13 @@ def phrase_wavs(texts, folder):
     return [folder / f"p{number}.wav" for number in range(1, len(texts) + 1)]
 
 
+def conversation_wavs(folder):
+    """Длинный разговор голосами Piper в folder: два WAV и timeline.json (его и возвращает)."""
+    folder = Path(folder).resolve()
+    run_inside(CONVERSATION, folder, "--conversation")
+    return json.loads((folder / "timeline.json").read_text(encoding="utf-8"))
+
+
 def verified_fixture():
     """Возвращает manifest, создавая WAV при первом запуске или смене сценария."""
     design = json.loads(DESIGN.read_text(encoding="utf-8"))
@@ -201,5 +248,7 @@ if __name__ == "__main__":
         render(Path("/fixture/design.json"), Path("/fixture/output"))
     elif sys.argv[1:] == ["--phrases"]:
         render_phrases(Path("/fixture/design.json"), Path("/fixture/output"))
+    elif sys.argv[1:] == ["--conversation"]:
+        render_conversation(Path("/fixture/design.json"), Path("/fixture/output"))
     else:
         print(json.dumps(verified_fixture()["tracks"], indent=2))

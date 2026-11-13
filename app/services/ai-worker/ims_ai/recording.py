@@ -90,6 +90,29 @@ def save_recording_turn(call_id, pcm8, transcript, result, speaker):
     }
 
 
+TIMELINE_FIELDS = (
+    "recording_turn", "call_ids", "service_mode", "utterance_end_reason",
+    "audio_duration_seconds", "first_voice_packet_at", "last_voice_packet_at",
+    "sentence_ready_at", "ai_started_at", "queue_wait_ms", "stt_processing_ms",
+    "llm_processing_ms", "processed_at", "reply_id", "reply_delivered", "detected_language",
+)  # fmt: skip
+
+
+def save_turn_timeline(result, transcript, translation):
+    """Ход фразы в записи звонка: метки времени, распознанный текст и перевод.
+
+    Только для звонков с записью (услуга record): текст лежит рядом с transcript.txt в
+    приватном каталоге записи, в журналы и /events не попадает.
+    """
+    if not result.get("recording_saved"):
+        return
+    line = {key: result.get(key) for key in TIMELINE_FIELDS}
+    line.update(transcript=transcript, translation=translation)
+    path = settings.recording_root / result["recording_session_id"] / "timeline.jsonl"
+    with path.open("a", encoding="utf-8") as target:
+        target.write(json.dumps(line, ensure_ascii=False) + "\n")
+
+
 def add_recording_legs(session_call_id, legs):
     """Ноги одного звонка пишутся в одну запись; закрыть её можно после последней ноги."""
     runtime.record_sessions.setdefault(session_call_id, set()).update(cid for cid, _ in legs)

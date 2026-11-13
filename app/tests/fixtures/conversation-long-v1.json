@@ -1,0 +1,43 @@
+{
+  "fixture_id": "conversation-long-v1",
+  "purpose": "Long RU/EN conversation at a natural pace for scripts/profile/conversation.py: short pauses between sentences, the answer starts soon after the other side stops.",
+  "speakers": {"ue1": "ru-RU", "ue2": "en-US"},
+  "leading_silence_ms": 2000,
+  "sentence_pause_ms": 350,
+  "turn_gap_ms": 1500,
+  "trailing_silence_ms": 5000,
+  "turns": [
+    {"speaker": "ue1", "sentences": [
+      "Добрый день, Эмили, спасибо, что нашли время поговорить сегодня.",
+      "Я хочу коротко рассказать, как прошла наша проверка на прошлой неделе.",
+      "Мы подключили два телефона, и звонки шли без обрывов почти три часа.",
+      "Главная проблема пока в задержке перевода, особенно когда сервер загружен."
+    ]},
+    {"speaker": "ue2", "sentences": [
+      "Good afternoon, Alex, thank you for the update.",
+      "Three hours without dropped calls is a very good result.",
+      "How long is the delay right now, and do people notice it in a normal conversation?"
+    ]},
+    {"speaker": "ue1", "sentences": [
+      "Сейчас перевод звучит примерно через две секунды после конца фразы.",
+      "В обычном разговоре это заметно, но говорить можно спокойно.",
+      "Хуже становится, когда человек говорит долго и почти без пауз.",
+      "Тогда фразы склеиваются, и перевод приходит большими кусками."
+    ]},
+    {"speaker": "ue2", "sentences": [
+      "I see, so the pauses between sentences matter a lot.",
+      "Could we split long speech into shorter pieces without cutting words in half?",
+      "That would make the conversation feel much more natural."
+    ]},
+    {"speaker": "ue1", "sentences": [
+      "Да, именно это мы и хотим проверить сегодня на длинном тексте.",
+      "Я буду говорить в обычном темпе, как на настоящей встрече.",
+      "После разговора мы сравним распознанный текст с исходным и посчитаем, сколько слов потерялось.",
+      "Если всё пройдёт хорошо, на следующей неделе подключим настоящий телефон."
+    ]},
+    {"speaker": "ue2", "sentences": [
+      "Sounds like a good plan.",
+      "Please send me the report after the test, and let us talk again on Friday."
+    ]}
+  ]
+}

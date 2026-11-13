@@ -144,7 +144,8 @@
 | `VOICE_AGENT_REPLY_QUEUE_MAX` | 16 | очередь озвучки на один звонок |
 | `AI_PROCESSING_WORKERS` (режим) | 1 в compact | сколько фраз распознаётся одновременно |
 | `AI_QUEUE_MAX`, `AI_UTTERANCE_QUEUE_MAX` | 8, 8 | размер очередей; лишнее отбрасывается |
-| `AI_MAX_REPLIES_PER_CALL`, `AI_CONVERSATION_*` | 4, 4, 300 | ответы и история разговора для языковой модели |
+| `AI_MAX_REPLIES_PER_CALL`, `AI_CONVERSATION_*` | 4, 4, 300 | ответы агента 1003 за звонок и история разговора для языковой модели |
+| `AI_INTERPRETER_MAX_REPLIES_PER_CALL` | 2000 | переводов за звонок (1005/1006, услуга translate); предел только от зацикливания |
 | `AI_*_RETENTION*`, `AI_EVENT_RETENTION` | числа | сколько хранить события в памяти для тестов и замеров |
 | `MEDIA_OBSERVE_INTERVAL_SECONDS` | 0.1 | звук идёт в AI кусками по 100 мс |
 | `MEDIA_SESSION_TTL_SECONDS` | 120 | забыть звонок, если от него долго нет звука |

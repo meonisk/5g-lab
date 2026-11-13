@@ -35,8 +35,10 @@ def may_reply(call_id: str | None, transcript: str, service_mode: str) -> bool:
 
     delivered_replies = runtime.reply_counts.get(call_id, 0)
     limit = settings.max_replies_per_call
-    if settings.streaming_enabled and service_mode in INTERPRETER_MODES:
-        limit = settings.stream_max_replies
+    if service_mode in INTERPRETER_MODES:
+        limit = settings.interpreter_max_replies
+        if settings.streaming_enabled:
+            limit = settings.stream_max_replies
     return delivered_replies < limit
 
 
@@ -148,12 +150,15 @@ def reply_to_utterance(
     result: dict,
     transcript: str,
     queued_at: float,
-) -> None:
-    """Выполнить LLM и TTS-часть конвейера для одной распознанной реплики."""
+) -> str | None:
+    """Выполнить LLM и TTS-часть конвейера для одной распознанной реплики.
+
+    Возвращает отправленный в озвучку текст (для записи звонка) или None.
+    """
     service_mode = result["service_mode"]
     call_id = single_call_id(event)
     if not may_reply(call_id, transcript, service_mode):
-        return
+        return None
 
     call_ids = event.get("call_ids") or []
 
@@ -165,7 +170,7 @@ def reply_to_utterance(
             reply_latin_chars,
         ) = generate_validated_reply(call_id, transcript, service_mode)
         if not reply:
-            return
+            return None
 
         reply_voice = output_voice(service_mode)
         destination_call_id = delivery_call(call_id, service_mode)
@@ -197,6 +202,7 @@ def reply_to_utterance(
             f"llm_ms={llm_processing_ms:.3f} calls={call_ids}",
             flush=True,
         )
+        return reply
     except Exception as error:
         # Ошибка ответа не должна терять STT-метрики уже обработанной реплики.
         result.update(
