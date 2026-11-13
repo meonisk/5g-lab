@@ -1,13 +1,13 @@
 # Local STT model provenance
 
 Дополнительные CPU-профили используют OPUS-MT int8 и закреплённые Whisper
-base/tiny: [режимы AI](../../../docs/guide-2-ims-ai.md#4-режимы-ai).
+base/tiny: [режимы AI](../../../docs/1-install.md#шаг-3-запустить).
 Параметры — `app/config/ai-profiles.json`; это отдельные экспериментальные условия.
 
 The current translation profile uses Unsloth Qwen3-4B-Instruct-2507 Q4_K_M
 through Ollama. `app/config/lab.env` pins the GGUF URL/revision and full SHA-256;
 the model initializer verifies the file before importing the configured tag.
-See [AI settings](../../../docs/guide-2-ims-ai.md#7-настройка-ai) for GPU and alternatives.
+See [AI settings](../../../docs/1-install.md#настройка-ai) for GPU and alternatives.
 Older Qwen2.5 experiments are historical and do not define the default profile.
 
 - Backend package: `faster-whisper==1.2.1`
@@ -19,7 +19,7 @@ Older Qwen2.5 experiments are historical and do not define the default profile.
   bounded PCMU utterances are resampled from 8 kHz to 16 kHz in memory
 - Storage: `ai-model-cache` Docker volume mounted at `AI_MODEL_CACHE`
 - Optional CUDA STT is a separate execution profile; see
-  [AI settings](../../../docs/guide-2-ims-ai.md#7-настройка-ai)
+  [AI settings](../../../docs/1-install.md#настройка-ai)
 
 The revision is fixed in `app/config/lab.env` and passed to the model downloader. The
 complete Python dependency set is fixed in `requirements.txt`. A different

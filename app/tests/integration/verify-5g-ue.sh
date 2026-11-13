@@ -184,7 +184,7 @@ for n in 1 2; do
     # Вызовы при этом идут (rport), но контакт живёт только пока жива NAT-запись.
     if grep -q "Contact: <sip:${!imsi_name}@${UPF_IP}:" "$(log_of "$n")"; then
         echo "  ПРИЧИНА: UPF ядра делает NAT трафика UE в IMS (контакт @$UPF_IP)."
-        echo "  Нужен NAT только в интернет — docs/guide-1-ims-core.md, шаг 2 (enable_snat: no)."
+        echo "  Нужен NAT только в интернет — docs/1-install.md, шаг 1 (enable_snat: no)."
     fi
 done
 

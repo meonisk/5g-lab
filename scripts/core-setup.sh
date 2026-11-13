@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Настройка ядра OAI партнёра под наш IMS — то, что описано в docs/partner-core.md.
+# Настройка ядра OAI партнёра под наш IMS — описано в docs/1-install.md, шаг 1.
 #   scripts/core-setup.sh check    # только показать текущее состояние, ничего не менять
 #   scripts/core-setup.sh apply    # привести ядро к нужному виду (повтор безопасен)
 #   scripts/core-setup.sh revert   # вернуть файлы ядра из резервных копий *.bak-ims

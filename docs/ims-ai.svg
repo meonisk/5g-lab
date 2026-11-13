@@ -23,11 +23,11 @@
   <text x="90" y="340" text-anchor="middle" class="t">Телефон (UE)</text>
   <text x="90" y="358" text-anchor="middle" class="d">через gNB партнёра</text>
   <text x="90" y="376" text-anchor="middle" class="c">PDU-сессия ims</text>
-  <text x="90" y="394" text-anchor="middle" class="c">12.1.1.x</text>
+  <text x="90" y="394" text-anchor="middle" class="c">10.0.9.x</text>
 
   <!-- Core network oai-cn5g -->
   <path d="M 194 50 H 1406 Q 1420 50 1420 64 V 226 Q 1420 240 1406 240 H 1060 V 906 Q 1060 920 1046 920 H 194 Q 180 920 180 906 V 64 Q 180 50 194 50 Z" fill="#eef4fb" stroke="#4a78b5" stroke-width="2"/>
-  <text x="200" y="895" class="net" fill="#2c5591">Docker-сеть ядра «oai-cn5g» (bridge, CORE_NETWORK_NAME)</text>
+  <text x="200" y="895" class="net" fill="#2c5591">Docker-сеть ядра «oai-cn5g-public-net» (bridge, CORE_NETWORK_NAME)</text>
   <text x="200" y="912" class="netsub" fill="#2c5591">подсеть 192.168.70.128/26 · у каждого контейнера один интерфейс eth0 в этой сети</text>
 
   <!-- Partner core -->
@@ -42,7 +42,7 @@
   <text x="283" y="322" text-anchor="middle" class="t">UPF</text>
   <text x="283" y="340" text-anchor="middle" class="c">192.168.70.134</text>
   <text x="283" y="358" text-anchor="middle" class="d">tun0: пул UE</text>
-  <text x="283" y="375" text-anchor="middle" class="c">12.1.1.0/24</text>
+  <text x="283" y="375" text-anchor="middle" class="c">10.0.9.0/24</text>
   <text x="283" y="392" text-anchor="middle" class="d">N6 без NAT</text>
 
   <!-- Signalling column -->
@@ -134,7 +134,7 @@
   <rect x="950" y="700" width="200" height="95" rx="6" fill="#fff" stroke="#111" stroke-width="2"/>
   <text x="1050" y="721" text-anchor="middle" class="t">AI Worker (STT+перевод)</text>
   <text x="1050" y="739" text-anchor="middle" class="c">lab-ai-worker</text>
-  <text x="1050" y="757" text-anchor="middle" class="c">oai-cn5g: .168 :8092</text>
+  <text x="1050" y="757" text-anchor="middle" class="c">.168 :8092</text>
   <text x="1050" y="775" text-anchor="middle" class="c">lab-ai-backend: IP Docker</text>
 
   <!-- One-shot containers: model loader in the core network, stand-init without network -->

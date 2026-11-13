@@ -2,7 +2,7 @@
 
 All commands and paths are relative to the repository root. Linux only.
 
-- Read `CONTRIBUTING.md` and `docs/project-layout.md` before structural changes.
+- Read `docs/4-development.md` before structural changes.
 - Keep owned source/config files at most 300 logical lines. Blank lines and
   comments do not count; a visually wrapped Python statement counts once.
 - Use blank lines to separate processing stages. Comment intent, protocol

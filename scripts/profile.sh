@@ -2,8 +2,7 @@
 # Профилирование стенда одной командой: CPU узлов и задержка перевода по этапам в
 # сценариях S1–S5, перебор настроек AI (модель Whisper, потоки STT, потоковый режим,
 # пауза конца фразы) и итог — что нужно для «конец фразы -> перевод» ≤ 2 с при rfsim.
-# Дизайн — docs/superpowers/specs/2026-11-12-profiling-design.md, чтение отчёта —
-# docs/guide-5-5g-scripts.md. Стенд IMS + AI должен быть запущен (scripts/start.py).
+# Как читать отчёт — docs/3-5g-and-profiling.md. Стенд IMS + AI должен быть запущен (scripts/start.py).
 #   scripts/profile.sh                    # 5 раундов, полный перебор
 #   scripts/profile.sh --quick            # меньше вариантов перебора, короче простой
 #   scripts/profile.sh --rounds 3 --no-sweep | --no-scenarios

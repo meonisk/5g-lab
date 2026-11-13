@@ -9,9 +9,9 @@
 | Конфигурации и скрипты IMS из docker_open5gs | [Происхождение](app/infrastructure/vendor/docker_open5gs/PROVENANCE.md), [лицензия](app/infrastructure/vendor/docker_open5gs/LICENSE) |
 | Распознавание речи и модель | [Происхождение модели](app/services/ai-worker/MODEL_PROVENANCE.md), зависимости и Dockerfile сервиса |
 | Kamailio IMS (патч S-CSCF) | [Происхождение](app/infrastructure/vendor/kamailio-ims/PROVENANCE.md), [лицензия](app/infrastructure/vendor/kamailio-ims/COPYING) |
-| Qwen GGUF | URL и SHA-256 в `app/config/lab.env`; [настройка AI](docs/guide-2-ims-ai.md#7-настройка-ai) |
+| Qwen GGUF | URL и SHA-256 в `app/config/lab.env`; [настройка AI](docs/1-install.md#настройка-ai) |
 | Helsinki-NLP OPUS-MT RU→EN / EN→RU и SentencePiece | Закреплённые ревизии, заявленные CC-BY-4.0 / Apache-2.0 и конверсия: `scripts/prepare_translation_models.py`; manifests создаются вместе с весами |
-| Piper и русские/английские голоса | Закреплённые загрузки в сборке Voice Agent и общей конфигурации; [настройка AI](docs/guide-2-ims-ai.md#7-настройка-ai) |
+| Piper и русские/английские голоса | Закреплённые загрузки в сборке Voice Agent и общей конфигурации; [настройка AI](docs/1-install.md#настройка-ai) |
 | PJSUA (pjproject 2.14.1) | Сборка из исходников в `app/infrastructure/images/pjsua/Dockerfile` |
 | Образы инфраструктуры и Python-библиотеки | `app/config/lab.env`, Dockerfile и `requirements*.txt` |
 | Дополнительные кодеки FFmpeg, OpenCORE AMR и VisualOn AMR-WB | Пакет Debian `libavcodec-extra59` и зависимости RTPengine; уведомления сохранены в `/usr/share/doc/` внутри образа |
