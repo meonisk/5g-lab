@@ -93,7 +93,8 @@ WAV уведомления). Media Adapter — `app/services/media-adapter/ims_m
 - `verify_interpreter.py` — 1005/1006: перевод в обе стороны и задержка.
 - `verify-isc-spike.sh` — spike ISC (`spike_isc_chain.py`) без ручных шагов: ISC-метка, затем
   fallback F1; `SPIKE DECISION: GO | GO-F1 | NO-GO`, восстановление стенда в `trap`.
-- `verify-services.sh` — услуги профиля: translate + record, `*номер`, обычный звонок, AS остановлен.
+- `verify-services.sh` — услуги профиля: translate + record, `*номер`, обычный звонок, AS остановлен
+  (отказ AS у звонящего и у вызываемого: временная term-iFC SIPUE2 из `term_ifc.py`).
 - `verify-security.sh` — изоляция и права контейнеров, токены, журналы.
 - `verify-5g-ue.sh` — абоненты UE через OAI rfsim (`scripts/rfsim.sh`): 1003, UE2↔UE1, 1004, перевод и запись UE1 → UE2, `*номер`, AS остановлен.
 - `common.sh` — общий код shell-проверок (загрузка `lab.env`, PASS/FAIL, PJSUA).
@@ -126,6 +127,8 @@ Unit (`app/tests/unit/`, без Docker; запускаются из `scripts/che
 - `test_ai_pairs.py` — пары ног перевода в AI Worker.
 - `test_ai_recording.py` — запись обеих сторон в один `transcript.txt`.
 - `test_announcements.py` — WAV уведомления и `play media` RTPengine.
+- `test_ai_startup.py` — AI Worker не стартует в обход `start.py` (режим AI не применён).
+- `test_term_ifc.py` — временная услуга вызываемого для проверки отказа AS.
 
 ## Правила
 

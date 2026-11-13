@@ -4,16 +4,25 @@
 #    стороны через MRF, уведомление и запись обеих сторон в один transcript.txt;
 # 2) SIPUE2 -> *SIPUE1: разовый перевод en-ru без записи;
 # 3) SIPUE2 -> SIPUE1: обычный звонок без MRF, только наблюдение;
-# 4) SIP AS остановлен: звонок проходит (DefaultHandling SESSION_CONTINUED).
+# 4) SIP AS остановлен: звонок проходит (DefaultHandling SESSION_CONTINUED) — и для
+#    услуг звонящего, и для временной услуги вызываемого (term_ifc.py).
 # После изменения услуг: python3 scripts/provision.py --apply && docker restart lab-scscf.
 # Печатаются только Call-ID и метаданные, не текст. Без -e: сбой — строка FAIL.
 set -uo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/common.sh"
 
 as_stopped=0
+term_ifc=0
+# iFC SIPUE2 из lab.env и рестарт S-CSCF, чтобы стенд не остался с тестовой услугой.
+restore_term_ifc() {
+    ((term_ifc)) || return 0
+    python3 "$root/app/tests/integration/term_ifc.py" restore >/dev/null &&
+        docker restart lab-scscf >/dev/null && term_ifc=0
+}
 cleanup() {
     hangup_clients
     if ((as_stopped)); then docker start lab-sip-as >/dev/null 2>&1 || true; fi
+    restore_term_ifc || echo 'WARN: iFC SIPUE2 не восстановлен: python3 scripts/start.py'
 }
 trap cleanup EXIT
 
@@ -143,16 +152,28 @@ pjsua lab-sipue2 'ha\n'
 sleep 2
 
 echo "===== 4: SIP AS остановлен: SIPUE1 -> SIPUE2 без услуг ====="
+# У SIPUE2 на время сценария — услуга вызываемого (term-iFC): отказ AS проверяется
+# с обеих сторон вызова. iFC S-CSCF берёт при SAR, отсюда рестарт и регистрация.
+term_ifc=1
+check 'term-iFC SIPUE2 установлен' python3 "$root/app/tests/integration/term_ifc.py" install
+docker restart lab-scscf >/dev/null
+check 'клиенты перерегистрированы с term-iFC' fresh_clients
 docker stop -t 1 lab-sip-as >/dev/null
 as_stopped=1
 since=$(now)
 pjsua lab-sipue1 "m\nsip:${SIPUE2_IMSI}@${IMS_DOMAIN}\n"
-# S-CSCF ждёт каждый AS цепочки до fr_timer и продолжает (DefaultHandling 0).
+# S-CSCF ждёт каждый AS до fr_timer (5 с): два на стороне A, один на стороне B.
 check 'звонок соединился без SIP AS (SESSION_CONTINUED)' \
     wait_for lab-sipue1 'Response msg 200/INVITE' 60 "$since"
+check 'S-CSCF: цепочка звонящего пропущена после отказа AS' \
+    wait_for lab-scscf 'Orig - AS chain skipped after AS failure' 1 "$since"
+check 'S-CSCF: цепочка вызываемого пропущена после отказа AS' \
+    wait_for lab-scscf 'Term - AS chain skipped after AS failure' 1 "$since"
 pjsua lab-sipue1 'ha\n'
+check 'SIPUE2: BYE дошёл' wait_for lab-sipue2 'DISCONNECTED' 15 "$since"
 docker start lab-sip-as >/dev/null
 as_stopped=0
+restore_term_ifc
 
 ((fail)) && sip_diag "$run_since"
 finish 'IMS SERVICES: TRANSLATE + RECORD + STAR + PLAIN + AS DOWN'

@@ -64,6 +64,11 @@ SMF, отключение демо-IMS OAI) — что и зачем меняе�
 5. [Скриптами](docs/guide-5-5g-scripts.md) — тот же прогон через `rfsim.sh` и
    `verify-5g-ue.sh`, журналы, диагностика.
 
+Развитие стенда:
+
+6. [Своя услуга IMS](docs/guide-6-services.md) — логический AS, iFC, тесты; известные
+   ограничения стенда.
+
 Устройство репозитория — [карта проекта](docs/project-layout.md), правила разработки —
 [CONTRIBUTING.md](CONTRIBUTING.md), сторонние компоненты — [THIRD_PARTY.md](THIRD_PARTY.md).
 

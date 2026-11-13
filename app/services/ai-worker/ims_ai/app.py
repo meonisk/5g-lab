@@ -10,9 +10,14 @@ from .api import api
 from .lifecycle import process_events
 from .models import load_model
 from .queueing import process_utterances
+from .startup import unapplied_mode_error
 
 
 def main():
+    error = unapplied_mode_error(os.environ)
+    if error:
+        print(f"AI startup_refused: {error}", flush=True)
+        raise SystemExit(2)
     threading.Thread(target=load_model, daemon=True).start()
     threading.Thread(target=process_events, daemon=True, name="media-assembler").start()
     for index in range(settings.processing_workers):

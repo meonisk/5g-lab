@@ -27,4 +27,10 @@
 #   The continued request still carries the failed AS Route and ISC mark (ims_isc
 #   lumps of the original request), returns via I-CSCF and would re-enter the iFC
 #   chain. isc_orig_failure adds X-Lab-ISC-Continued; route[orig] then drops it,
-#   the Route headers and dst_uri, and goes straight to FINAL_ORIG.
+#   the Route headers and dst_uri, and goes straight to FINAL_ORIG. The mark is
+#   always stripped in route[orig], whatever its value.
+# - S-CSCF term side mirrors this: route[term] arms t_on_failure before
+#   isc_match_filter and marks $avp(isc_term_as); isc_term_failure tries the next
+#   AS once, then relays to itself ($du = URI) with X-Lab-ISC-Continued: term, and
+#   route[term] (only when src_ip == myself) drops the mark and Route headers and
+#   goes to FINAL_TERM. Checked by verify-services.sh scenario 4 (term_ifc.py).

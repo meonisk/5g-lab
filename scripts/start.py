@@ -245,7 +245,8 @@ def main():
         raise ValueError(f"AI_MODE={args.mode}: допустимы {', '.join(profiles())}")
     compose, mode_values = compose_command(args.mode)
     # Shell-переменные приоритетнее --env-file; режим не должен от них зависеть.
-    environment = None if mode_values is None else {**os.environ, **mode_values}
+    # AI_MODE_APPLIED: AI Worker стартует только с ним, то есть только через start.py.
+    environment = {**os.environ, **(mode_values or {}), "AI_MODE_APPLIED": args.mode}
     run(compose + ["config", "--quiet"], "Конфигурация Compose не прошла проверку", env=environment)
     check_core_network(settings)
     if args.check:
