@@ -73,6 +73,7 @@ def service_spec(inspect):
     return {
         "image": inspect["Config"]["Image"],
         "cpus": nano / 1e9 if nano else None,
+        "cpuset": inspect["HostConfig"].get("CpusetCpus") or None,
         "memory": inspect["HostConfig"].get("Memory") or None,
         "stt_threads": int(env.get("AI_STT_CPU_THREADS", "4")),
         "model": env.get("AI_MODEL_SIZE"),
@@ -195,13 +196,15 @@ def main():
     env_file = folder / f"service-{args.load}.env"
     env_file.write_text("".join(f"{line}\n" for line in spec["env"]), encoding="utf-8")
 
-    # Те же ограничения, что у сервиса: лимит CPU и памяти, без сети, только чтение.
+    # Те же ограничения, что у сервиса: лимит и ядра CPU, память, без сети, только чтение.
     command = ["docker", "run", "--rm", "--name", f"lab-profile-sweep-{args.load}",
                "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=128m",
                "--user", "65532:65532", "--cap-drop", "ALL", "--security-opt",
                "no-new-privileges:true", "--env-file", str(env_file)]  # fmt: skip
     if spec["cpus"]:
         command += ["--cpus", f"{spec['cpus']:g}"]
+    if spec.get("cpuset"):
+        command += ["--cpuset-cpus", spec["cpuset"]]
     if spec["memory"]:
         command += ["--memory", str(spec["memory"])]
     for mount in spec["mounts"]:
@@ -209,7 +212,7 @@ def main():
     command += ["-v", f"{folder}:/sweep:ro", "-v", f"{WORKER}:/sweep-code/sweep_worker.py:ro",
                 "--entrypoint", "python", spec["image"], "/sweep-code/sweep_worker.py",
                 "/sweep/plan.json"]  # fmt: skip
-    print(f"{args.load}: образ {spec['image']}, CPU {spec['cpus']}, модели "
+    print(f"{args.load}: образ {spec['image']}, CPU {spec['cpus']}, ядра {spec.get('cpuset') or 'все'}, модели "
           f"{', '.join(plan['models'])}, потоки {plan['threads']}", flush=True)  # fmt: skip
     result = run(*command, timeout=5400)
     print(result.stderr[-3000:], end="", flush=True)

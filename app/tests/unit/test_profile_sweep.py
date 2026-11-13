@@ -82,6 +82,11 @@ class Service(unittest.TestCase):
     def test_no_cpu_limit(self):
         inspect = {**INSPECT, "HostConfig": {"NanoCpus": 0, "Memory": 0}}
         self.assertIsNone(sweep.service_spec(inspect)["cpus"])
+        self.assertIsNone(sweep.service_spec(inspect)["cpuset"])
+
+    def test_sweep_uses_service_cores(self):
+        host = {**INSPECT["HostConfig"], "CpusetCpus": "2,3,6,7"}
+        self.assertEqual(sweep.service_spec({**INSPECT, "HostConfig": host})["cpuset"], "2,3,6,7")
 
 
 class Aggregate(unittest.TestCase):
