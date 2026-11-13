@@ -70,8 +70,51 @@ class PhraseBoundaries(unittest.TestCase):
             emitted.assert_not_called()
             self.segmentation.process_event(self.event(b"\xff" * 8000 * 2, observed=100.25))
             self.assertEqual(emitted.call_count, 1)
-            self.assertEqual(emitted.call_args.args[3], "silence")
+            # Длинная фраза диалога заканчивается уже на короткой паузе.
+            self.assertEqual(emitted.call_args.args[3], "short-pause")
             self.assertGreater(len(emitted.call_args.args[0]), 8000 * 8)
+
+    # PCMU: 0x00 — громкий отсчёт (речь), 0xff — тишина. 8000 байт = 1 с.
+    def speech(self, *parts):
+        """parts: секунды речи и тишины по очереди, начиная с речи."""
+        return b"".join(
+            (b"\x00" if index % 2 == 0 else b"\xff") * int(seconds * 8000)
+            for index, seconds in enumerate(parts)
+        )
+
+    def test_short_pause_ends_long_dialogue_phrase(self):
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(self.event(self.speech(3, 0.3, 1)))
+            self.assertEqual(emitted.call_count, 1)
+            self.assertEqual(emitted.call_args.args[3], "short-pause")
+            self.assertLess(len(emitted.call_args.args[0]), 8000 * 3.4)
+
+    def test_short_pause_does_not_split_short_start(self):
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(self.event(self.speech(1, 0.3, 1)))
+            emitted.assert_not_called()
+
+    def test_maximum_duration_cuts_inside_longest_pause(self):
+        audio = self.speech(4, 0.1, 3, 0.2, 3.5)
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(self.event(audio))
+            self.assertEqual(emitted.call_count, 1)
+            self.assertEqual(emitted.call_args.args[3], "pause-cut")
+            cut = len(emitted.call_args.args[0])
+            self.assertTrue(8000 * 7.1 < cut < 8000 * 7.3, cut)
+            state = next(iter(self.runtime.buffers.values()))
+            self.assertTrue(state["in_speech"])
+            self.assertEqual(len(state["utterance"]), len(audio) - cut)
+
+    def test_maximum_duration_without_pauses_cuts_hard(self):
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(self.event(self.speech(10.5)))
+            self.assertEqual(emitted.call_args.args[3], "maximum-duration")
+
+    def test_short_pause_is_only_for_dialogue(self):
+        with patch.object(self.segmentation, "enqueue_utterance") as emitted:
+            self.segmentation.process_event(self.event(self.speech(3, 0.3, 1), mode="assistant"))
+            emitted.assert_not_called()
 
     def test_suppressed_rtp_gap_finishes_previous_phrase(self):
         with patch.object(self.segmentation, "enqueue_utterance") as emitted:

@@ -9,6 +9,7 @@ import time
 from . import runtime, settings
 from .audio import frame_rms
 from .maintenance import expire_transient
+from .pauses import remember_pause, short_pause_reached, split_at_pause
 from .queueing import enqueue_utterance
 
 PCMU_FRAME_BYTES = 160  # 20 мс при PCMU/8000.
@@ -72,6 +73,11 @@ def empty_stream_state(now: float) -> dict:
         "last_voice_packet_at": None,
         "first_voice_packet_at": None,
         "snapshot_bytes": 0,
+        "cut_at": None,
+        "cut_pause_bytes": 0,
+        "cut_voice_end_at": None,
+        "cut_resume_at": None,
+        "cut_resume_pending": False,
         "last_seen": now,
     }
 
@@ -161,6 +167,8 @@ def append_frame(state: dict, frame: bytes) -> None:
     state["peak_rms"] = max(state.get("peak_rms", 0), rms)
 
     if frame_has_voice:
+        if state["in_speech"] and state["silence_bytes"]:
+            remember_pause(state)
         if not state["in_speech"]:
             state["utterance"].extend(state["preroll"])
             state["preroll"].clear()
@@ -182,7 +190,9 @@ def append_frame(state: dict, frame: bytes) -> None:
     del state["preroll"][: -settings.preroll_bytes]
 
 
-def completion_reason(state: dict, silence_limit: int, utterance_limit: int) -> str | None:
+def completion_reason(
+    state: dict, silence_limit: int, utterance_limit: int, dialogue_mode: bool = False
+) -> str | None:
     """Реплика заканчивается тишиной либо защитным пределом длительности."""
     if not state["in_speech"]:
         return None
@@ -190,6 +200,9 @@ def completion_reason(state: dict, silence_limit: int, utterance_limit: int) -> 
     enough_speech = state["speech_bytes"] >= settings.min_utterance_bytes
     if enough_speech and state["silence_bytes"] >= silence_limit:
         return "silence"
+
+    if enough_speech and dialogue_mode and short_pause_reached(state):
+        return "short-pause"
 
     if len(state["utterance"]) >= utterance_limit:
         return "maximum-duration"
@@ -204,6 +217,7 @@ def process_audio_frames(
     received_at: float,
     silence_limit: int,
     utterance_limit: int,
+    dialogue_mode: bool = False,
 ) -> None:
     """Последовательно применить VAD и поставить законченные фразы в очередь."""
     for frame_offset in range(0, len(audio_chunk), PCMU_FRAME_BYTES):
@@ -215,12 +229,19 @@ def process_audio_frames(
         timestamps = event.get("audio_frame_received_at", [])
         frame_index = frame_offset // PCMU_FRAME_BYTES
         if state["in_speech"] and state["silence_bytes"] == 0 and frame_index < len(timestamps):
+            if state["cut_resume_pending"]:
+                state["cut_resume_at"], state["cut_resume_pending"] = timestamps[frame_index], False
             state["last_voice_packet_at"] = timestamps[frame_index]
             if state["first_voice_packet_at"] is None:
                 state["first_voice_packet_at"] = timestamps[frame_index]
 
-        reason = completion_reason(state, silence_limit, utterance_limit)
-        if reason:
+        reason = completion_reason(state, silence_limit, utterance_limit, dialogue_mode)
+        split = split_at_pause(state) if dialogue_mode and reason == "maximum-duration" else None
+        if split:
+            # Фраза кончается на самой длинной паузе, остаток продолжает следующую.
+            queue_completed_phrase(state, event, received_at, "pause-cut")
+            state.update(split[1])
+        elif reason:
             queue_completed_phrase(state, event, received_at, reason)
         elif settings.streaming_enabled and event.get("service_mode") in {
             "interpret_ru",
@@ -292,4 +313,5 @@ def process_event(event: dict) -> None:
         received_at,
         silence_limit,
         utterance_limit,
+        dialogue_mode,
     )

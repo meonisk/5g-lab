@@ -101,7 +101,8 @@
 | `AI_UTTERANCE_SILENCE_MS` | 700 | сколько тишины означает конец фразы. Меньше — быстрее ответ, но фраза может оборваться на вдохе |
 | `AI_UTTERANCE_MIN_SECONDS` | 0.35 | короче — не фраза, а шум |
 | `AI_UTTERANCE_MAX_SECONDS` | 5 | длинная речь без пауз режется на куски по 5 с |
-| `AI_DIALOGUE_UTTERANCE_*`, `AI_DIALOGUE_EVENT_GAP_MS` | 600 мс, 10 с, 1200 мс | то же для двустороннего перевода 1005/1006 |
+| `AI_DIALOGUE_UTTERANCE_*`, `AI_DIALOGUE_EVENT_GAP_MS` | 600 мс, 10 с, 1200 мс | то же для двустороннего перевода 1005/1006 и услуги translate; на пределе 10 с фраза режется по самой длинной паузе внутри неё |
+| `AI_DIALOGUE_SHORT_PAUSE_MS`, `AI_DIALOGUE_SHORT_PAUSE_AFTER_SECONDS` | 250 мс, 2,5 с | в переводе фраза длиннее 2,5 с заканчивается уже на паузе 250 мс — обычно это граница предложения |
 | `AI_AUDIO_PREROLL_MS` | 200 | сколько звука до начала речи добавить к фразе |
 | `AI_STREAMING_ENABLED`, `AI_STREAM_*` | `0` | потоковый перевод до конца фразы; экспериментальный, выключен |
 | `INTERPRETER_MAX_RESPONSE_DELAY_MS` | 5000 | предел задержки в тесте `verify_interpreter.py` |

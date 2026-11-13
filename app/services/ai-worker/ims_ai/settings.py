@@ -42,6 +42,12 @@ dialogue_silence_bytes_required = int(
 
 dialogue_max_utterance_bytes = int(float(os.environ["AI_DIALOGUE_UTTERANCE_MAX_SECONDS"]) * 8000)
 
+# Длинная фраза диалога заканчивается и на короткой паузе между предложениями.
+dialogue_short_pause_bytes = int(float(os.environ["AI_DIALOGUE_SHORT_PAUSE_MS"]) / 1000 * 8000)
+dialogue_short_pause_after_bytes = int(
+    float(os.environ["AI_DIALOGUE_SHORT_PAUSE_AFTER_SECONDS"]) * 8000
+)
+
 dialogue_event_gap_seconds = float(os.environ["AI_DIALOGUE_EVENT_GAP_MS"]) / 1000
 
 preroll_bytes = int(float(os.environ["AI_AUDIO_PREROLL_MS"]) / 1000 * 8000)
