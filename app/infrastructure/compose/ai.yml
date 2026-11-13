@@ -99,6 +99,8 @@ services:
     container_name: lab-ai-worker
     user: "65532:65532"
     cpus: ${AI_WORKER_CPU_LIMIT}
+    # Пустое значение — без привязки к ядрам.
+    cpuset: ${AI_WORKER_CPUSET:-}
     mem_limit: ${AI_WORKER_MEMORY_LIMIT}
     env_file: [app/config/lab.env]
     environment:

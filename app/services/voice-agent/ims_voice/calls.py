@@ -10,7 +10,8 @@ from . import runtime
 
 def start_call(call_id: str, remote_ip: str, remote_port: int, mode: str) -> bool:
     """Повторное SIP-уведомление не создаёт второй поток и не сбрасывает RTP."""
-    from .media import enqueue_audio, play_queued_audio
+    from .media import enqueue_audio
+    from .playout import play_queued_audio
 
     with runtime.lock:
         if call_id in runtime.calls:
@@ -62,6 +63,10 @@ def expire_calls():
         time.sleep(min(30, max(1, runtime.call_timeout)))
         cutoff = time.time() - runtime.call_timeout
         with runtime.lock:
-            expired = [cid for cid, call in runtime.calls.items() if call["started_at"] < cutoff]
+            expired = [
+                cid
+                for cid, call in runtime.calls.items()
+                if call.get("last_activity", call["started_at"]) < cutoff
+            ]
         for call_id in expired:
             end_call(call_id)

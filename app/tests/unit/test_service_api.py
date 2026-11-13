@@ -129,19 +129,71 @@ class ServiceApi(unittest.TestCase):
         calls.end_call("same-call")
 
     def test_full_playback_queue_can_be_closed(self):
-        from ims_voice import calls, media, runtime
+        from ims_voice import calls, playout, runtime
 
         pending = queue.Queue(maxsize=1)
         pending.put(("text", "test", "ru", None))
         runtime.calls["full-call"] = {"received_packets": 0}
         runtime.reply_queues["full-call"] = pending
         calls.end_call("full-call")
-        with patch.object(media, "send_audio") as send:
-            worker = threading.Thread(target=media.play_queued_audio, args=("full-call", pending))
+        with patch.object(playout, "prepare_audio") as send:
+            worker = threading.Thread(target=playout.play_queued_audio, args=("full-call", pending))
             worker.start()
             worker.join(timeout=1)
             self.assertFalse(worker.is_alive())
             send.assert_not_called()
+
+    def test_next_reply_is_synthesized_while_previous_plays(self):
+        """Синтез второго ответа начинается до конца игры первого и идёт ускоренно."""
+        import time
+
+        from ims_voice import playout, runtime
+
+        voice, events = runtime.tts_translation_voice, []
+        pending = queue.Queue()
+        runtime.calls["pipe-call"] = {"tts_active": False}
+        runtime.reply_queues["pipe-call"] = pending
+
+        def synthesize(text, _voice, factor):
+            events.append(("synth", text, factor, time.monotonic()))
+            return b"\xff" * 160
+
+        def play(call_id, item):
+            runtime.calls[call_id]["tts_active"] = True
+            events.append(("play", item.reply_id, item.length_factor, time.monotonic()))
+            time.sleep(0.4)
+            runtime.calls[call_id]["tts_active"] = False
+            events.append(("played", item.reply_id, None, time.monotonic()))
+
+        with (
+            patch.object(playout, "synthesize", synthesize),
+            patch.object(playout, "play_prepared", play),
+        ):
+            worker = threading.Thread(target=playout.play_queued_audio, args=("pipe-call", pending))
+            worker.start()
+            pending.put(("one", "llm_reply", voice, "r1"))
+            time.sleep(0.1)
+            pending.put(("two", "llm_reply", voice, "r2"))
+            time.sleep(1.2)
+            runtime.reply_queues.pop("pipe-call")
+            worker.join(timeout=2)
+        runtime.calls.pop("pipe-call")
+
+        plays = [e[1] for e in events if e[0] == "play"]
+        self.assertEqual(plays, ["r1", "r2"])
+        second_synth = next(e for e in events if e[0] == "synth" and e[1] == "two")
+        first_played = next(e for e in events if e[0] == "played" and e[1] == "r1")
+        self.assertLess(second_synth[3], first_played[3])
+        self.assertEqual(second_synth[2], runtime.catchup_length_factor)
+        first_synth = next(e for e in events if e[0] == "synth" and e[1] == "one")
+        self.assertEqual(first_synth[2], 1.0)
+
+    def test_greeting_is_never_sped_up(self):
+        from ims_voice import playout, runtime
+
+        with patch.object(playout, "synthesize", return_value=b"") as synthesize:
+            playout.prepare_audio("hi", "greeting", runtime.tts_voice, None, catch_up=True)
+        self.assertEqual(synthesize.call_args.args[2], 1.0)
 
 
 if __name__ == "__main__":

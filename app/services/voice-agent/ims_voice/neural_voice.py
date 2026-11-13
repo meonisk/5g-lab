@@ -35,7 +35,7 @@ def load_voice(voice):
         )
 
 
-def synthesize_neural(text: str, voice: str, destination: str):
+def synthesize_neural(text: str, voice: str, destination: str, length_factor: float = 1.0):
     from piper import SynthesisConfig
 
     # A single resident model avoids a cold model load for every reply.
@@ -46,6 +46,6 @@ def synthesize_neural(text: str, voice: str, destination: str):
                 text,
                 output,
                 syn_config=SynthesisConfig(
-                    length_scale=runtime.piper_voices[voice]["length_scale"]
+                    length_scale=runtime.piper_voices[voice]["length_scale"] * length_factor
                 ),
             )

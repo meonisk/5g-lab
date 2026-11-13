@@ -24,6 +24,9 @@ channel=('--rfsimulator.[0].options' chanmod --channelmod.modellist modellist_rf
 # Шаблон процессов с нашими копиями; [n] не даёт pgrep/pkill найти собственную
 # командную строку, в которой этот шаблон записан.
 ours="[n]r-.*softmodem -O $work/"
+# RFSIM_CPUSET из lab.env: gNB и UE только на этих ядрах (ядра AI Worker остаются ему).
+pin=()
+[[ -n ${RFSIM_CPUSET:-} ]] && pin=(taskset -c "$RFSIM_CPUSET")
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -74,7 +77,7 @@ start_radio() {
     prepare_configs
 
     # </dev/null у фоновых процессов: они не забирают терминал и не портят его режим.
-    nohup sudo env RFSIMULATOR=server "$build/nr-softmodem" -O "$work/gnb.conf" --continuous-tx \
+    nohup sudo "${pin[@]}" env RFSIMULATOR=server "$build/nr-softmodem" -O "$work/gnb.conf" --continuous-tx \
         --rfsim "${channel[@]}" </dev/null >"$work/gnb.log" 2>&1 &
     wait_for 30 grep -q 'Received NGSetupResponse' "$work/gnb.log" ||
         die "gNB не подключился к AMF: grep -E 'SCTP|errno|bind' $work/gnb.log"
@@ -90,7 +93,7 @@ start_radio() {
         # multi-ue.sh создаёт namespace ueN; сервер rfsim доступен из него на 10.(200+N).1.100.
         sudo ip netns list | grep -qw "ue$n" || sudo "$ran/tools/scripts/multi-ue.sh" "-c$n" >/dev/null
         # shellcheck disable=SC2086 # параметры UE — несколько отдельных слов
-        nohup sudo ip netns exec "ue$n" "$build/nr-uesoftmodem" -O "$work/ue$n.conf" --rfsim $ue_options \
+        nohup sudo ip netns exec "ue$n" "${pin[@]}" "$build/nr-uesoftmodem" -O "$work/ue$n.conf" --rfsim $ue_options \
             "${channel[@]}" "--rfsimulator.[0].serveraddr" "10.$((200 + n)).1.100" </dev/null >"$work/ue$n.log" 2>&1 &
         # UE подключаются по очереди: при одновременном входе gNB rfsim под нагрузкой
         # не успевает с PDCCH (растёт CCE fail), и SMF отклоняет сессию по таймеру.

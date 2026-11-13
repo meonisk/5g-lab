@@ -48,7 +48,9 @@ llm_mode = os.environ["VOICE_AGENT_LLM_MODE"] == "1"
 vad_rms = int(os.environ["VOICE_AGENT_VAD_RMS"])
 audible_rms = int(os.environ["TTS_AUDIBLE_RMS"])
 silence_seconds = int(os.environ["VOICE_AGENT_SILENCE_MS"]) / 1000
+# Звонок без входящего звука дольше этого времени закрывается (BYE потерян).
 call_timeout = int(os.environ["VOICE_AGENT_CALL_TIMEOUT"])
+catchup_length_factor = float(os.environ["VOICE_AGENT_CATCHUP_LENGTH_FACTOR"])
 max_calls = int(os.environ["VOICE_AGENT_MAX_CALLS"])
 reply_queue_max = int(os.environ["VOICE_AGENT_REPLY_QUEUE_MAX"])
 event_retention = int(os.environ["VOICE_AGENT_EVENT_RETENTION"])

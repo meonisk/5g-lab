@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 from . import runtime
-from .audio import backend_for, synthesize, ulaw_rms
+from .audio import backend_for, ulaw_rms
 
 PCMU_FRAME_BYTES = 160
 PCMU_FRAME_SECONDS = 0.02
@@ -101,6 +101,7 @@ def finish_playback(
     synthesis_ms: float,
     playout_ms: float,
     total_ms: float,
+    length_factor: float = 1.0,
 ) -> None:
     """Сохранить RTP-счётчики и безопасные метрики без текста ответа."""
     with runtime.lock:
@@ -128,53 +129,10 @@ def finish_playback(
                 "synthesis_ms": synthesis_ms,
                 "rtp_playout_ms": playout_ms,
                 "tts_total_ms": total_ms,
+                "length_factor": length_factor,
             }
         )
         del runtime.events[: -runtime.event_retention]
-
-
-def send_audio(
-    call_id: str,
-    text: str,
-    reason: str,
-    voice: str,
-    reply_id: str | None = None,
-) -> None:
-    """Синтезировать и воспроизвести один элемент очереди звонка."""
-    if voice not in runtime.allowed_tts_voices:
-        return
-
-    total_started_at = time.perf_counter_ns()
-    synthesis_started_at = time.perf_counter_ns()
-    audio_payload = synthesize(text, voice)
-    synthesis_ms = elapsed_ms(synthesis_started_at)
-
-    playback = begin_playback(call_id)
-    if playback is None:
-        return
-
-    playout_started_at = time.perf_counter_ns()
-    send_rtp_frames(call_id, audio_payload, playback)
-
-    playout_ms = elapsed_ms(playout_started_at)
-    total_ms = elapsed_ms(total_started_at)
-    finish_playback(
-        call_id,
-        playback,
-        reason,
-        voice,
-        reply_id,
-        synthesis_ms,
-        playout_ms,
-        total_ms,
-    )
-
-    delivery_state = "interrupted" if playback.interrupted else "sent"
-    print(
-        f"VOICE tts call_id={call_id} reason={reason} state={delivery_state} "
-        f"backend={backend_for(voice)} voice={voice} packets={playback.packets_sent}",
-        flush=True,
-    )
 
 
 def enqueue_audio(
@@ -198,32 +156,6 @@ def enqueue_audio(
         return False
 
 
-def play_queued_audio(call_id: str, playback_queue: queue.Queue) -> None:
-    """Сохранить слышимый порядок ответов одного звонка."""
-    while True:
-        with runtime.lock:
-            call_is_active = runtime.reply_queues.get(call_id) is playback_queue
-
-        if not call_is_active:
-            return
-
-        try:
-            playback_item = playback_queue.get(timeout=0.5)
-        except queue.Empty:
-            continue
-
-        try:
-            send_audio(call_id, *playback_item)
-        except Exception as error:
-            # Ошибка одного синтеза не должна навсегда остановить очередь звонка.
-            print(
-                f"VOICE synthesis_failed type={type(error).__name__}",
-                flush=True,
-            )
-        finally:
-            playback_queue.task_done()
-
-
 def extract_pcmu_payload(packet: bytes) -> bytes | None:
     """Принять только минимальный RTP v2 с payload type 0 (PCMU)."""
     if len(packet) < RTP_HEADER_BYTES:
@@ -240,6 +172,7 @@ def extract_pcmu_payload(packet: bytes) -> bytes | None:
 def update_call_from_audio(call: dict, audio_rms: float, now: float) -> bool:
     """Обновить VAD звонка и вернуть True, когда нужен фиксированный ответ."""
     call["received_packets"] += 1
+    call["last_activity"] = now
 
     if audio_rms >= runtime.vad_rms:
         # Перевод собеседника должен прозвучать целиком, даже при одновременной

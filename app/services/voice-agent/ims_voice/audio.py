@@ -32,12 +32,14 @@ def ulaw_rms(payload):
     return int(math.sqrt(sum(ulaw_sample(value) ** 2 for value in payload) / len(payload)))
 
 
-def synthesize(text, voice):
+def synthesize(text, voice, length_factor=1.0):
+    """PCMU 8 кГц; length_factor < 1 — речь быстрее (только Piper)."""
     identity = (
         backend_for(voice),
         voice,
         runtime.tts_rate,
         runtime.piper_voices.get(voice),
+        length_factor,
         text,
     )
     key = hashlib.sha256(repr(identity).encode()).hexdigest()[:16]
@@ -47,7 +49,7 @@ def synthesize(text, voice):
             if backend_for(voice) == "piper":
                 from .neural_voice import synthesize_neural
 
-                synthesize_neural(text, voice, wav.name)
+                synthesize_neural(text, voice, wav.name, length_factor)
             else:
                 synthesize_espeak(text, voice, wav.name)
             subprocess.run(

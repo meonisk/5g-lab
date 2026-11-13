@@ -133,6 +133,8 @@ def journal(sentences, legs, tts):
             t = tts.get(p.get("reply_id"))
             if t and t.get("first_voice_rtp_at"):
                 state = "ПРЕРВАН" if t.get("event") == "tts_interrupted" else "доигран"
+                if (t.get("length_factor") or 1) < 1:
+                    state += f", ускорен ×{t['length_factor']}"
                 rows.append((at(t["first_voice_rtp_at"]),
                              f"звучит     {tag}: через {_ms((t['first_voice_rtp_at'] - last) * 1000)} мс "
                              f"после конца речи, синтез {_ms(t.get('synthesis_ms'))} мс, звучал "
