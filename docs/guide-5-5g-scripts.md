@@ -111,7 +111,7 @@ scripts/profile.sh --rounds 3 --no-sweep    # только сценарии; --n
 1   PASS  preflight  PREFLIGHT: PASS
 2   PASS  S1         SCENARIO S1: DONE (0 раундов, 0 отказов)
 ...
-9   SKIP  S5         translate не прошёл verify-services.sh (...)
+9   SKIP  S5         нет стенда 5G: ...
 11  PASS  report     REPORT: .../report.md
 PROFILE: PASS — ...
 REPORT: local/profile/<UTC>/report.md
@@ -208,8 +208,8 @@ grep -E 'Registration Accept|PduSession|Establishment Accept|REJ|TUN Interface' 
 звонит на переводчик `VOICE_TRANSLATOR_MSISDN`; S4 — то же с UE1 через 5G (как
 `bench_5g.py`); S5 — одновременно переводимый звонок UE1 → UE2 через translate B2BUA и
 SIPUE1 на переводчик. S2/S4/S5 — SKIP, если нет rfsim или `sudo`; S5 — ещё и если
-последний `verify-all` записал FAIL/SKIP для `verify-services` или звонок UE1 → UE2
-не установился. Фраза одна: «Добрый день. Как у вас дела?» голосом тестовых клиентов.
+звонок UE1 → UE2 не установился. Фраза одна: «Добрый день. Как у вас дела?» голосом
+Piper, как в тесте диалога: espeak-ng тестовых клиентов Whisper распознаёт плохо.
 
 **CPU по сценариям** — занятые ядра (1.0 = одно ядро целиком), среднее / p95 по
 отсчётам раз в 0,5 с. `host` — весь хост из `/proc/stat` (предел — `nproc`), контейнеры

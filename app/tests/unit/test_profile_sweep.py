@@ -1,11 +1,16 @@
 """scripts/profile/sweep.py: план перебора, параметры контейнера сервиса и сводка без Docker."""
 
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path[:0] = [str(ROOT / "scripts/lib"), str(ROOT / "scripts/profile"), str(ROOT / "scripts")]
+sys.path[:0] = [str(ROOT / "scripts/lib"), str(ROOT / "scripts/profile"), str(ROOT / "scripts"),
+                str(ROOT / "app/tests/fixtures")]  # fmt: skip
+import dialogue  # noqa: E402
 import sweep  # noqa: E402
 
 INSPECT = {
@@ -105,3 +110,18 @@ class Aggregate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PiperPhrases(unittest.TestCase):
+    def test_phrase_wavs_creates_missing_folder(self):
+        # S4 пишет фразу в local/rfsim/phrase, которого на чистом стенде ещё нет.
+        with (
+            tempfile.TemporaryDirectory() as root,
+            mock.patch.object(dialogue, "run_inside") as run,
+        ):
+            folder = Path(root).resolve() / "rfsim/phrase"
+            paths = dialogue.phrase_wavs(["Добрый день.", "Как дела?"], folder)
+            texts = json.loads((folder / "phrases.json").read_text(encoding="utf-8"))
+        self.assertEqual(texts, ["Добрый день.", "Как дела?"])
+        self.assertEqual(paths, [folder / "p1.wav", folder / "p2.wav"])
+        run.assert_called_once_with(folder / "phrases.json", folder, "--phrases")

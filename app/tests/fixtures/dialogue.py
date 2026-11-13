@@ -169,10 +169,12 @@ def generate():
 
 def phrase_wavs(texts, folder):
     """Русские фразы голосом Piper (как реплики диалога): WAV PCM16 8 кГц folder/p1.wav..."""
-    source = Path(folder) / "phrases.json"
+    folder = Path(folder).resolve()  # docker монтирует только абсолютные пути
+    folder.mkdir(parents=True, exist_ok=True)
+    source = folder / "phrases.json"
     source.write_text(json.dumps(list(texts), ensure_ascii=False), encoding="utf-8")
-    run_inside(source, Path(folder), "--phrases")
-    return [Path(folder) / f"p{number}.wav" for number in range(1, len(texts) + 1)]
+    run_inside(source, folder, "--phrases")
+    return [folder / f"p{number}.wav" for number in range(1, len(texts) + 1)]
 
 
 def verified_fixture():

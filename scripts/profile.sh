@@ -131,12 +131,6 @@ if reason=$(have_5g); then
     fi
 fi
 
-# S5 нужна услуга translate: последний verify-all с провалом verify-services — SKIP.
-services_reason=''
-last_verify=$(ls -1t "$root"/local/verify-all/*.log 2>/dev/null | head -1)
-if [[ -n $last_verify ]] && grep -Eq '^>>> (FAIL|SKIP): verify-services ' "$last_verify"; then
-    services_reason="translate не прошёл verify-services.sh ($(basename "$last_verify"))"
-fi
 
 scenario() { # scenario ИМЯ СЕКУНД [--tty]
     run_step "$1" "$2" "^SCENARIO $1: DONE" ${3:+"$3"} -- \
@@ -188,8 +182,6 @@ else
         for name in S2 S4 S5; do
             if [[ -n $up_reason ]]; then
                 skip_scenario "$name" "$up_reason"
-            elif [[ $name == S5 && -n $services_reason ]]; then
-                skip_scenario S5 "$services_reason"
             elif [[ $name == S2 ]]; then
                 scenario S2 $((IDLE_SECONDS + 120))
             else
