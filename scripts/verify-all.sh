@@ -126,7 +126,10 @@ if reason=$(have_5g); then
     fivegee=1
     # verify-5g-ue.sh и rfsim.sh вызывают sudo: пароль один раз сейчас, затем держим.
     if sudo -n true 2>/dev/null || sudo -v; then
-        (while kill -0 $$ 2>/dev/null; do sudo -n true 2>/dev/null; sleep 50; done) &
+        # Без журнала: иначе цикл держит открытым канал tee, и wait "$tee_pid" в конце
+        # ждёт его вечно (прогон напечатал итог и не вернул приглашение).
+        (while kill -0 $$ 2>/dev/null; do sudo -n true 2>/dev/null; sleep 50; done) \
+            </dev/null >/dev/null 2>&1 &
         keepalive=$!
     else
         fivegee=0
