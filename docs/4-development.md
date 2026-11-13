@@ -66,12 +66,34 @@ PYTHONPATH=app/services python3 -m unittest discover -s app/tests/unit
 
 ## Как добавить свою услугу
 
-Пример — услуга `demo`.
+Услуга — это модуль Python внутри сервера услуг `lab-sip-as`. S-CSCF отправляет туда
+звонок, если в профиле абонента есть правило iFC на адрес этой услуги. Пример —
+услуга `demo`, которая видит каждый новый звонок абонента, пишет его в журнал и
+пропускает дальше без изменений.
 
-1. Создайте `app/services/sip-as/ims_sip/services/demo.py` с `HOST = "demo.as"` и
-   функцией `handle(message, peer)`. Образцы: `record.py` — пропускает звонок дальше и
-   может действовать по ответу; `translate.py` — B2BUA, сам отвечает и делает второй
-   звонок. Контракт модуля — в `services/__init__.py`.
+1. Создайте `app/services/sip-as/ims_sip/services/demo.py`:
+
+   ```python
+   """demo AS: пишет в журнал каждый новый звонок и пропускает его дальше."""
+
+   from ..core import proxy
+   from ..core.sip import message_call_id, request_method, tag_of, value_of
+
+   HOST = "demo.as"  # адрес услуги: sip:demo.as.<IMS_DOMAIN>
+
+
+   def handle(message: str, peer: tuple[str, int]) -> None:
+       # Новый звонок — INVITE без тега у получателя; повторные запросы его имеют.
+       if request_method(message) == "INVITE" and not tag_of(value_of(message, "To")):
+           print(f"AS demo call_id={message_call_id(message)}", flush=True)
+       proxy.forward(message, peer)  # вернуть запрос в S-CSCF, дальше по цепочке
+   ```
+
+   `proxy.forward` возвращает запрос в S-CSCF, а транзакции, заголовки Via и Route
+   берёт на себя `core/`. Если услуге нужно ответить самой или вмешаться в звук,
+   смотрите образцы: `record.py` — пропускает звонок и действует по ответу (запись);
+   `translate.py` — B2BUA (сам отвечает и делает второй звонок). Контракт модуля
+   описан в `services/__init__.py`.
 2. Добавьте модуль в `SERVICES` в `app/services/sip-as/ims_sip/core/dispatch.py`.
 3. В `scripts/provision.py` добавьте в `SERVICES` строку `"demo": ("demo.as", 25)`.
    Число — приоритет, то есть место в цепочке услуг (сейчас translate 10, `*номер` 15,

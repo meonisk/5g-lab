@@ -73,6 +73,14 @@ def logs(container, since=None):
                           check=False).stdout  # fmt: skip
 
 
+def voice_slots():
+    """VOICE_AGENT_MAX_CALLS работающего Voice Agent (режим AI мог заменить lab.env)."""
+    env = subprocess.run(["docker", "inspect", "-f", "{{json .Config.Env}}", "lab-voice-agent"],
+                         capture_output=True, encoding="utf-8", check=False).stdout  # fmt: skip
+    values = dict(item.split("=", 1) for item in json.loads(env or "[]"))
+    return int(values.get("VOICE_AGENT_MAX_CALLS", "0"))
+
+
 def phrase_wav(folder, settings):
     """Фраза и 20 с тишины в /fixtures клиента SIPUE (тот же звук, что у UE в jail)."""
     del settings
@@ -190,6 +198,11 @@ def ue_rounds(args, settings, record):
 
 def concurrent(args, settings, record):
     """Два длинных звонка: плееры подключены всё время, фраза повторяется раз в период."""
+    # Перевод UE1 -> UE2 занимает два места Voice Agent, звонок на 1003 — третье.
+    slots = voice_slots()
+    if slots < 3:
+        raise Skip(f"VOICE_AGENT_MAX_CALLS={slots} в текущем режиме AI: двум звонкам с "
+                   "переводом нужно 3 места Voice Agent")  # fmt: skip
     addresses, seconds = radio(settings)
     period = seconds + 20
     clients, ue = [], None
