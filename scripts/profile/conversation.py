@@ -1,6 +1,10 @@
-"""Длинный разговор в обычном темпе: SIPUE1 (ru) звонит SIPUE2 (en) через translate + record.
+"""Длинный разговор в обычном темпе: абонент ru звонит абоненту en через translate + record.
 
-  python3 scripts/profile/conversation.py [--out DIR]
+  python3 scripts/profile/conversation.py [--5g] [--out DIR]
+
+Без --5g говорят тестовые клиенты сети ядра: SIPUE1 звонит SIPUE2, 5G не проходит.
+С --5g — полный путь: UE1 звонит UE2 через радио OAI rfsim (gNB, AMF/SMF, UPF), IMS и
+услуги. Если rfsim не запущен, скрипт поднимает его сам и в конце останавливает.
 
 Текст — app/tests/fixtures/conversation-long-v1.json, голос — Piper: внутри реплики паузы
 между предложениями 350 мс, ответ собеседника начинается через 1,5 с после конца реплики.
@@ -34,10 +38,11 @@ from conversation_log import TARGET_MS, direction_metrics, journal, problems  # 
 from dialogue import conversation_wavs  # noqa: E402
 from latency import conference_ports  # noqa: E402
 from provision import LAB_ENV, read_env  # noqa: E402
-from ue5g import query, sh, wait_for  # noqa: E402
+from ue5g import JAIL, Client, prepare_jail, query, sh, tunnel_ip, wait_for  # noqa: E402
 
 COMPOSE = ["docker", "compose", "--project-directory", str(ROOT), "--env-file", str(LAB_ENV),
            "-f", str(ROOT / "docker-compose.yml"), "--profile", "test"]  # fmt: skip
+RFSIM = ROOT / "scripts/rfsim.sh"
 FIXTURES = ROOT / "local/private/interpreter"
 WAVS = {"ue1": "conversation-ue1.wav", "ue2": "conversation-ue2.wav"}
 CLIENTS = {"ue1": "lab-sipue1", "ue2": "lab-sipue2"}
@@ -70,29 +75,6 @@ def fixtures_command(*args):
     return ["docker", "run", "--rm", "--network", "none", "-v", f"{FIXTURES}:/fixtures", *args]
 
 
-def install_wavs(work):
-    timeline = conversation_wavs(work)
-    sources = [f"/src/{name}" for name in WAVS.values()]
-    sh(*fixtures_command("-v", f"{work}:/src:ro", "--entrypoint", "cp", "lab-pjsua", *sources,
-                         "/fixtures/"))  # fmt: skip
-    return timeline
-
-
-def remove_wavs():
-    targets = [f"/fixtures/{name}" for name in WAVS.values()]
-    subprocess.run(fixtures_command("--entrypoint", "rm", "lab-pjsua", "-f", *targets),
-                   capture_output=True, check=False)  # fmt: skip
-
-
-def start_clients():
-    env = dict(os.environ, SIPUE1_PLAYBACK_FILE=f"fixtures/{WAVS['ue1']}",
-               SIPUE2_PLAYBACK_FILE=f"fixtures/{WAVS['ue2']}", SIPUE_AUTO_CONFERENCE="0")  # fmt: skip
-    subprocess.run([*COMPOSE, "up", "-d", "--no-deps", "--force-recreate", "sipue1", "sipue2"],
-                   env=env, capture_output=True, check=True)  # fmt: skip
-    wait_for(lambda: all("Response msg 200/REGISTER" in logs(c) for c in CLIENTS.values()), 60,
-             "тестовые клиенты не зарегистрированы")  # fmt: skip
-
-
 def player_ports(client):
     offset = len(logs(client).splitlines())
     pjsua(client, "cl\n")
@@ -103,26 +85,120 @@ def player_ports(client):
     return player, call
 
 
-def switch_players(ports, command):
-    """cc — оба проигрывателя в вызов одновременно, cd — отключить (иначе WAV пойдёт по кругу)."""
-    with ThreadPoolExecutor(max_workers=len(ports)) as pool:
-        list(pool.map(lambda item: pjsua(item[0], f"{command}\n{item[1][0]}\n{item[1][1]}\n"),
-                      ports.items()))  # fmt: skip
+def at_once(action, items):
+    """Действие над обоими клиентами одновременно: собеседники начинают говорить вместе."""
+    with ThreadPoolExecutor(max_workers=len(items)) as pool:
+        list(pool.map(action, items))
 
 
-def translated_call(settings, started):
-    pjsua(CLIENTS["ue1"], f"m\nsip:{settings['SIPUE2_IMSI']}@{settings['IMS_DOMAIN']}\n")
+class CorePath:
+    """SIPUE1 и SIPUE2 — контейнеры в сети ядра IMS, радио и UPF не проходят."""
+
+    title = "сеть ядра: lab-sipue1 → IMS → lab-sipue2 (без 5G)"
+
+    def __init__(self, settings):
+        self.settings, self.ports = settings, {}
+
+    def install(self, work):
+        sources = [f"/src/{name}" for name in WAVS.values()]
+        sh(*fixtures_command("-v", f"{work}:/src:ro", "--entrypoint", "cp", "lab-pjsua",
+                             *sources, "/fixtures/"))  # fmt: skip
+
+    def start(self):
+        env = dict(os.environ, SIPUE1_PLAYBACK_FILE=f"fixtures/{WAVS['ue1']}",
+                   SIPUE2_PLAYBACK_FILE=f"fixtures/{WAVS['ue2']}", SIPUE_AUTO_CONFERENCE="0")  # fmt: skip
+        subprocess.run([*COMPOSE, "up", "-d", "--no-deps", "--force-recreate", "sipue1",
+                        "sipue2"], env=env, capture_output=True, check=True)  # fmt: skip
+        wait_for(lambda: all("Response msg 200/REGISTER" in logs(c) for c in CLIENTS.values()),
+                 60, "тестовые клиенты не зарегистрированы")  # fmt: skip
+
+    def dial(self):
+        s = self.settings
+        pjsua(CLIENTS["ue1"], f"m\nsip:{s['SIPUE2_IMSI']}@{s['IMS_DOMAIN']}\n")
+
+    def players(self, connect):
+        """cc — оба проигрывателя в вызов одновременно, cd — отключить (иначе WAV по кругу)."""
+        if connect:
+            self.ports = {client: player_ports(client) for client in CLIENTS.values()}
+        command = "cc" if connect else "cd"
+        at_once(lambda item: pjsua(item[0], f"{command}\n{item[1][0]}\n{item[1][1]}\n"),
+                list(self.ports.items()))  # fmt: skip
+
+    def hangup(self):
+        pjsua(CLIENTS["ue1"], "ha\n")
+
+    def stop(self):
+        # Остановка клиентов завершает и незакрытый звонок (PJSUA отправляет BYE).
+        subprocess.run([*COMPOSE, "rm", "-sf", "sipue1", "sipue2"], capture_output=True)
+        targets = [f"/fixtures/{name}" for name in WAVS.values()]
+        subprocess.run(fixtures_command("--entrypoint", "rm", "lab-pjsua", "-f", *targets),
+                       capture_output=True, check=False)  # fmt: skip
+
+
+class RadioPath:
+    """UE1 и UE2 OAI rfsim: PJSUA в namespace UE, звук идёт через gNB, UPF и IMS."""
+
+    title = "5G: UE1 → gNB rfsim → UPF → IMS → UPF → gNB rfsim → UE2"
+
+    def __init__(self, settings):
+        self.settings, self.clients, self.ports = settings, [], []
+        self.radio_started = False
+
+    def install(self, work):
+        if not all(tunnel_ip(n) for n in (1, 2)):
+            print("rfsim не запущен: поднимаю (scripts/rfsim.sh up)", flush=True)
+            self.radio_started = True
+            subprocess.run([str(RFSIM), "up"], check=True, timeout=400)
+        prepare_jail()
+        for name in WAVS.values():
+            sh("sudo", "cp", str(Path(work) / name), str(JAIL / "tmp" / name))
+
+    def start(self):
+        for n in (1, 2):
+            address = tunnel_ip(n)
+            if not address:
+                raise RuntimeError(f"UE{n} без адреса туннеля: scripts/rfsim.sh status")
+            client = Client(n, address, self.settings, play_file=f"/tmp/{WAVS[f'ue{n}']}")
+            self.clients.append(client)
+        for client in self.clients:
+            client.registered_ms()
+
+    def dial(self):
+        s = self.settings
+        self.clients[0].send(f"m\nsip:{s['UE2_MSISDN']}@{s['IMS_DOMAIN']}\n")
+
+    def players(self, connect):
+        if connect:
+            self.ports = [client.player_ports() for client in self.clients]
+        at_once(lambda item: item[0].switch_player(item[1], connect),
+                list(zip(self.clients, self.ports)))  # fmt: skip
+
+    def hangup(self):
+        self.clients[0].send("ha\n")
+
+    def stop(self):
+        for client in self.clients:
+            client.stop()
+        targets = [str(JAIL / "tmp" / name) for name in WAVS.values()]
+        subprocess.run(["sudo", "rm", "-f", *targets], capture_output=True, check=False)
+        if self.radio_started:
+            subprocess.run([str(RFSIM), "down"], check=False)
+
+
+def answered_call(started):
+    """Ноги B2BUA translate (a — звонящий, b — вызываемый) после ответа и начала записи."""
     answered = wait_for(
         lambda: re.search(
             r"AS translate answered call_id=(\S+) leg_b=(\S+)", logs("lab-sip-as", started)
         ),  # fmt: skip
         40,
-        "translate AS не ответил: нужен SIPUE1_SERVICES=translate,record (verify-services.sh)",
+        "translate AS не ответил: у звонящего нужны услуги translate,record "
+        "(SIPUE1_SERVICES / UE1_SERVICES, verify-services.sh)",
     )
     legs = dict(zip("ab", answered.groups()))
     # Уведомление о записи звучит до речи: иначе первые слова попадут на него.
     wait_for(lambda: f"AS record started call_id={legs['a']}" in logs("lab-sip-as", started), 40,
-             "запись не началась: нужен SIPUE1_SERVICES=translate,record")  # fmt: skip
+             "запись не началась: у звонящего нужна услуга record")  # fmt: skip
     return legs
 
 
@@ -169,6 +245,8 @@ def markdown(report):
 
     lines = [
         f"# Длинный разговор, {report['created_at']}", "",
+        f"Путь: {report['path']}. Ядра AI Worker: {report['ai_worker_cpuset'] or 'все'}"
+        + (f", rfsim: {report['rfsim_cpuset'] or 'все'}" if report["radio"] else "") + ".", "",
         f"Разговор {report['duration_s']} с. Настройки AI: " +
         ", ".join(f"{k}={v}" for k, v in report["settings"].items()) + ".", "",
         "| | " + " | ".join(names) + " |", "|---|" + "---|" * len(names),
@@ -195,30 +273,36 @@ def markdown(report):
     return "\n".join(lines) + "\n"
 
 
-def run(out):
-    settings = read_env()
-    timeline = install_wavs((out / "work").resolve())
+def talk(path, settings, timeline):
+    """Звонок с переводом, оба собеседника говорят, затем отбой: (ноги, озвучки, фразы)."""
     tts = {}
+    path.start()
+    started = time.time()
+    path.dial()
+    legs = answered_call(started)
+    path.players(connect=True)
+    print(f"разговор идёт {timeline['duration_ms'] / 1000:.0f} с", flush=True)
+    deadline = time.monotonic() + timeline["duration_ms"] / 1000
+    while time.monotonic() < deadline:
+        collect_tts(tts, started)
+        time.sleep(max(0, min(3, deadline - time.monotonic())))
+    # В конце WAV 5 с тишины: проигрыватель отключается до повтора файла по кругу.
+    path.players(connect=False)
+    wait_quiet(tts, started)
+    path.hangup()
+    return legs, tts, recorded_phrases(settings, legs["a"], started)
+
+
+def run(out, radio=False):
+    settings = read_env()
+    path = (RadioPath if radio else CorePath)(settings)
+    work = (out / "work").resolve()
+    timeline = conversation_wavs(work)
     try:
-        start_clients()
-        started = time.time()
-        legs = translated_call(settings, started)
-        ports = {client: player_ports(client) for client in CLIENTS.values()}
-        switch_players(ports, "cc")
-        print(f"разговор идёт {timeline['duration_ms'] / 1000:.0f} с", flush=True)
-        deadline = time.monotonic() + timeline["duration_ms"] / 1000
-        while time.monotonic() < deadline:
-            collect_tts(tts, started)
-            time.sleep(max(0, min(3, deadline - time.monotonic())))
-        # В конце WAV 5 с тишины: проигрыватель отключается до повтора файла по кругу.
-        switch_players(ports, "cd")
-        wait_quiet(tts, started)
-        pjsua(CLIENTS["ue1"], "ha\n")
-        phrases = recorded_phrases(settings, legs["a"], started)
+        path.install(work)
+        legs, tts, phrases = talk(path, settings, timeline)
     finally:
-        # Остановка клиентов завершает и незакрытый звонок (PJSUA отправляет BYE).
-        subprocess.run([*COMPOSE, "rm", "-sf", "sipue1", "sipue2"], capture_output=True)
-        remove_wavs()
+        path.stop()
     by_leg = {}
     for name, (speaker, leg) in DIRECTIONS.items():
         by_leg[name] = (speaker, [p for p in phrases if p.get("call_ids") == [legs[leg]]])
@@ -229,9 +313,13 @@ def run(out):
     }  # fmt: skip
     found = problems(directions, MIN_ACCURACY)
     env = container_env("lab-ai-worker")
+    cpuset = sh("docker", "inspect", "-f", "{{.HostConfig.CpusetCpus}}", "lab-ai-worker",
+                check=False).strip()  # fmt: skip
     report = {
         "test": "long-conversation", "fixture_id": timeline["fixture_id"],
         "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "path": path.title, "radio": radio, "ai_worker_cpuset": cpuset,
+        "rfsim_cpuset": settings.get("RFSIM_CPUSET", ""),
         "duration_s": round(timeline["duration_ms"] / 1000), "target_ms": TARGET_MS,
         "settings": {k: env.get(k) for k in SETTINGS_SHOWN}, "directions": directions,
         "problems": found, "result": "FAIL" if found else "PASS",
@@ -242,9 +330,12 @@ def run(out):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    parser.add_argument("--5g", dest="radio", action="store_true",
+                        help="UE1 → UE2 через радио rfsim, UPF и IMS (полный путь)")  # fmt: skip
     parser.add_argument("--out", type=Path, default=ROOT / "local/conversation" / stamp)
-    out = parser.parse_args().out
-    report, lines = run(out)
+    args = parser.parse_args()
+    out = args.out
+    report, lines = run(out, args.radio)
     (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2),
                                      encoding="utf-8")  # fmt: skip
     (out / "conversation.log").write_text("\n".join(lines) + "\n", encoding="utf-8")

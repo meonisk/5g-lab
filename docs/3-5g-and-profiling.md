@@ -114,10 +114,18 @@ S5 в `compact` пропускается: Voice Agent обслуживает н�
 ## Длинный разговор в обычном темпе
 
 ```bash
-python3 scripts/profile/conversation.py     # около 3 минут, стенд запущен, rfsim не нужен
+python3 scripts/profile/conversation.py        # сеть ядра: SIPUE1 -> SIPUE2, без 5G
+python3 scripts/profile/conversation.py --5g   # полный путь: UE1 -> UE2 через rfsim
 ```
 
-SIPUE1 (русский) звонит SIPUE2 (английский) через услуги translate и record. Разговор —
+Около 3 минут, стенд должен быть запущен. Без `--5g` говорят тестовые клиенты сети ядра
+`lab-sipue1/2`: IMS и услуги те же, но радио и UPF звук не проходит. С `--5g` — путь
+настоящего телефона: PJSUA внутри UE1 и UE2 rfsim, звук идёт через gNB, UPF, IMS и
+услуги в обе стороны. Если rfsim не запущен, скрипт поднимает его сам и в конце
+останавливает (нужен `sudo`). В отчёте указаны путь и ядра AI Worker и rfsim.
+
+Абонент с русским (SIPUE1 или UE1) звонит абоненту с английским (SIPUE2 или UE2) через
+услуги translate и record (`SIPUE1_SERVICES`, `UE1_SERVICES`). Разговор —
 6 реплик, 20 предложений, 96 с (`app/tests/fixtures/conversation-long-v1.json`, голос
 Piper). Паузы как у живого человека: 350 мс между предложениями, ответ через 1,5 с после
 конца чужой реплики. Собеседники не ждут, пока дозвучит перевод.

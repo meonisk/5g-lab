@@ -99,7 +99,8 @@ def prepare_phrase(settings):
 class Client:
     """PJSUA абонента UEn в namespace UE; команды консоли — через FIFO."""
 
-    def __init__(self, n, address, settings):
+    def __init__(self, n, address, settings, play_file="/tmp/bench-pause.wav"):
+        """play_file — путь внутри корня образа lab-pjsua (JAIL); файл кладётся заранее."""
         self.n, self.log = n, WORK / f"bench-ue{n}.log"
         self.fifo = JAIL / f"tmp/bench-ue{n}"
         imsi, key = settings[f"UE{n}_IMSI"], settings[f"UE{n}_IMS_K"]
@@ -113,7 +114,7 @@ class Client:
             "--log-level=4", "--app-log-level=4", "--null-audio", "--no-tcp", "--no-vad",
             "--auto-update-nat=0", "--clock-rate=8000", "--snd-clock-rate=8000",
             "--dis-codec=*", f"--add-codec={codec}", "--auto-answer=200",
-            "--play-file=/tmp/bench-pause.wav", f"--id=sip:{imsi}@{domain}",
+            f"--play-file={play_file}", f"--id=sip:{imsi}@{domain}",
             f"--registrar=sip:{domain}", f"--proxy={proxy}", f"--realm={domain}",
             f"--username={imsi}@{domain}", f"--password={key}",
             f"--ip-addr={address}", f"--bound-addr={address}",
@@ -154,15 +155,22 @@ class Client:
     def registered_ms(self):
         return self.between_ms(r"TX .*Request msg REGISTER", r"Response msg 200/REGISTER", 0, 60)
 
-    def connect_player(self, connect=True):
-        """Проигрыватель WAV -> последний вызов (cc) или отключение (cd)."""
+    def player_ports(self):
+        """(порт проигрывателя WAV, порт последнего вызова) в конференц-мосте PJSUA."""
         offset = self.mark()
         self.send("cl\n")
         time.sleep(1)
         player, call = conference_ports("\n".join(self.lines(offset)))
         if player is None or call is None:
             raise RuntimeError(f"UE{self.n}: нет порта проигрывателя или вызова")
-        self.send(f"{'cc' if connect else 'cd'}\n{player}\n{call}\n")
+        return player, call
+
+    def switch_player(self, ports, connect=True):
+        """Проигрыватель WAV -> вызов (cc) или отключение (cd) по готовым портам."""
+        self.send(f"{'cc' if connect else 'cd'}\n{ports[0]}\n{ports[1]}\n")
+
+    def connect_player(self, connect=True):
+        self.switch_player(self.player_ports(), connect)
 
     def say_once(self, phrase_seconds):
         self.connect_player()
