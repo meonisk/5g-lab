@@ -11,8 +11,8 @@
 
 **Режим AI важнее файла.** Режим (`AI_MODE`, по умолчанию `compact`) заменяет часть
 значений своими из [ai-profiles.json](../app/config/ai-profiles.json). Например, в
-`compact` действуют `AI_MODEL_SIZE=base`, `AI_STT_CPU_THREADS=2`,
-`AI_WORKER_CPU_LIMIT=2.0`, `AI_TRANSLATION_BACKEND=opus-mt`, хотя в `lab.env` записано
+`compact` действуют `AI_MODEL_SIZE=base`, `AI_STT_CPU_THREADS=4`,
+`AI_WORKER_CPU_LIMIT=4.0`, `AI_TRANSLATION_BACKEND=opus-mt`, хотя в `lab.env` записано
 другое. Ниже такие переменные помечены «(режим)».
 
 ## Сеть
@@ -85,7 +85,7 @@
 |---|---|---|
 | `AI_MODEL_SIZE` (режим) | `base` в compact | модель Whisper: `tiny`, `base`, `small` — больше значит точнее и медленнее |
 | `AI_MODEL_REVISION` (режим) | хеш | точная версия модели; модель скачивается именно эта |
-| `AI_STT_CPU_THREADS` (режим) | 2 в compact | потоков распознавания; больше лимита процессора контейнера — медленнее |
+| `AI_STT_CPU_THREADS` (режим) | 4 в compact | потоков распознавания; больше лимита процессора контейнера — медленнее |
 | `AI_LANGUAGE` | `ru` | язык распознавания для переводчика 1003 |
 | `AI_STT_BEAM_SIZE` | 1 | ширина поиска Whisper; 1 — быстрее всего |
 | `AI_STT_MIN_RMS` | 0.005 | слишком тихий звук не распознаётся |
@@ -134,7 +134,7 @@
 | `PIPER_MODEL_URL`, `PIPER_*_SHA256`, `PIPER_MODEL_PATH` | ссылка, хеши, путь | русский голос Piper; меняется только пересборкой образа `voice-agent` |
 | `PIPER_EN_*` | то же | английский голос |
 | `PIPER_LENGTH_SCALE` | 1.0 | темп: больше 1 — медленнее |
-| `PIPER_THREADS` | 1 | потоков синтеза |
+| `PIPER_THREADS` | 2 | потоков синтеза; не больше `VOICE_AGENT_CPU_LIMIT` |
 
 ## Голосовой агент, очереди, запись
 
@@ -159,7 +159,8 @@
 
 | Переменная | Значение | Что это |
 |---|---|---|
-| `AI_WORKER_CPU_LIMIT` (режим) | 2.0 в compact | сколько ядер процессора может занять AI Worker |
+| `AI_WORKER_CPU_LIMIT` (режим) | 4.0 в compact | сколько ядер процессора может занять AI Worker; на компьютере с меньшим числом ядер контейнер не запустится — уменьшите |
+| `VOICE_AGENT_CPU_LIMIT` | 2.0 | сколько ядер может занять Voice Agent (синтез Piper) |
 | `AI_WORKER_CPUSET`, `RFSIM_CPUSET` | пусто | номера ядер (как в `lscpu -e`) для AI Worker и для gNB/UE rfsim; пусто — без привязки. См. документ 3 |
 | `*_MEMORY_LIMIT` | `256m` … `6g` | предел памяти контейнера; при превышении он перезапускается |
 | `CUSTOM_SERVICE_CPU_LIMIT`, `_PIDS_LIMIT` | 1.0, 128 | пределы для остальных наших сервисов |

@@ -213,6 +213,7 @@ services:
     container_name: lab-voice-agent
     user: "65532:65532"
     mem_limit: ${VOICE_AGENT_MEMORY_LIMIT}
+    cpus: ${VOICE_AGENT_CPU_LIMIT}
     env_file: [app/config/lab.env]
     depends_on:
       stand-init: {condition: service_completed_successfully}

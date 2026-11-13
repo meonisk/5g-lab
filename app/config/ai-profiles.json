@@ -30,12 +30,12 @@
     "AI_MODEL_SIZE": "base",
     "AI_MODEL_REVISION": "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66",
     "AI_WORKER_MEMORY_LIMIT": "1536m",
-    "AI_WORKER_CPU_LIMIT": "2.0",
-    "AI_STT_CPU_THREADS": "2",
+    "AI_WORKER_CPU_LIMIT": "4.0",
+    "AI_STT_CPU_THREADS": "4",
     "AI_TRANSLATION_THREADS": "2",
     "AI_PROCESSING_WORKERS": "1",
     "TTS_BACKEND": "piper",
-    "PIPER_THREADS": "1"
+    "PIPER_THREADS": "2"
   },
   "minimal": {
     "VOICE_AGENT_MAX_CALLS": "2",
