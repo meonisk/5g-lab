@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="470" viewBox="0 0 960 470" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <rect width="960" height="470" rx="16" fill="#ffffff"/>
+  <text x="480" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">Было → стало: идентичность стенда</text>
+
+  <!-- Было -->
+  <rect x="30" y="64" width="400" height="380" rx="12" fill="#f3f4f6" stroke="#9ca3af"/>
+  <text x="230" y="94" text-anchor="middle" font-size="18" font-weight="700" fill="#4b5563">Было</text>
+  <g font-size="14" fill="#374151">
+    <text x="50" y="130" font-weight="600">PLMN</text><text x="200" y="130">001 / 01 (синтетический)</text>
+    <text x="50" y="162" font-weight="600">IMS-домен</text><text x="200" y="162">ims.mnc001.mcc001…</text>
+    <text x="50" y="194" font-weight="600">UE1 / UE2</text><text x="200" y="194">00101…01 / …02</text>
+    <text x="50" y="226" font-weight="600">Абоненты</text><text x="200" y="226">только 2 виртуальных UE</text>
+    <text x="50" y="258" font-weight="600">Физические SIM</text><text x="200" y="258" fill="#b91c1c">завести нечем</text>
+    <text x="50" y="290" font-weight="600">Проверка SIM</text><text x="200" y="290" fill="#b91c1c">нет</text>
+  </g>
+  <rect x="50" y="320" width="360" height="100" rx="10" fill="#e5e7eb"/>
+  <text x="230" y="352" text-anchor="middle" font-size="14" fill="#4b5563">UERANSIM UE1, UE2 + PJSUA</text>
+  <text x="230" y="378" text-anchor="middle" font-size="14" fill="#4b5563">Телефон с SIM 901/70 не видит сеть:</text>
+  <text x="230" y="400" text-anchor="middle" font-size="14" fill="#4b5563">gNB вещает другой PLMN</text>
+
+  <!-- Arrow -->
+  <path d="M440 254 H515" stroke="#2563eb" stroke-width="4" fill="none"/>
+  <path d="M515 242 L533 254 L515 266 Z" fill="#2563eb"/>
+
+  <!-- Стало -->
+  <rect x="540" y="64" width="390" height="380" rx="12" fill="#ecfdf5" stroke="#10b981"/>
+  <text x="735" y="94" text-anchor="middle" font-size="18" font-weight="700" fill="#047857">Стало</text>
+  <g font-size="14" fill="#064e3b">
+    <text x="560" y="130" font-weight="600">PLMN</text><text x="700" y="130">901 / 70 (как у SIM)</text>
+    <text x="560" y="162" font-weight="600">IMS-домен</text><text x="700" y="162">ims.mnc070.mcc901…</text>
+    <text x="560" y="194" font-weight="600">UE1 / UE2</text><text x="700" y="194">90170…01 / …02</text>
+    <text x="560" y="226" font-weight="600">Абоненты</text><text x="700" y="226">2 UE + 10 SIM</text>
+    <text x="560" y="258" font-weight="600">Номера SIM</text><text x="700" y="258">2600 – 2609</text>
+    <text x="560" y="290" font-weight="600">Проверка SIM</text><text x="700" y="290">plan / status / readiness</text>
+  </g>
+  <rect x="560" y="320" width="350" height="100" rx="10" fill="#d1fae5"/>
+  <text x="735" y="352" text-anchor="middle" font-size="14" fill="#065f46">scripts/research_sims.py</text>
+  <text x="735" y="378" text-anchor="middle" font-size="14" fill="#065f46">заводит SIM в OAI UDR и PyHSS,</text>
+  <text x="735" y="400" text-anchor="middle" font-size="14" fill="#065f46">SQN и ключи сохраняются</text>
+</svg>

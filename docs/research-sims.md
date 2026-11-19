@@ -12,7 +12,11 @@ ACC, PIN1/PUK1, PIN2/PUK2, Ki и OPc. Ключа администрирован�
 Ki/OPc и PIN/PUK в Git и документацию не попадают. Таблица хранится у оператора,
 рабочий список — в игнорируемом `local/secrets/research-sims.csv`.
 
+![Было и стало: идентичность стенда](images/research-sims/before-after.svg)
+
 ## Команды
+
+![Как SIM попадают в базы](images/research-sims/provisioning-flow.svg)
 
 Все команды выполняются из корня репозитория. Команды без `--apply` базы не меняют.
 
@@ -44,6 +48,8 @@ python scripts/research_sims.py oai-sql --output local/private/research-sims-udr
 ```
 
 ### Что записывается в базы
+
+![Один Ki/OPc карты — две аутентификации](images/research-sims/phone-call-path.svg)
 
 У физической карты один Ki/OPc, поэтому он используется дважды:
 
