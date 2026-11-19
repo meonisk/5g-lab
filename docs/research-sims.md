@@ -123,5 +123,6 @@ python scripts/research_sims.py retire --imsi 001010000000001 --imsi 00101000000
    может ждать его перед UPDATE; AI-услуга ждёт `SIP_AS_PRECONDITION_TIMEOUT_SECONDS`
    (8 с) и затем принимает вызов, поэтому первый ответ может прийти с задержкой.
 
+Пошаговая проверка на стенде одной командой — [stand-check.md](stand-check.md).
 Порядок приёмки на телефоне — [native-phone.md](native-phone.md#подключение-партнёров-и-порядок-проверки).
 Номера для вызовов: SIM между собой 2600–2609; AI-услуги — `VOICE_*_MSISDN` (1003–1006).

@@ -16,6 +16,7 @@
 | `start.ps1`, `start.sh` | Windows/Linux точки входа в общий launcher |
 | `start_partner.py` | Запуск только IMS + AI на Linux LAN; `--check` и `--ims-only`, без изменения ядра партнёров |
 | `phone_readiness.py` | Read-only проверка серверных возможностей; `NOT_READY` до отдельной приёмки настоящего телефона |
+| `stand_check.py`, `stand_check_uac.py` | Стенд перед телефоном: preflight с подсказками и самотестом AI-вызова с preconditions, `phones`, `watch`, `collect`; [инструкция](../docs/stand-check.md) |
 | `research_sims.py`, `research_sim_inventory.py` | Исследовательские SIM: импорт таблицы в `local/secrets`, проверка, заведение в OAI UDR и PyHSS с сохранением SQN, `status`, `retire`, приватный SQL для партнёров; [инструкция](../docs/research-sims.md) |
 | `oai_config.py`, `oai_subscribers.py`, `oai-upf-network.sh` | Приватная конфигурация OAI, UDR provisioning с сохранением SQN, internet-only NAT |
 | `start_lab.py` | Общий запуск; `--base-only` запускает сеть/IMS без AI и обязательно проверяет связность/регистрацию |

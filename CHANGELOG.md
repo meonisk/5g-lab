@@ -9,6 +9,12 @@
 
 ## [Unreleased]
 
+- feat: `scripts/stand_check.py` для испытаний с телефонами: preflight с подсказками
+  (конфигурация, контейнеры, версии SIP AS/P-CSCF, SIM в базах, кодеки, самотест
+  AI-вызова с preconditions внутри `lab-sip-as`), `phones` (регистрация SIM по
+  S-CSCF), `watch` (живой журнал без ключей), `collect` (журналы в `local/evidence`);
+  пошаговая инструкция `docs/stand-check.md`.
+
 - feat: SIP AS отвечает штатным IMS-клиентам с `100rel` и QoS preconditions
   (RFC 3262/3312/3311): надёжный 183 с QoS-атрибутами и повторами, PRACK, UPDATE,
   затем 200 OK; CANCEL в раннем диалоге даёт 487, неизвестные обязательные
