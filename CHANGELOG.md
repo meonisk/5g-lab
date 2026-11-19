@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+- feat: SIP AS отвечает штатным IMS-клиентам с `100rel` и QoS preconditions
+  (RFC 3262/3312/3311): надёжный 183 с QoS-атрибутами и повторами, PRACK, UPDATE,
+  затем 200 OK; CANCEL в раннем диалоге даёт 487, неизвестные обязательные
+  расширения — 420, re-INVITE/OPTIONS/INFO получают ответ. Номер услуги
+  распознаётся и в `tel:`/`phone-context` URI звонилки.
+- fix: P-CSCF якорит в RTPengine ответ AI-услуги на UPDATE/re-INVITE, сохраняет
+  перекодирование в PCMU для повторных offer и узнаёт номера AI с `;phone-context`.
+
 - feat: добавлены исследовательские SIM: `scripts/research_sims.py` импортирует
   таблицу поставщика в игнорируемый `local/secrets/research-sims.csv` (без PIN/PUK),
   проверяет IMSI/ICCID/ключи/номера и заводит карты в OAI UDR и PyHSS без

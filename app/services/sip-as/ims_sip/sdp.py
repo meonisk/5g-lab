@@ -8,20 +8,14 @@ def accepts_pcmu(message: str) -> bool:
 
     Phones may offer only AMR. A relay address alone is not proof that a
     transcoder has inserted PCMU. Inspect SDP, never SIP headers or video PTs.
-    Multiple media streams and required QoS preconditions are not implemented.
+    QoS precondition attributes are negotiated separately (preconditions.py);
+    SIP option tags (Require/Supported) are checked by the dialog layer.
     """
     headers, separator, body = message.partition("\r\n\r\n")
     if not separator:
         return False
     content_type = re.search(r"(?im)^(?:Content-Type|c):\s*([^;\r\n]+)", headers)
     if not content_type or content_type[1].strip().lower() != "application/sdp":
-        return False
-    required = re.findall(r"(?im)^Require:\s*([^\r\n]+)", headers)
-    if any(
-        token.strip().lower() in {"precondition", "100rel"}
-        for value in required
-        for token in value.split(",")
-    ):
         return False
     lines = body.splitlines()
     media = [line.split() for line in lines if line.startswith("m=")]
@@ -36,6 +30,4 @@ def accepts_pcmu(message: str) -> bool:
     maps = re.findall(r"(?im)^a=rtpmap:0\s+([^\r\n]+)", body)
     if any(value.strip().upper() not in {"PCMU/8000", "PCMU/8000/1"} for value in maps):
         return False
-    if any(line.lower() in {"a=inactive", "a=sendonly", "a=recvonly"} for line in lines):
-        return False
-    return not re.search(r"(?im)^a=des:qos\s+mandatory\b", body)
+    return not any(line.lower() in {"a=inactive", "a=sendonly", "a=recvonly"} for line in lines)

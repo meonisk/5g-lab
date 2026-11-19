@@ -107,7 +107,9 @@ for name in VOICE_AGENT_MSISDN VOICE_TRANSLATOR_MSISDN VOICE_TRANSCRIBER_MSISDN 
     fi
     ai_targets="${ai_targets:+${ai_targets}|}${value}"
 done
-sed -i "s@AI_MEDIA_TARGETS@^(${ai_targets})\$@g" /etc/kamailio_pcscf/route/rtp.cfg
+# Native dialers send sip:1003;phone-context=...@domain;user=phone, whose user
+# part keeps the phone-context parameter: accept it after the identifier.
+sed -i "s@AI_MEDIA_TARGETS@^(${ai_targets})(;.*)?\$@g" /etc/kamailio_pcscf/route/rtp.cfg
 
 # Add static route to route traffic back to UE as there is not NATing
 ip route replace "${IMS_UE_CIDR}" via "${UPF_IP}"
