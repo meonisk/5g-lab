@@ -18,6 +18,28 @@ def run(container, *arguments):
         return ""
 
 
+def research_sims_check():
+    """Только чтение: заведены ли исследовательские SIM в PyHSS и локальном UDR."""
+    import research_sims
+
+    try:
+        env = research_sims.environment()
+        sims = research_sims.load(env)
+        # Без контейнера локального OAI ядро у партнёров: проверяем только PyHSS.
+        ims_only = not run("lab-oai-db", "echo", "ok")
+        report = research_sims.status(env, sims, ims_only=ims_only)
+    except (OSError, RuntimeError, ValueError) as error:
+        return {"check": "research_sims_provisioned", "status": "FAIL", "detail": str(error)}
+    found = {key: len(report[key]) for key in ("pyhss", "oai_udr") if key in report}
+    complete = all(count == len(sims) for count in found.values())
+    return {
+        "check": "research_sims_provisioned",
+        "status": "PASS" if complete else "FAIL",
+        "detail": {"sims": len(sims), **found},
+        "scope": "Записи в базах; совпадение ключей с картой проверяет только телефон",
+    }
+
+
 def inspect():
     codecs = run("lab-rtpengine", "rtpengine", "--codecs")
     supported = dict(line.strip().split(":", 1) for line in codecs.splitlines() if ":" in line)
@@ -40,6 +62,7 @@ def inspect():
                 "detail": value,
             }
         )
+    checks.append(research_sims_check())
     for name in (
         "native_phone_and_sim_profile",
         "radio_and_5gs_registration",

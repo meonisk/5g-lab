@@ -11,7 +11,7 @@
 | Что менять | Переменные |
 | --- | --- |
 | Сети, адреса, DNS | `LAB_*`, `IMS_UE_*`, `INTERNET_UE_*`, `*_IP`, `DNS_*` |
-| Сигнализация и порты | `*_PORT`, `RTPENGINE_QUERY_TIMEOUT_SECONDS`, `IMS_DOMAIN`, `UE*_IMSI`, `VOICE_*_MSISDN` |
+| Сигнализация и порты | `*_PORT`, `RTPENGINE_QUERY_TIMEOUT_SECONDS`, `IMS_DOMAIN`, `UE*_IMSI`, `RESEARCH_SIM_*`, `VOICE_*_MSISDN` |
 | Версии образов | `OAI_*_IMAGE`, `UERANSIM_IMAGE`, `MYSQL_IMAGE`, `PYHSS_IMAGE`, `KAMAILIO_IMAGE`, `SCSCF_IMAGE`, `OLLAMA_IMAGE`, `CONTROL_INIT_IMAGE`; `OPEN5GS_IMAGE` и `MONGO_IMAGE` сохранены для отката |
 | STT | `AI_MODEL_SIZE`, `AI_MODEL_REVISION`, `AI_DEVICE`, `AI_COMPUTE_TYPE`, `AI_LANGUAGE`, `AI_STT_*` |
 | Границы обычных реплик | `AI_UTTERANCE_*`, `AI_VAD_RMS`, `AI_AUDIO_PREROLL_MS` |

@@ -255,6 +255,24 @@ def provision_subscribers(bash):
         [bash, "scripts/provision-ims-subscribers.sh", "--apply"],
         "Не удалось настроить абонентов IMS",
     )
+    provision_research_sims()
+
+
+def provision_research_sims(ims_only=False):
+    """Исследовательские SIM заводятся, только если оператор импортировал их список."""
+    settings = public_environment()
+    if not (ROOT / settings["RESEARCH_SIM_FILE"]).exists():
+        print("Исследовательские SIM: список не импортирован, шаг пропущен")
+        return
+    run(
+        [
+            sys.executable,
+            "scripts/research_sims.py",
+            "apply",
+            *(["--ims-only"] if ims_only else []),
+        ],
+        "Не удалось завести исследовательские SIM",
+    )
 
 
 def restart_registration_chain():

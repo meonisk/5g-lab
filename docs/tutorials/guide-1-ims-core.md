@@ -127,17 +127,17 @@ ip -br addr     # сеть этого интерфейса
 ```
 
 ```dotenv
-MCC=001
-MNC=01
-IMS_DOMAIN=ims.mnc001.mcc001.3gppnetwork.org   # строго ims.mnc<MNC из 3 цифр>.mcc<MCC>...
+MCC=901
+MNC=70
+IMS_DOMAIN=ims.mnc070.mcc901.3gppnetwork.org   # строго ims.mnc<MNC из 3 цифр>.mcc<MCC>...
 IMS_UE_CIDR=10.46.0.0/16          # = ipv4_subnet DNN ims
 INTERNET_UE_CIDR=10.45.0.0/16     # = ipv4_subnet DNN internet
 LAB_NETWORK_CIDR=172.22.0.0/24    # сеть интерфейса
 LAB_DYNAMIC_IP_RANGE=172.22.0.128/25  # свободный диапазон, исключить из DHCP
 IMS_PARENT_INTERFACE=ens192
 IMS_ROUTE_GATEWAY=172.22.0.1      # UPF или маршрутизатор к IMS-пулу
-UE1_IMSI=001010000000001          # два тестовых абонента партнёров
-UE2_IMSI=001010000000002
+UE1_IMSI=901700000000001          # два тестовых абонента партнёров
+UE2_IMSI=901700000000002
 UE1_MSISDN=1001
 UE2_MSISDN=1002
 ```
@@ -274,8 +274,8 @@ OAI, NRF, N2/N3/N4. Связь ядра и IMS — четыре вещи:
 
 | Параметр | По умолчанию | Смысл |
 | --- | --- | --- |
-| `MCC`, `MNC` | `001`, `01` | PLMN |
-| `IMS_DOMAIN` | `ims.mnc001.mcc001.3gppnetwork.org` | Домашний IMS-домен, realm |
+| `MCC`, `MNC` | `901`, `70` | PLMN (партия исследовательских SIM) |
+| `IMS_DOMAIN` | `ims.mnc070.mcc901.3gppnetwork.org` | Домашний IMS-домен, realm |
 | `INTERNET_DNN`, `IMS_DNN` | `internet`, `ims` | Имена DNN |
 | `UE_PDU_SST` | `1` | S-NSSAI SST |
 | `INTERNET_UE_CIDR` | `10.45.0.0/16` | Пул internet; NAT только для него |

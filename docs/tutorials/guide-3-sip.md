@@ -199,7 +199,7 @@ Dockerfile S-CSCF до применения патча проверяет ком
 
 | Параметр | По умолчанию | Смысл |
 | --- | --- | --- |
-| `IMS_DOMAIN` | `ims.mnc001.mcc001.3gppnetwork.org` | Домашний домен и realm |
+| `IMS_DOMAIN` | `ims.mnc070.mcc901.3gppnetwork.org` | Домашний домен и realm |
 | `PCSCF_IP`, `PCSCF_SIP_PORT` | `172.22.0.106`, `5060` | P-CSCF |
 | `ICSCF_IP`, `ICSCF_SIP_PORT` | `172.22.0.104`, `5060` | I-CSCF |
 | `SCSCF_IP`, `SCSCF_SIP_PORT` | `172.22.0.105`, `6060` | S-CSCF |
@@ -259,12 +259,13 @@ IMS subscriber (MSISDN, домен, `ifc_path: default_ifc.xml`). Существ
 
 | Идентификатор | Формат | Пример UE1 |
 | --- | --- | --- |
-| IMPI (username) | `<IMSI>@<домен>` | `001010000000001@ims.mnc001.mcc001.3gppnetwork.org` |
-| IMPU | `sip:<MSISDN>@<домен>`, `tel:<MSISDN>`, `sip:<IMSI>@<домен>` | `sip:1001@ims.mnc001.mcc001.3gppnetwork.org` |
-| Realm | `<IMS_DOMAIN>` | `ims.mnc001.mcc001.3gppnetwork.org` |
+| IMPI (username) | `<IMSI>@<домен>` | `901700000000001@ims.mnc070.mcc901.3gppnetwork.org` |
+| IMPU | `sip:<MSISDN>@<домен>`, `tel:<MSISDN>`, `sip:<IMSI>@<домен>` | `sip:1001@ims.mnc070.mcc901.3gppnetwork.org` |
+| Realm | `<IMS_DOMAIN>` | `ims.mnc070.mcc901.3gppnetwork.org` |
 
-**Ограничение: provisioning поддерживает только двух абонентов, UE1 и UE2.**
-Третьего абонента скрипт не создаёт. Заменить абонента: измените `UE<n>_IMSI`/`UE<n>_MSISDN`
+**Ограничение: bootstrap-provisioning создаёт только двух виртуальных абонентов, UE1 и UE2.**
+Третьего абонента этот скрипт не создаёт; физические исследовательские SIM заводит
+отдельная команда `scripts/research_sims.py` ([инструкция](../research-sims.md)). Заменить абонента: измените `UE<n>_IMSI`/`UE<n>_MSISDN`
 и ключи, затем повторите запуск (шаг А). Смена ключей в существующей базе — только
 явной миграцией с backup.
 

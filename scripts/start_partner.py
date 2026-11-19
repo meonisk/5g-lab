@@ -11,6 +11,7 @@ from start_lab import (
     ROOT,
     bash_command,
     guard_mysql_storage,
+    provision_research_sims,
     public_environment,
     restart_ims_chain,
     run,
@@ -99,6 +100,8 @@ def main():
         [bash_command(), "scripts/provision-ims-subscribers.sh", "--apply"],
         "Не удалось настроить IMS",
     )
+    # 5GS-ключи SIM у партнёров в их UDR; у нас только IMS AKA в PyHSS.
+    provision_research_sims(ims_only=True)
     wait_for_pyhss_cx(settings)
     restart_ims_chain()
     wait_ims_peers(settings)
