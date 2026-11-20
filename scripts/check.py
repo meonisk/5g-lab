@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_LOGICAL_LINES = 300
-SOURCE_SUFFIXES = {".py", ".sh", ".yml", ".yaml"}
+SOURCE_SUFFIXES = {".py", ".sh", ".yml", ".yaml", ".js", ".vue", ".css"}
 PRIVATE_SUFFIXES = {".wav", ".flac", ".mp3", ".ogg", ".pcap", ".pcapng", ".pem", ".key", ".zip"}
 SIGNATURE = re.compile(
     rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}"
@@ -115,8 +115,9 @@ def main():
         raise SystemExit("\n".join(sorted(set(errors))))
     print(f"FILES: PASS — {len(names)} файлов: Git, размер, синтаксис, ссылки, топология")
 
-    folders = ["app/services", "scripts", "app/tests"]
-    environment = dict(os.environ, PYTHONPATH=str(ROOT / "app/services"))
+    folders = ["app/services", "app/panel", "scripts", "app/tests"]
+    python_path = [ROOT / "app/services", ROOT / "app/panel/server", ROOT / "app/panel/sipcap"]
+    environment = dict(os.environ, PYTHONPATH=os.pathsep.join(map(str, python_path)))
     for command in (
         [sys.executable, "-m", "ruff", "check", *folders],
         [sys.executable, "-m", "ruff", "format", "--check", *folders],

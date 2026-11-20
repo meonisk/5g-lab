@@ -13,6 +13,7 @@
 | `app/services/voice-agent/` | синтез речи и отправка звука в звонок |
 | `app/services/lab_common/` | общий HTTP-код; копируется во все четыре образа |
 | `app/infrastructure/` | Dockerfile инфраструктуры, DNS, сторонние конфигурации Kamailio и PyHSS (`vendor/`, правки описаны в `PROVENANCE.md`) |
+| `app/panel/` | панель стенда: `server/` — API (Flask), `sipcap/` — захват SIP, `web/` — интерфейс Vue; [документ 9](9-panel.md) |
 | `app/tests/unit/` | быстрые тесты без Docker |
 | `app/tests/integration/` | проверки работающего стенда (звонки) |
 | `scripts/` | запуск, абоненты, проверки, rfsim, замеры (`profile/`), общий код (`lib/`) |

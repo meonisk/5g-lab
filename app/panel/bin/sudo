@@ -1,0 +1,8 @@
+#!/bin/sh
+# Обёртка sudo для заданий панели: у них нет терминала, и пароль спросить нельзя.
+# sudo -v (продлить пароль) превращается в проверку sudo -n true; остальное — sudo -n.
+# Нужное правило печатает scripts/panel.sh sudoers.
+if [ "$1" = -v ]; then
+    exec /usr/bin/sudo -n true
+fi
+exec /usr/bin/sudo -n "$@"

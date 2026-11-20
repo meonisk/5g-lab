@@ -14,6 +14,7 @@
 | Piper и русские/английские голоса | Закреплённые загрузки в сборке Voice Agent и общей конфигурации; [настройка AI](docs/1-install.md#настройка-ai) |
 | PJSUA (pjproject 2.14.1) | Сборка из исходников в `app/infrastructure/images/pjsua/Dockerfile` |
 | Образы инфраструктуры и Python-библиотеки | `app/config/lab.env`, Dockerfile и `requirements*.txt` |
+| Vue 3, uPlot, Vite (панель стенда, MIT) | Точные версии в `app/panel/web/package.json` и `package-lock.json`; в Git только исходники, сборка `dist/` создаётся на сервере |
 | Дополнительные кодеки FFmpeg, OpenCORE AMR и VisualOn AMR-WB | Пакет Debian `libavcodec-extra59` и зависимости RTPengine; уведомления сохранены в `/usr/share/doc/` внутри образа |
 
 Веса моделей и образы скачиваются при подготовке, а не хранятся в исходниках.
