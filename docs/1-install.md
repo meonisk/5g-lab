@@ -126,10 +126,12 @@ scripts/verify-all.sh
 
 ```bash
 git pull && python3 scripts/start.py                       # обновить и перезапустить
-docker compose --env-file app/config/lab.env --profile test down   # остановить всё
+docker compose --env-file app/config/lab.env --profile test down   # остановить IMS + AI
+scripts/stand.sh down && scripts/stand.sh up               # весь стенд: ядро, IMS, AI, gNB
 ```
 
-Остановка не трогает сеть и контейнеры ядра. Данные (база абонентов, модели)
+`stand.sh` — [документ 8](8-real-sims.md#3-включить-и-выключить-всё). `docker compose
+down` не трогает сеть и контейнеры ядра. Данные (база абонентов, модели)
 остаются в томах Docker. `down -v` удаляет и их.
 
 Изменения `lab.env` применяет `scripts/start.py`: он пересоздаёт контейнеры, у которых

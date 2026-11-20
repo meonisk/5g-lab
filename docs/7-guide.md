@@ -254,6 +254,8 @@ python3 scripts/profile/conversation.py --5g        # длинный разго�
 
 ### Исследовательские SIM (PLMN 901/70)
 
+Подробно — [документ 8](8-real-sims.md).
+
 Партия USIM/ISIM с IMSI `90170…` и известными Ki/OPc. Таблица поставщика в Git не
 попадает (репозиторий публичный): поля карт лежат в `local/secrets/research-sims.csv`.
 
