@@ -18,6 +18,7 @@
 | `phone_readiness.py` | Read-only проверка серверных возможностей; `NOT_READY` до отдельной приёмки настоящего телефона |
 | `stand_check.py`, `stand_check_uac.py` | Стенд перед телефоном: preflight с подсказками и самотестом AI-вызова с preconditions, `phones`, `watch`, `collect`; [инструкция](../docs/stand-check.md) |
 | `research_sims.py`, `research_sim_inventory.py` | Исследовательские SIM: импорт таблицы в `local/secrets`, проверка, заведение в OAI UDR и PyHSS с сохранением SQN, `status`, `retire`, приватный SQL для партнёров; [инструкция](../docs/research-sims.md) |
+| `lab_env_merge.py` | Перенос локальных правок `lab.env` стенда в версию ветки при переключении |
 | `oai_config.py`, `oai_subscribers.py`, `oai-upf-network.sh` | Приватная конфигурация OAI, UDR provisioning с сохранением SQN, internet-only NAT |
 | `start_lab.py` | Общий запуск; `--base-only` запускает сеть/IMS без AI и обязательно проверяет связность/регистрацию |
 | `migrate_mysql_storage.py` | Холодная миграция legacy MySQL в постоянный том, приватный backup и rollback image; требует остановленного MySQL и нового `--backup-dir` под `local/private` |

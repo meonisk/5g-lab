@@ -6,6 +6,7 @@
   apply [--ims-only]          — завести абонентов: OAI UDR (если не --ims-only) и PyHSS;
   status                      — только чтение: какие SIM уже есть в базах;
   retire --imsi <IMSI> [--apply] — убрать из PyHSS абонентов прежнего PLMN;
+  retire --foreign-plmn [--apply] — то же для всех IMSI вне PLMN lab.env;
   oai-sql --output <файл>     — приватный SQL для UDR партнёров (OAI MySQL).
 
 У физической SIM один Ki/OPc: он используется и для 5G AKA (UDR), и для IMS AKA
@@ -249,6 +250,21 @@ def retire_hss(env, imsis, apply=False):
         print(f"PyHSS: IMSI {imsi}: удалено: {names}")
 
 
+def foreign_plmn_imsis(env) -> list[str]:
+    """IMSI в PyHSS вне PLMN lab.env: после смены MCC/MNC это прежние UE1/UE2.
+
+    Наш PyHSS заполняют только скрипты стенда, поэтому такие записи устарели:
+    IMS-домен и IMPI выводятся из текущего PLMN, а номера 1001/1002 заняты ими.
+    """
+    hss = Hss(env)
+    plmn = env["MCC"] + env["MNC"]
+    found = set()
+    for kind in ("ims_subscriber", "subscriber", "auc"):
+        rows = hss.call("GET", f"/{kind}/list?page=0&page_size=1000") or []
+        found.update(str(row.get("imsi") or "") for row in rows)
+    return sorted(imsi for imsi in found if imsi and not imsi.startswith(plmn))
+
+
 def hss_present(env, sims) -> set[str]:
     hss = Hss(env)
     rows = hss.call("GET", "/ims_subscriber/list?page=0&page_size=1000") or []
@@ -302,7 +318,10 @@ def main(argv=None):
             "--ims-only", action="store_true", help="Только PyHSS (ядро OAI у партнёров)"
         )
     retired = sub.add_parser("retire", help="Удалить устаревших абонентов из PyHSS")
-    retired.add_argument("--imsi", action="append", required=True)
+    retired.add_argument("--imsi", action="append", default=[])
+    retired.add_argument(
+        "--foreign-plmn", action="store_true", help="Все IMSI PyHSS вне PLMN lab.env"
+    )
     retired.add_argument("--apply", action="store_true", help="Без флага только показать план")
     exported = sub.add_parser("oai-sql", help="Приватный SQL для UDR партнёров")
     exported.add_argument("--output", type=Path, required=True)
@@ -312,9 +331,15 @@ def main(argv=None):
     if args.command == "import":
         return command_import(env, args.source, args.force)
     if args.command == "retire":
-        if any(not imsi.isdigit() for imsi in args.imsi):
-            raise ValueError("IMSI должен состоять из цифр")
-        return retire_hss(env, args.imsi, args.apply)
+        imsis = list(args.imsi)
+        if args.foreign_plmn:
+            imsis += foreign_plmn_imsis(env)
+            if not imsis:
+                print("PyHSS: абонентов вне PLMN lab.env нет")
+                return 0
+        if not imsis or any(not imsi.isdigit() for imsi in imsis):
+            raise ValueError("Укажите --imsi (только цифры) или --foreign-plmn")
+        return retire_hss(env, imsis, args.apply)
     sims = load(env)
     if args.command == "plan":
         return command_plan(env, sims)

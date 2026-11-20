@@ -43,12 +43,30 @@ python scripts/stand_check.py
 
 ## 3. На стенде, без телефона
 
+Если таблицу SIM нельзя перенести на сервер файлом, рабочий список создаётся
+прямо в терминале стенда (heredoc в `local/secrets/research-sims.csv`, права 600).
+Таблица и ключи не попадают в Git и в публичный репозиторий.
+
 ```bash
-python scripts/research_sims.py retire --imsi 001010000000001 --imsi 001010000000002 --apply  # только для старого стенда
-python scripts/start_lab.py --base-only        # или: python3 scripts/start_partner.py --ims-only
-scripts/compose.sh up -d --build --force-recreate sip-as pcscf   # если стенд уже был запущен
-python scripts/stand_check.py
+# 1. Ветка: сохранить локальный lab.env, переключиться, перенести свои значения
+cp app/config/lab.env local/lab.env.mine && git show HEAD:app/config/lab.env > local/lab.env.base
+git checkout -- app/config/lab.env && git fetch origin BRANCH && git checkout -B BRANCH origin/BRANCH
+python3 scripts/lab_env_merge.py local/lab.env.base local/lab.env.mine
+# 2. Список SIM: вставить строки CSV (IMSI,ICCID,Ki,OPc,AMF,MSISDN) и проверить без вывода ключей
+(umask 077; cat > local/secrets/research-sims.csv) <<'CSV'
+...
+CSV
+python3 scripts/research_sims.py plan
+# 3. Запуск и проверка
+python3 scripts/start_partner.py              # или: python scripts/start_lab.py
+python3 scripts/stand_check.py
 ```
+
+`lab_env_merge.py` переносит локальные значения (интерфейс, шлюз, адреса), а для
+ключей, изменённых и на стенде, и в ветке (PLMN), оставляет значение ветки с
+предупреждением. Запуск сам удаляет из PyHSS абонентов прежнего PLMN
+(`research_sims.py retire --foreign-plmn --apply`), пересобирает SIP AS и
+перезапускает P-CSCF с новой конфигурацией.
 
 В партнёрском варианте пересоздание идёт через partner-файл:
 `docker compose --env-file app/config/lab.env --env-file local/secrets/ims.env -f compose.partner.yml up -d --build --force-recreate sip-as pcscf`.

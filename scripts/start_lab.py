@@ -246,11 +246,20 @@ def wait_for_pyhss_cx(settings):
     raise RuntimeError("Слушатель Diameter Cx в PyHSS не стал доступен")
 
 
+def retire_foreign_plmn():
+    """Прежние UE1/UE2 после смены PLMN занимают номера новых: удалить до заведения."""
+    run(
+        [sys.executable, "scripts/research_sims.py", "retire", "--foreign-plmn", "--apply"],
+        "Не удалось убрать из PyHSS абонентов прежнего PLMN",
+    )
+
+
 def provision_subscribers(bash):
     run(
         [sys.executable, "scripts/oai_subscribers.py"],
         "Не удалось настроить абонентов OAI",
     )
+    retire_foreign_plmn()
     run(
         [bash, "scripts/provision-ims-subscribers.sh", "--apply"],
         "Не удалось настроить абонентов IMS",

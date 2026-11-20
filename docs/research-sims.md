@@ -88,6 +88,9 @@ python scripts/research_sims.py retire --imsi 001010000000001 --imsi 00101000000
 python scripts/research_sims.py retire --imsi 001010000000001 --imsi 001010000000002 --apply  # удаление
 ```
 
+`start_lab.py` и `start_partner.py` делают это сами командой
+`research_sims.py retire --foreign-plmn --apply`: удаляются все записи PyHSS с
+IMSI вне PLMN `lab.env` (их заводили только скрипты стенда).
 Строки старых IMSI в UDR OAI ни с чем не конфликтуют и могут остаться.
 Новый стенд с пустыми томами этого шага не требует.
 

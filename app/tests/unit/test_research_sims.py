@@ -212,6 +212,16 @@ class Provisioning(unittest.TestCase):
         deleted = [path for method, path in calls if method == "DELETE"]
         self.assertEqual(deleted, ["/ims_subscriber/4", "/subscriber/4", "/auc/5"])
 
+    def test_foreign_plmn_lists_only_imsis_outside_lab_plmn(self):
+        own = self.env["MCC"] + self.env["MNC"] + "1".zfill(10)
+        old = "00101" + "1".zfill(10)
+
+        def fake(_self, method, path, payload=None):
+            return [{"imsi": own}, {"imsi": old}, {"imsi": None}]
+
+        with patch.object(SIMS.Hss, "call", fake):
+            self.assertEqual(SIMS.foreign_plmn_imsis(self.env), [old])
+
 
 if __name__ == "__main__":
     unittest.main()

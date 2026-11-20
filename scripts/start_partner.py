@@ -14,6 +14,7 @@ from start_lab import (
     provision_research_sims,
     public_environment,
     restart_ims_chain,
+    retire_foreign_plmn,
     run,
     wait_for_pyhss,
     wait_for_pyhss_cx,
@@ -96,6 +97,7 @@ def main():
     services = list(IMS_SERVICES) if args.ims_only else []
     run(PARTNER_COMPOSE + ["up", "-d", "--build", *services], "Не удалось запустить IMS + AI")
     wait_for_pyhss(settings)
+    retire_foreign_plmn()
     run(
         [bash_command(), "scripts/provision-ims-subscribers.sh", "--apply"],
         "Не удалось настроить IMS",
