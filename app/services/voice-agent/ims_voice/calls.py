@@ -9,12 +9,16 @@ from . import runtime
 
 
 def start_call(call_id: str, remote_ip: str, remote_port: int, mode: str) -> bool:
-    """Повторное SIP-уведомление не создаёт второй поток и не сбрасывает RTP."""
+    """Повторное SIP-уведомление не создаёт второй поток и не сбрасывает RTP.
+
+    Оно лишь переносит адрес RTP, если UPDATE/re-INVITE сменил порт RTPengine.
+    """
     from .media import enqueue_audio
     from .playout import play_queued_audio
 
     with runtime.lock:
         if call_id in runtime.calls:
+            runtime.calls[call_id].update(remote_ip=remote_ip, remote_port=remote_port)
             return True
         if len(runtime.calls) >= runtime.max_calls:
             return False

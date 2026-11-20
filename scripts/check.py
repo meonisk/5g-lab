@@ -20,8 +20,8 @@ SIGNATURE = re.compile(
 # Адреса, IMSI и домен живут только в lab.env; код получает их из окружения.
 TOPOLOGY = (
     re.compile(r"\b(?:192\.168\.70|12\.1\.1)\.\d{1,3}(?:/\d+)?\b"),
-    re.compile(r"\b0010100000001?0[0-9]\b"),
-    re.compile(r"\bims\.mnc001\.mcc001\.3gppnetwork\.org\b"),
+    re.compile(r"\b(?:00101|90170)00000001?0[0-9]\b"),
+    re.compile(r"\bims\.mnc0(?:01|70)\.mcc(?:001|901)\.3gppnetwork\.org\b"),
 )
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(<?([^\s)>]+)>?(?:\s+\"[^\"]*\")?\)")
 

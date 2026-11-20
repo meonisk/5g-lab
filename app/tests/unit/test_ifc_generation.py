@@ -123,7 +123,8 @@ class SubscriberProfiles(unittest.TestCase):
 class Provisioning(unittest.TestCase):
     def test_each_subscriber_gets_own_generated_ifc(self):
         hss = FakeHss()
-        settings = provision.read_env()
+        # Список исследовательских SIM — локальный файл стенда: в тесте его нет.
+        settings = {**provision.read_env(), "RESEARCH_SIM_FILE": "local/test-absent/sims.csv"}
         with (
             patch.object(provision, "PyHSS", return_value=hss),
             patch.object(provision, "ensure_apn", return_value=1),

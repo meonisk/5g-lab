@@ -290,9 +290,14 @@ def upsert(hss, kind, id_field, entry, payload):
 
 
 def provision(settings, replace_keys=False):
-    entries = subscribers(settings)
+    # Импорт здесь: research_sims сам использует PyHSS и read_env этого модуля.
+    from research_sims import hss_entries, retire_foreign
+
+    entries = subscribers(settings) + hss_entries(settings)
     hss = PyHSS(settings)
     domain = settings["IMS_DOMAIN"]
+    # После смены PLMN прежние записи держат номера абонентов: убрать их первыми.
+    retire_foreign(hss, settings)
     apn_id = ensure_apn(hss, settings["IMS_DNN"])
 
     for entry in entries:
@@ -338,7 +343,9 @@ def main():
     args = parser.parse_args()
     settings = read_env()
     if not args.apply:
-        for entry in subscribers(settings):
+        from research_sims import hss_entries
+
+        for entry in subscribers(settings) + hss_entries(settings):
             services = ",".join(entry["services"]) or "-"
             print(
                 f"{entry['name']}: IMSI {entry['imsi']}, MSISDN {entry['msisdn']}, "

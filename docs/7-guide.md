@@ -67,6 +67,8 @@
 | NAT только для интернета | телефон по-прежнему выходит в интернет |
 | SMF отдаёт `PCSCF_IP` и `DNS_IP` | телефон сам узнаёт, куда регистрироваться и как разрешать имена IMS |
 | демонстрационный IMS OAI выключен | чтобы телефоны не попадали в него |
+| PLMN AMF = `MCC`/`MNC` из `lab.env` | SIM видят и принимают только сеть своего PLMN; при смене пересоздаются все NF ядра |
+| UE1/UE2 и SIM из `local/secrets` в UDR (`scripts/core_subscribers.py`) | 5G AKA по тем же Ki/OPc, что и IMS AKA в PyHSS; заведённые записи и SQN не меняются |
 
 ## 3. Как работает IMS
 
@@ -172,7 +174,8 @@ translate AS пропускает звонок дальше без перево�
 ### Как поднимается радио (`scripts/rfsim.sh up`)
 
 1. Копирует конфигурации в `local/rfsim/`: gNB получает адрес хоста на мосту ядра для
-   NG и N3, UE — DNN `IMS_DNN`. Исходные файлы не меняются.
+   NG и N3 и PLMN `MCC`/`MNC`, UE — IMSI и ключи `UE1_*`/`UE2_*` и DNN `IMS_DNN`.
+   Исходные файлы не меняются.
 2. Запускает gNB и ждёт `NGSetupResponse` от AMF.
 3. Для каждого UE создаёт сетевое пространство `ue1`/`ue2` (OAI `multi-ue.sh`) и
    запускает в нём UE. UE подключаются по очереди: регистрация и PDU-сессия занимают до
@@ -241,7 +244,7 @@ python3 scripts/profile/conversation.py --5g        # длинный разго�
 
 - **Телефон** с 5G SA и VoNR, который поддерживает диапазон из конфигурации gNB
   (сейчас n78). Многие телефоны включают VoNR/VoLTE только для известных операторов:
-  для тестовой сети MCC 001 / MNC 01 может понадобиться инженерное меню или настройки
+  для тестовой сети MCC 901 / MNC 70 может понадобиться инженерное меню или настройки
   оператора в телефоне.
 - **Программируемая SIM** (например, sysmoISIM) и программатор (pySim): IMSI, K, OPc,
   MCC/MNC, приложение ISIM (IMPI, IMPU, домен IMS). Без ISIM телефон выводит имена IMS
@@ -249,16 +252,39 @@ python3 scripts/profile/conversation.py --5g        # длинный разго�
 - **SDR** с антеннами и gNB OAI, собранный с его драйвером; конфигурация gNB — та же,
   что для rfsim, но с параметрами SDR вместо `--rfsim`.
 
+### Исследовательские SIM (PLMN 901/70)
+
+Партия USIM/ISIM с IMSI `90170…` и известными Ki/OPc. Таблица поставщика в Git не
+попадает (репозиторий публичный): поля карт лежат в `local/secrets/research-sims.csv`.
+
+```bash
+python3 scripts/research_sims.py import sim_imsi.xlsx   # или CSV; PIN/PUK не переносятся
+python3 scripts/research_sims.py plan                    # IMSI, номера, IMPI — без ключей
+scripts/core-setup.sh apply     # PLMN ядра 901/70, SIM и UE1/UE2 в UDR
+scripts/setup.sh                # PyHSS: SIM с номерами 2600–2609; старый PLMN удаляется
+scripts/gnb.sh up               # свой gNB на SDR с PLMN 901/70
+python3 scripts/stand_check.py  # готовность: контейнеры, PLMN, абоненты, самотест AI
+python3 scripts/stand_check.py watch   # журнал REGISTER/INVITE во время звонка
+```
+
+`gnb.sh up` берёт конфигурацию и аргументы уже работающего `nr-softmodem` (или
+`GNB_CONF`/`GNB_ARGS`), подставляет PLMN в копию в `local/gnb/` и перезапускает gNB.
+Исходная команда — `local/gnb/source.txt`.
+
+Звонки на 1003–1006 со штатной звонилки: SIP AS отвечает надёжным 183 (`100rel`),
+ведёт preconditions через PRACK/UPDATE (RFC 3262/3312/3311) и снимает трубку, когда
+телефон сообщил о готовности QoS или через `SIP_AS_PRECONDITION_TIMEOUT_SECONDS`.
+
 ### Шаги
 
-1. **SIM.** Записать IMSI, K, OPc для `UE1` (или `UE2`). MCC/MNC — `001`/`01`, как в
+1. **SIM.** Записать IMSI, K, OPc для `UE1` (или `UE2`). MCC/MNC — `901`/`70`, как в
    `lab.env` и ядре.
 2. **Ядро.** Абонент в UDR с теми же IMSI/K/OPc и разрешёнными DNN `ims` и `internet`.
    `scripts/core-setup.sh check` — ядро настроено под IMS.
 3. **Стенд.** Те же ключи в `lab.env` (`UE1_IMSI`, `UE1_IMS_K`, `UE1_IMS_OPC`), номер,
    язык и услуги абонента. Затем `python3 scripts/start.py` — ключи и iFC попадут в
    HSS. Ключи уже были другими — `python3 scripts/provision.py --apply --replace-keys`.
-4. **Радио.** Запустить gNB с SDR (PLMN 001/01, TAC и срез как в AMF). Эмулятор rfsim
+4. **Радио.** Запустить gNB с SDR (`scripts/gnb.sh up`: PLMN из `lab.env`, TAC и срез как в AMF). Эмулятор rfsim
    при этом остановлен: `scripts/rfsim.sh down`.
 5. **Телефон.** Сеть — только 5G (SA), точка доступа `ims` с типом `ims` (если телефон
    не создал её сам), включить VoNR. Телефон регистрируется в сети, открывает сессию
@@ -275,7 +301,7 @@ python3 scripts/profile/conversation.py --5g        # длинный разго�
 | IMS-AKA | S-CSCF и PyHSS поддерживают AKAv1-MD5 по тем же K/OPc; проверен только Digest | при `401` по кругу — сверить ключи и OPc; счётчик SQN не сбрасывать |
 | IPsec с P-CSCF | P-CSCF собран с поддержкой IPsec (`WITH_IPSEC`, права `NET_ADMIN`) | смотреть `docker logs lab-pcscf` на `sec-agree`; если телефон без IPsec не регистрируется — разбирать настройки IPsec P-CSCF |
 | AMR-WB → PCMU | P-CSCF просит RTPengine добавить PCMU (`codec-transcode-PCMU`), услуги AI принимают только PCMU | проверить, что RTPengine умеет кодек телефона: `docker exec lab-rtpengine rtpengine --codecs`; без PCMU перевод между абонентами пропускается (звонок идёт без него), номера 1003–1006 отвечают `488` |
-| `100rel`, `precondition` | услуги AI не обслуживают звонки, которые их требуют (`Require:`): перевод пропускается, номера 1003–1006 отвечают `488` | если телефон их требует — услуги AI нужно доработать; обычные звонки между абонентами идут |
+| `100rel`, `precondition` | номера 1003–1006 поддерживают (надёжный 183, PRACK, UPDATE); перевод между абонентами такие звонки пропускает | проверено самотестом `stand_check.py`, с телефоном — нет |
 | QoS 5QI=1 | Rx/N5 выключен: у PCF ядра нет Diameter | если телефон обрывает звонок без выделенного потока — нужна интеграция P-CSCF с PCF по N5 |
 | EVS | не проверен | — |
 

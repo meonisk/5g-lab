@@ -6,6 +6,9 @@
 # Меняются только файлы в OAI_CORE_DIR (по умолчанию ~/oai-cn5g): conf/config.yaml и
 # docker-compose.yaml. Перед первой правкой создаются копии *.bak-ims. Применение
 # пересоздаёт oai-smf и oai-upf: PDU-сессии всех UE обрываются на несколько секунд.
+# PLMN ядра (AMF: served_guami_list, plmn_support_list) приводится к MCC/MNC из
+# lab.env; при смене PLMN пересоздаются все сетевые функции ядра. Затем в UDR
+# заводятся UE1/UE2 и исследовательские SIM (scripts/core_subscribers.py).
 set -Eeuo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 set -a
@@ -28,9 +31,16 @@ service_indent=$(sed -n 's/^\( *\)oai-upf:.*/\1/p' "$compose_file" | head -1)
 key_indent="$service_indent    "
 
 value() { sed -n "s/^ *$1: *\"\{0,1\}\([^\" #]*\).*/\1/p" "$config" | head -1; }
+# Все записи PLMN ядра одной строкой: «001/01 001/01» — served_guami и plmn_support.
+plmn_values() {
+    paste -d/ <(sed -n 's/^ *-\{0,1\} *mcc: *"\{0,1\}\([0-9]*\).*/\1/p' "$config") \
+        <(sed -n 's/^ *-\{0,1\} *mnc: *"\{0,1\}\([0-9]*\).*/\1/p' "$config") | sort -u | xargs
+}
+core_nfs=(oai-nrf oai-udr oai-udm oai-ausf oai-amf oai-smf oai-upf)
 
 status() {
     echo "--- $config"
+    printf '  PLMN AMF:       %s (нужно: %s/%s)\n' "$(plmn_values)" "$MCC" "$MNC"
     printf '  enable_snat:    %s (нужно: no)\n' "$(value enable_snat)"
     printf '  pcscf_ipv4:     %s (нужно: %s)\n' "$(value pcscf_ipv4)" "$PCSCF_IP"
     printf '  ue_dns primary: %s (нужно: %s)\n' "$(value primary_ipv4)" "$DNS_IP"
@@ -48,12 +58,19 @@ status() {
     echo "--- работающие контейнеры"
     docker exec oai-upf iptables -t nat -S POSTROUTING 2>/dev/null | grep -E 'SNAT|MASQUERADE' | sed 's/^/  /' || true
     docker ps --format '  {{.Names}} {{.Status}}' --filter "name=^${demo}$"
+    echo "--- абоненты в UDR ядра"
+    python3 "$root/scripts/core_subscribers.py" check || true
 }
 
 apply() {
     # Копии делаются один раз: они хранят исходное состояние ядра партнёра.
     [[ -e $config.bak-ims ]] || cp -p "$config" "$config.bak-ims"
     [[ -e $compose_file.bak-ims ]] || cp -p "$compose_file" "$compose_file.bak-ims"
+
+    # PLMN SIM-карт: AMF принимает только перечисленные PLMN, gNB вещает тот же.
+    local plmn_before
+    plmn_before=$(plmn_values)
+    sed -i -E "s/^( *-? *mcc: *)\"?[0-9]+\"?/\\1$MCC/; s/^( *-? *mnc: *)\"?[0-9]+\"?/\\1$MNC/" "$config"
 
     # UPF не натит трафик UE в сеть ядра: адрес телефона записан внутри SIP/SDP.
     sed -i -E 's/^( *enable_snat: *)yes/\1no/' "$config"
@@ -80,9 +97,17 @@ apply() {
     fi
 
     "${compose[@]}" config --quiet || die "compose ядра не проходит проверку; откат: $0 revert"
-    "${compose[@]}" up -d --force-recreate oai-smf oai-upf
+    if [[ $plmn_before != "$MCC/$MNC" ]]; then
+        # NRF, UDR, UDM, AUSF и AMF читают PLMN при старте: пересоздаются все.
+        echo "PLMN ядра: $plmn_before -> $MCC/$MNC; пересоздаются ${core_nfs[*]}"
+        "${compose[@]}" up -d --force-recreate "${core_nfs[@]}"
+    else
+        "${compose[@]}" up -d --force-recreate oai-smf oai-upf
+    fi
     docker rm -f "$demo" >/dev/null 2>&1 || true
     sleep 5
+    # Абоненты UDR: UE1/UE2 rfsim и SIM из local/secrets; существующие не меняются.
+    python3 "$root/scripts/core_subscribers.py" apply
     status
 }
 
@@ -90,7 +115,7 @@ revert() {
     [[ -e $config.bak-ims && -e $compose_file.bak-ims ]] || die "нет копий *.bak-ims"
     cp -p "$config.bak-ims" "$config"
     cp -p "$compose_file.bak-ims" "$compose_file"
-    "${compose[@]}" up -d --force-recreate oai-smf oai-upf
+    "${compose[@]}" up -d --force-recreate "${core_nfs[@]}"
     "${compose[@]}" up -d "$demo" 2>/dev/null || true
     status
 }

@@ -19,8 +19,13 @@
 
 | Переменная | Значение | Что это |
 |---|---|---|
-| `MCC`, `MNC` | `001`, `01` | код страны и оператора, как в ядре и на SIM |
-| `IMS_DOMAIN` | `ims.mnc001.mcc001.3gppnetwork.org` | домен IMS; строится из MCC и MNC по правилу 3GPP |
+| `MCC`, `MNC` | `901`, `70` | PLMN исследовательских SIM; `core-setup.sh apply` ставит его в AMF, `rfsim.sh` и `gnb.sh` — в gNB |
+| `IMS_DOMAIN` | `ims.mnc070.mcc901.3gppnetwork.org` | домен IMS; строится из MCC и MNC по правилу 3GPP |
+| `RESEARCH_SIM_FILE` | `local/secrets/research-sims.csv` | список SIM с Ki/OPc; только внутри игнорируемого `local/` |
+| `RESEARCH_SIM_MSISDN_PREFIX`, `RESEARCH_SIM_MSISDN_SUFFIX_DIGITS` | `2`, `3` | номер SIM: префикс и последние цифры IMSI (2600–2609) |
+| `RESEARCH_SIM_SERVICES`, `RESEARCH_SIM_LANGUAGE` | пусто, `ru` | услуги и язык всех SIM в PyHSS |
+| `GNB_CONF`, `GNB_ARGS` | пусто, `--continuous-tx` | gNB на SDR (`scripts/gnb.sh`); пусто — конфигурация и аргументы уже работающего gNB |
+| `SIP_AS_T1_SECONDS`, `SIP_AS_PRECONDITION_TIMEOUT_SECONDS` | `0.5`, `8` | повтор надёжного 183 (RFC 3262) и ожидание UPDATE о готовности QoS телефона |
 | `CORE_NETWORK_NAME` | `oai-cn5g-public-net` | Docker-сеть ядра (`docker network ls`) |
 | `LAB_NETWORK_CIDR` | `192.168.70.128/26` | её подсеть; все адреса стенда внутри неё |
 | `UPF_IP` | `.134` | UPF ядра; через него контейнеры отвечают телефонам |

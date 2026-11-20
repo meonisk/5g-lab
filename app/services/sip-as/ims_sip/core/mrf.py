@@ -11,6 +11,7 @@ from urllib.parse import quote
 from lab_common.http import request_json
 
 from .. import runtime
+from .preconditions import answer_lines
 from .sip import message_call_id
 
 
@@ -69,19 +70,21 @@ def media_is_anchored(offered_ip: str, offered_port: int) -> bool:
     )
 
 
-def voice_agent_sdp() -> str:
-    """Сформировать минимальный ответ для единственного кодека PCMU/8000."""
-    return (
-        "v=0\r\n"
-        f"o=voice-agent 1 1 IN IP4 {runtime.voice_ip}\r\n"
-        "s=IMS Voice Agent\r\n"
-        f"c=IN IP4 {runtime.voice_ip}\r\n"
-        "t=0 0\r\n"
-        f"m=audio {runtime.voice_rtp_port} RTP/AVP 0\r\n"
-        "a=rtpmap:0 PCMU/8000\r\n"
-        "a=ptime:20\r\n"
-        "a=sendrecv\r\n"
-    )
+def voice_agent_sdp(offer_sdp: str = "", version: int = 1) -> str:
+    """Минимальный ответ для единственного кодека PCMU/8000 и, если offer просит, QoS."""
+    lines = [
+        "v=0",
+        f"o=voice-agent 1 {version} IN IP4 {runtime.voice_ip}",
+        "s=IMS Voice Agent",
+        f"c=IN IP4 {runtime.voice_ip}",
+        "t=0 0",
+        f"m=audio {runtime.voice_rtp_port} RTP/AVP 0",
+        "a=rtpmap:0 PCMU/8000",
+        "a=ptime:20",
+        "a=sendrecv",
+        *answer_lines(offer_sdp),
+    ]
+    return "\r\n".join(lines) + "\r\n"
 
 
 INTERPRETER_MODES = {"ru": "interpret_ru", "en": "interpret_en"}

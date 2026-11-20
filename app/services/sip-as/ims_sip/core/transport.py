@@ -4,7 +4,15 @@ from .. import runtime
 from .sip import all_headers, header, message_call_id, request_method
 
 
-def local_response(request, status, reason, body="", to_tag="", contact_user=None):
+def establishes_dialog(request: str, status: int) -> bool:
+    """1xx/2xx на INVITE и 2xx на UPDATE несут Contact AS (RFC 3261 12.1.1, RFC 3311)."""
+    method = request_method(request)
+    if method == "INVITE":
+        return 100 < status < 300
+    return method == "UPDATE" and 200 <= status < 300
+
+
+def local_response(request, status, reason, body="", to_tag="", contact_user=None, extra=()):
     lines = [f"SIP/2.0 {status} {reason}"]
     lines.extend(all_headers(request, "Via", "v"))
     lines.extend(all_headers(request, "Record-Route"))
@@ -18,9 +26,10 @@ def local_response(request, status, reason, body="", to_tag="", contact_user=Non
         f"Call-ID: {message_call_id(request)}",
         f"CSeq: {header(request, 'CSeq')}",
     ]
-    if status == 200 and request_method(request) in {"INVITE", "UPDATE"}:
+    if establishes_dialog(request, status):
         user = contact_user or runtime.voice_user
         lines.append(f"Contact: <sip:{user}@{runtime.bind_ip}:{runtime.bind_port};transport=udp>")
+    lines.extend(extra)
     if body:
         lines.append("Content-Type: application/sdp")
     lines.append(f"Content-Length: {len(body.encode())}")
@@ -40,5 +49,9 @@ def send_local_response(
     body: str = "",
     to_tag: str = "",
     contact_user: str = "",
-) -> None:
-    send(local_response(request, status_code, reason, body, to_tag, contact_user), peer)
+    extra: tuple[str, ...] = (),
+) -> str:
+    """Отправить ответ и вернуть его текст: INVITE-ответы повторяются до ACK/PRACK."""
+    response = local_response(request, status_code, reason, body, to_tag, contact_user, extra)
+    send(response, peer)
+    return response

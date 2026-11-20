@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Радио без телефона: gNB и два UE OAI в режиме RF Simulator, в фоне, журналы в
 # local/rfsim. Нужен собранный openairinterface5g и конфигурации стенда; сами
-# конфигурации не меняются — копии получают DNN IMS_DNN и адрес NG/N3 хоста на
-# мосту ядра (в исходных стоит адрес контейнера gNB, которого на хосте нет).
+# конфигурации не меняются — копии получают PLMN MCC/MNC, IMSI и ключи UE1/UE2,
+# DNN IMS_DNN и адрес NG/N3 хоста на мосту ядра (в исходных стоит адрес
+# контейнера gNB, которого на хосте нет).
 #   scripts/rfsim.sh up | down | status
 # Запускать от обычного пользователя: sudo нужен только OAI и ip netns.
 set -Eeuo pipefail
@@ -11,6 +12,8 @@ set -a
 # shellcheck source=../app/config/lab.env
 source "$root/app/config/lab.env"
 set +a
+# shellcheck source=lib/ran-conf.sh
+source "$root/scripts/lib/ran-conf.sh"
 
 # Пути стенда; переопределяются в lab.env или окружении.
 ran=${OAI_RAN_DIR:-$HOME/openairinterface5g}
@@ -63,10 +66,10 @@ prepare_configs() {
     address=$(host_address)
     [[ $address == */* && $address != /* ]] || die "нет шлюза сети ядра у lab-pcscf; стенд запущен?"
     sed -E "s#(GNB_IPV4_ADDRESS_FOR_(NG_AMF|NGU)) *= *\"[^\"]*\"#\\1 = \"$address\"#" \
-        "$confs/$gnb_source" >"$work/gnb.conf"
+        "$confs/$gnb_source" | gnb_plmn >"$work/gnb.conf"
     local n
     for n in 1 2; do
-        sed -E "s/dnn *= *\"[^\"]*\"/dnn = \"$IMS_DNN\"/" "$confs/${ue_sources[n - 1]}" >"$work/ue$n.conf"
+        ue_sim "UE$n" <"$confs/${ue_sources[n - 1]}" >"$work/ue$n.conf"
     done
 }
 

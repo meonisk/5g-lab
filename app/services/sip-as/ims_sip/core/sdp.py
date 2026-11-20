@@ -5,24 +5,36 @@ import re
 
 
 def accepts_pcmu(message: str) -> bool:
-    """Reject offers the fixed PT=0 answer cannot satisfy, before allocating RTP.
+    """PCMU offer without required 100rel/QoS preconditions: B2BUA translate has neither."""
+    return accepts_pcmu_media(message) and not requires_extensions(message)
 
-    Phones may offer only AMR. A relay address alone is not proof that a
-    transcoder has inserted PCMU. Inspect SDP, never SIP headers or video PTs.
-    Multiple media streams and required QoS preconditions are not implemented.
-    """
-    headers, separator, body = message.partition("\r\n\r\n")
-    if not separator:
-        return False
-    content_type = re.search(r"(?im)^(?:Content-Type|c):\s*([^;\r\n]+)", headers)
-    if not content_type or content_type[1].strip().lower() != "application/sdp":
-        return False
+
+def requires_extensions(message: str) -> bool:
+    """Require: 100rel/precondition or a mandatory QoS precondition in SDP."""
+    headers, _, body = message.partition("\r\n\r\n")
     required = re.findall(r"(?im)^Require:\s*([^\r\n]+)", headers)
     if any(
         token.strip().lower() in {"precondition", "100rel"}
         for value in required
         for token in value.split(",")
     ):
+        return True
+    return bool(re.search(r"(?im)^a=des:qos\s+mandatory\b", body))
+
+
+def accepts_pcmu_media(message: str) -> bool:
+    """Reject offers the fixed PT=0 answer cannot satisfy, before allocating RTP.
+
+    Phones may offer only AMR. A relay address alone is not proof that a
+    transcoder has inserted PCMU. Inspect SDP, never SIP headers or video PTs.
+    Multiple media streams are not implemented. SIP option tags and QoS
+    preconditions are negotiated by the numbers AS (core/preconditions.py).
+    """
+    headers, separator, body = message.partition("\r\n\r\n")
+    if not separator:
+        return False
+    content_type = re.search(r"(?im)^(?:Content-Type|c):\s*([^;\r\n]+)", headers)
+    if not content_type or content_type[1].strip().lower() != "application/sdp":
         return False
     lines = body.splitlines()
     media = [line.split() for line in lines if line.startswith("m=")]
@@ -37,9 +49,7 @@ def accepts_pcmu(message: str) -> bool:
     maps = re.findall(r"(?im)^a=rtpmap:0\s+([^\r\n]+)", body)
     if any(value.strip().upper() not in {"PCMU/8000", "PCMU/8000/1"} for value in maps):
         return False
-    if any(line.lower() in {"a=inactive", "a=sendonly", "a=recvonly"} for line in lines):
-        return False
-    return not re.search(r"(?im)^a=des:qos\s+mandatory\b", body)
+    return not any(line.lower() in {"a=inactive", "a=sendonly", "a=recvonly"} for line in lines)
 
 
 def offered_media_endpoint(message: str) -> tuple[str, int] | None:
