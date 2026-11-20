@@ -73,6 +73,21 @@ prepare_configs() {
     done
 }
 
+# UE N в своём namespace; журнал — local/rfsim/ueN.log.
+start_ue() {
+    local n=$1 ue_options=$2
+    # shellcheck disable=SC2086 # параметры UE — несколько отдельных слов
+    nohup sudo ip netns exec "ue$n" "${pin[@]}" "$build/nr-uesoftmodem" -O "$work/ue$n.conf" --rfsim $ue_options \
+        "${channel[@]}" "--rfsimulator.[0].serveraddr" "10.$((200 + n)).1.100" </dev/null >"$work/ue$n.log" 2>&1 &
+    # Процесс появляется не сразу: иначе ue_ready примет его за упавший.
+    sleep 3
+}
+
+# Ждать больше нечего: туннель есть или процесс UE уже завершился.
+ue_ready() {
+    has_tunnel "$1" || ! pgrep -f -- "[n]r-uesoftmodem -O $work/ue$1.conf" >/dev/null
+}
+
 start_radio() {
     pgrep -f '[s]oftmodem' >/dev/null && die "softmodem уже запущен: $(pgrep -af '[s]oftmodem' | head -1)"
     [[ -x $build/nr-softmodem ]] || die "нет $build/nr-softmodem"
@@ -91,17 +106,23 @@ start_radio() {
     ue_options=$(sed -n 's/.*Command line parameters for OAI UE: //p' "$work/gnb.log" | head -1)
     [[ -n $ue_options ]] || die "gNB не напечатал параметры UE"
 
-    local n
+    local n attempt
     for n in 1 2; do
         # multi-ue.sh создаёт namespace ueN; сервер rfsim доступен из него на 10.(200+N).1.100.
         sudo ip netns list | grep -qw "ue$n" || sudo "$ran/tools/scripts/multi-ue.sh" "-c$n" >/dev/null
-        # shellcheck disable=SC2086 # параметры UE — несколько отдельных слов
-        nohup sudo ip netns exec "ue$n" "${pin[@]}" "$build/nr-uesoftmodem" -O "$work/ue$n.conf" --rfsim $ue_options \
-            "${channel[@]}" "--rfsimulator.[0].serveraddr" "10.$((200 + n)).1.100" </dev/null >"$work/ue$n.log" 2>&1 &
-        # UE подключаются по очереди: при одновременном входе gNB rfsim под нагрузкой
-        # не успевает с PDCCH (растёт CCE fail), и SMF отклоняет сессию по таймеру.
-        # Регистрация и PDU-сессия одного UE занимают до двух минут.
-        wait_for 120 has_tunnel "$n" ||
+        # OAI иногда падает при старте (_Assert_Exit_ в threadCreate: поток завершился
+        # раньше, чем получил имя). Упавший UE запускается заново, до трёх попыток.
+        for attempt in 1 2 3; do
+            start_ue "$n" "$ue_options"
+            # UE подключаются по очереди: при одновременном входе gNB rfsim под нагрузкой
+            # не успевает с PDCCH (растёт CCE fail), и SMF отклоняет сессию по таймеру.
+            # Регистрация и PDU-сессия одного UE занимают до двух минут.
+            wait_for 120 ue_ready "$n" || break
+            has_tunnel "$n" && break
+            echo "UE$n: OAI упал при старте (попытка $attempt): $(grep -m1 -E 'Assert|Error' "$work/ue$n.log")"
+            cp "$work/ue$n.log" "$work/ue$n.failed-$attempt.log"
+        done
+        has_tunnel "$n" ||
             die "UE$n без PDU-сессии: grep -E 'PduSession|reject' $work/ue$n.log; docker logs --tail 20 oai-smf. Радио оставлено для разбора: scripts/rfsim.sh down"
         printf 'UE%s: %s\n' "$n" "$(tunnel_ip "$n")"
     done
