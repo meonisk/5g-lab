@@ -42,10 +42,10 @@ class PhoneSdp(unittest.TestCase):
         self.assertFalse(SDP.accepts_pcmu(offer(extra="a=rtpmap:0 AMR/8000\r\n")))
         self.assertFalse(SDP.accepts_pcmu(offer(extra="m=video 4002 RTP/AVP 96\r\n")))
 
-    def test_required_phone_features_are_not_silently_accepted(self):
-        for option in ("100rel", "precondition", "timer, precondition"):
-            self.assertFalse(SDP.accepts_pcmu(offer(headers=f"Require: {option}\r\n")))
-        self.assertFalse(SDP.accepts_pcmu(offer(extra="a=des:qos mandatory local sendrecv\r\n")))
+    def test_qos_preconditions_are_negotiated_not_rejected(self):
+        # Options are handled by the dialog layer (test_sip_as_preconditions).
+        self.assertTrue(SDP.accepts_pcmu(offer(extra="a=des:qos mandatory local sendrecv\r\n")))
+        self.assertTrue(SDP.accepts_pcmu(offer(headers="Require: 100rel, precondition\r\n")))
         self.assertFalse(SDP.accepts_pcmu(offer(extra="a=inactive\r\n")))
 
     def test_header_cannot_smuggle_codec(self):

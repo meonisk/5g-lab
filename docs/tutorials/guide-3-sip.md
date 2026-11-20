@@ -199,7 +199,7 @@ Dockerfile S-CSCF до применения патча проверяет ком
 
 | Параметр | По умолчанию | Смысл |
 | --- | --- | --- |
-| `IMS_DOMAIN` | `ims.mnc001.mcc001.3gppnetwork.org` | Домашний домен и realm |
+| `IMS_DOMAIN` | `ims.mnc070.mcc901.3gppnetwork.org` | Домашний домен и realm |
 | `PCSCF_IP`, `PCSCF_SIP_PORT` | `172.22.0.106`, `5060` | P-CSCF |
 | `ICSCF_IP`, `ICSCF_SIP_PORT` | `172.22.0.104`, `5060` | I-CSCF |
 | `SCSCF_IP`, `SCSCF_SIP_PORT` | `172.22.0.105`, `6060` | S-CSCF |
@@ -259,12 +259,13 @@ IMS subscriber (MSISDN, домен, `ifc_path: default_ifc.xml`). Существ
 
 | Идентификатор | Формат | Пример UE1 |
 | --- | --- | --- |
-| IMPI (username) | `<IMSI>@<домен>` | `001010000000001@ims.mnc001.mcc001.3gppnetwork.org` |
-| IMPU | `sip:<MSISDN>@<домен>`, `tel:<MSISDN>`, `sip:<IMSI>@<домен>` | `sip:1001@ims.mnc001.mcc001.3gppnetwork.org` |
-| Realm | `<IMS_DOMAIN>` | `ims.mnc001.mcc001.3gppnetwork.org` |
+| IMPI (username) | `<IMSI>@<домен>` | `901700000000001@ims.mnc070.mcc901.3gppnetwork.org` |
+| IMPU | `sip:<MSISDN>@<домен>`, `tel:<MSISDN>`, `sip:<IMSI>@<домен>` | `sip:1001@ims.mnc070.mcc901.3gppnetwork.org` |
+| Realm | `<IMS_DOMAIN>` | `ims.mnc070.mcc901.3gppnetwork.org` |
 
-**Ограничение: provisioning поддерживает только двух абонентов, UE1 и UE2.**
-Третьего абонента скрипт не создаёт. Заменить абонента: измените `UE<n>_IMSI`/`UE<n>_MSISDN`
+**Ограничение: bootstrap-provisioning создаёт только двух виртуальных абонентов, UE1 и UE2.**
+Третьего абонента этот скрипт не создаёт; физические исследовательские SIM заводит
+отдельная команда `scripts/research_sims.py` ([инструкция](../research-sims.md)). Заменить абонента: измените `UE<n>_IMSI`/`UE<n>_MSISDN`
 и ключи, затем повторите запуск (шаг А). Смена ключей в существующей базе — только
 явной миграцией с backup.
 
@@ -395,8 +396,10 @@ P-CSCF и RTPengine без NAT. Софтфон из LAN в обход ядра �
 
 Ограничения:
 
-- SIP AS отклоняет вызовы с обязательными `100rel`/`precondition`; для таких телефонов
-  нужна реализация PRACK/UPDATE и согласования QoS.
+- SIP AS отвечает телефонам с `100rel`/`precondition` по RFC 3262/3312: надёжный 183
+  с QoS-атрибутами, PRACK, UPDATE, затем 200 OK. Если UPDATE не приходит за
+  `SIP_AS_PRECONDITION_TIMEOUT_SECONDS`, вызов принимается без него. Неизвестные
+  обязательные расширения получают 420. На телефоне пока не проверено.
 - Телефон: Android с 5G SA и VoNR в диапазоне партнёров, IMS и AMR/AMR-WB;
   программируемая USIM/ISIM с согласованными IMS-идентификаторами. Операторскую SIM
   в HSS скопировать нельзя. Подробнее — [native-phone.md](../native-phone.md).
@@ -435,7 +438,7 @@ P-CSCF и RTPengine без NAT. Софтфон из LAN в обход ядра �
 | Регистрация AKA вытесняется | Digest-клиенты не остановлены: лимит одного Contact с overwrite вытесняет binding |
 | `ERROR: no TUN reaches IMS_UE_GATEWAY` | У UE нет IMS PDU-сессии — [туториал 1](guide-1-ims-core.md#8-диагностика) |
 | Вызов есть, звука нет или в одну сторону | SDP (адреса и порты), маршруты к RTPengine в обе стороны, диапазон RTP, кодек, `docker logs lab-rtpengine` |
-| Телефон получает отказ при `100rel`/`precondition` | Ограничение SIP AS (раздел 7) |
+| AI-вызов с телефона: 504 `No PRACK Received` или 420 | PRACK не дошёл до SIP AS (маршрут через P/S-CSCF) или телефон требует неподдерживаемое расширение; `docker logs lab-sip-as` |
 | После перезапуска первый вызов не проходит | Пересоздать `sipue1 sipue2`, повторить регистрацию; прежний `FAIL` сохраняется |
 | Изменения конфигурации CSCF не применились | Пересоздать контейнер; для S-CSCF/RTPengine — пересобрать образ (часть 1, шаг Е) |
 

@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PATTERNS = (
     re.compile(r"\b(?:172\.22|10\.45|10\.46)\.\d{1,3}(?:\.\d{1,3})?(?:/\d+)?\b"),
-    re.compile(r"\b00101000000000[12]\b"),
-    re.compile(r"\bims\.mnc001\.mcc001\.3gppnetwork\.org\b"),
+    re.compile(r"\b(?:00101|90170)000000000[12]\b"),
+    re.compile(r"\bims\.(?:mnc001\.mcc001|mnc070\.mcc901)\.3gppnetwork\.org\b"),
 )
 # Validate private values without ever embedding them in source or diagnostics.
 secret_path = ROOT / "local/secrets/ims.env"
@@ -22,6 +22,16 @@ if secret_path.exists():
         if "=" in line and not line.startswith("#")
     ]
     PATTERNS += tuple(re.compile(re.escape(value)) for value in private_values if len(value) >= 16)
+# IMSI, Ki and OPc of research SIMs (scripts/research_sims.py) stay in the private list.
+sim_path = ROOT / "local/secrets/research-sims.csv"
+if sim_path.exists():
+    sim_values = set()
+    for line in sim_path.read_text(encoding="utf-8").splitlines()[1:]:
+        cells = [cell.strip() for cell in line.split(",")]
+        sim_values.update(cells[:1] + cells[2:4])
+    PATTERNS += tuple(
+        re.compile(re.escape(value), re.IGNORECASE) for value in sim_values if len(value) >= 15
+    )
 
 SUFFIXES = {".sh", ".py", ".ps1", ".js", ".yaml", ".yml"}
 ALLOWED = {

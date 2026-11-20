@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="578" viewBox="0 0 960 578" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+<defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="context-stroke"/></marker></defs>
+<rect width="960" height="578" rx="16" fill="#ffffff"/>
+<text x="480" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">AI-вызов из штатной звонилки: 100rel + preconditions</text>
+<rect x="15" y="58" width="190" height="40" rx="8" fill="#f3f4f6" stroke="#6b7280"/>
+<text x="110" y="83" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2937">Телефон</text>
+<line x1="110" y1="98" x2="110" y2="528" stroke="#d1d5db" stroke-width="2" stroke-dasharray="5 4"/>
+<rect x="245" y="58" width="190" height="40" rx="8" fill="#f3f4f6" stroke="#6b7280"/>
+<text x="340" y="83" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2937">P-CSCF + RTPengine</text>
+<line x1="340" y1="98" x2="340" y2="528" stroke="#d1d5db" stroke-width="2" stroke-dasharray="5 4"/>
+<rect x="485" y="58" width="190" height="40" rx="8" fill="#f3f4f6" stroke="#6b7280"/>
+<text x="580" y="83" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2937">S-CSCF</text>
+<line x1="580" y1="98" x2="580" y2="528" stroke="#d1d5db" stroke-width="2" stroke-dasharray="5 4"/>
+<rect x="725" y="58" width="190" height="40" rx="8" fill="#eff6ff" stroke="#6b7280"/>
+<text x="820" y="83" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2937">SIP AS (AI)</text>
+<line x1="820" y1="98" x2="820" y2="528" stroke="#d1d5db" stroke-width="2" stroke-dasharray="5 4"/>
+<line x1="110" y1="140" x2="814" y2="140" stroke="#1f2937" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="140" r="3.5" fill="#1f2937"/>
+<circle cx="580" cy="140" r="3.5" fill="#1f2937"/>
+<text x="465" y="132" text-anchor="middle" font-size="13" fill="#1f2937">INVITE tel:1003 · Supported: 100rel, precondition · SDP qos none</text>
+<line x1="820" y1="186" x2="116" y2="186" stroke="#2563eb" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="186" r="3.5" fill="#2563eb"/>
+<circle cx="580" cy="186" r="3.5" fill="#2563eb"/>
+<text x="465" y="178" text-anchor="middle" font-size="13" fill="#2563eb">183 · Require: 100rel · RSeq 1 · SDP PCMU + a=conf:qos</text>
+<line x1="110" y1="232" x2="814" y2="232" stroke="#1f2937" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="232" r="3.5" fill="#1f2937"/>
+<circle cx="580" cy="232" r="3.5" fill="#1f2937"/>
+<text x="465" y="224" text-anchor="middle" font-size="13" fill="#1f2937">PRACK (RAck 1)</text>
+<line x1="820" y1="278" x2="116" y2="278" stroke="#2563eb" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="278" r="3.5" fill="#2563eb"/>
+<circle cx="580" cy="278" r="3.5" fill="#2563eb"/>
+<text x="465" y="270" text-anchor="middle" font-size="13" fill="#2563eb">200 OK (PRACK)</text>
+<line x1="110" y1="324" x2="814" y2="324" stroke="#1f2937" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="324" r="3.5" fill="#1f2937"/>
+<circle cx="580" cy="324" r="3.5" fill="#1f2937"/>
+<text x="465" y="316" text-anchor="middle" font-size="13" fill="#1f2937">UPDATE · SDP curr:qos local sendrecv</text>
+<line x1="820" y1="370" x2="116" y2="370" stroke="#2563eb" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="370" r="3.5" fill="#2563eb"/>
+<circle cx="580" cy="370" r="3.5" fill="#2563eb"/>
+<text x="465" y="362" text-anchor="middle" font-size="13" fill="#2563eb">200 OK (UPDATE) · SDP через RTPengine</text>
+<line x1="820" y1="416" x2="116" y2="416" stroke="#047857" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="416" r="3.5" fill="#047857"/>
+<circle cx="580" cy="416" r="3.5" fill="#047857"/>
+<text x="465" y="408" text-anchor="middle" font-size="13" fill="#047857">200 OK (INVITE) → Voice Agent стартует</text>
+<line x1="110" y1="462" x2="814" y2="462" stroke="#1f2937" stroke-width="2.2" marker-end="url(#m)"/>
+<circle cx="340" cy="462" r="3.5" fill="#1f2937"/>
+<circle cx="580" cy="462" r="3.5" fill="#1f2937"/>
+<text x="465" y="454" text-anchor="middle" font-size="13" fill="#1f2937">ACK · RTP AMR ⇄ PCMU · перевод</text>
+<text x="480" y="556" text-anchor="middle" font-size="12" fill="#6b7280">Нет UPDATE за 8 с → 200 OK всё равно · нет PRACK за 64×T1 → 504 · CANCEL до 200 → 487</text>
+</svg>

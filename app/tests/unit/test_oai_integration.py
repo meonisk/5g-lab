@@ -70,7 +70,8 @@ class OaiIntegration(unittest.TestCase):
             PARTNER.validate(self.env)
         self.env["IMS_ROUTE_GATEWAY"] = self.env["UPF_IP"]
         self.env["IMS_DOMAIN"] = "ims.partner.example"
-        with self.assertRaisesRegex(ValueError, "ims.mnc001.mcc001"):
+        expected = f"ims.mnc{self.env['MNC'].zfill(3)}.mcc{self.env['MCC']}"
+        with self.assertRaisesRegex(ValueError, expected):
             PARTNER.validate(self.env)
 
     def test_ims_only_initialization_does_not_need_5gs_keys_or_core(self):

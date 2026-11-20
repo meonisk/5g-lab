@@ -67,7 +67,8 @@ echo "===== UPF internet interface ====="
 check_command 'UPF internet address' docker exec lab-upf ip -4 addr show "$UPF_INTERNET_TUN"
 
 echo "===== OAI subscriber count ====="
-check_command 'both configured subscribers' docker exec lab-oai-db sh -c \
-    'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u oai -N -B oai_db -e "SELECT COUNT(*) FROM AuthenticationSubscription" | grep -qx 2'
+# Research SIMs share the UDR: count only the two virtual UE identities.
+check_command 'both configured subscribers' docker exec -e UE1_IMSI -e UE2_IMSI lab-oai-db sh -c \
+    'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u oai -N -B oai_db -e "SELECT COUNT(*) FROM AuthenticationSubscription WHERE ueid IN ('"'"'$UE1_IMSI'"'"', '"'"'$UE2_IMSI'"'"')" | grep -qx 2'
 
 exit "$((failures > 0))"

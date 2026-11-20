@@ -12,3 +12,7 @@
 #   fail the image build if either bidirectional codec is unavailable.
 # - P-CSCF: add PCMU transcoding to configured AI service offers only; identifiers
 #   are validated and rendered by pcscf_init.sh. Normal destinations are unchanged.
+# - P-CSCF rtp.cfg: anchor in-dialog answers from a locally terminating AS
+#   (dialog profile "as") in RTPengine and keep PCMU transcoding on in-dialog
+#   offers to AI targets, so precondition UPDATE/re-INVITE work for AI calls.
+# - P-CSCF AI target match also accepts a ";phone-context=..." user suffix.

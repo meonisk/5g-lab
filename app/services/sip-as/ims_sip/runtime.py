@@ -3,6 +3,7 @@
 import ipaddress
 import os
 import socket
+import threading
 
 bind_ip = os.environ["SIP_AS_IP"]
 bind_port = int(os.environ["SIP_AS_PORT"])
@@ -24,10 +25,16 @@ rtp_port_min = int(os.environ["RTPENGINE_PORT_MIN"])
 rtp_port_max = int(os.environ["RTPENGINE_PORT_MAX"])
 with open(os.environ["SERVICE_CONTROL_TOKEN_FILE"], encoding="ascii") as token_source:
     control_token = token_source.read().strip()
+# Phone QoS segment wait after PRACK; without N5/Rx no dedicated flow may come.
+precondition_timeout = float(os.environ["SIP_AS_PRECONDITION_TIMEOUT_SECONDS"])
+# RFC 3261 T1 for reliable 1xx retransmission (RFC 3262 section 3).
+sip_t1 = float(os.environ["SIP_AS_T1_SECONDS"])
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((bind_ip, bind_port))
 transactions = {}
 agent_calls = {}
+# Receive loop, retransmission and precondition timers share agent_calls.
+calls_lock = threading.RLock()
 service_targets = {
     voice_number: "translate",
     voice_user: "translate",
