@@ -1,162 +1,221 @@
-# 8. Настоящие SIM и телефоны: PLMN 901/70, gNB на USRP X310
+# 8. Как подключить настоящий телефон
 
-Как стенд работает с партией исследовательских SIM-карт и настоящими телефонами:
-что меняется в ядре и IMS, как включить и выключить всё одной командой, как
-проверить готовность и что смотреть во время звонка. Общая картина 5G и IMS —
-[документ 7](7-guide.md).
+Пошаговая инструкция: от выключенного стенда до звонка с телефона на SIM-карте из
+исследовательской партии. Команды выполняются на сервере стенда в папке репозитория
+(`~/projects/5g-lab`). Как устроены 5G и IMS — [документ 7](7-guide.md).
 
-## 1. Что получилось
+> С настоящим телефоном стенд ещё не проверялся. Всё до радиоэфира проверено:
+> ядро, абоненты, IMS, звонки в AI (`verify-all.sh`, `stand_check.py`). Если на
+> каком-то шаге телефон ведёт себя иначе — раздел [«Если не работает»](#если-не-работает).
 
-| Часть | Состояние |
+## Что нужно
+
+| Что | Требование |
 |---|---|
-| PLMN | `901/70` в ядре OAI (AMF), в gNB на X310 и в rfsim; IMS-домен `ims.mnc070.mcc901.3gppnetwork.org` |
-| SIM | 10 карт, IMSI `901700000029600`–`…609`, номера `2600`–`2609`; заведены в UDR ядра (5G AKA) и в PyHSS (IMS AKA) с одними Ki/OPc |
-| Эмулятор | UE1/UE2 rfsim с IMSI `90170…`: `verify-all.sh` проходит целиком, включая `verify-5g` |
-| Радио | gNB OAI на USRP X310, n78, 20 МГц (`band78_20mhz.conf`) |
-| Звонки в AI со штатной звонилки | номера 1003–1006 поддерживают `100rel`, QoS preconditions, PRACK и UPDATE (RFC 3262, 3312, 3311) |
-| Проверено с телефоном | нет: регистрация и звонок настоящего телефона — следующий шаг |
+| Телефон | 5G SA (автономный 5G) и диапазон **n78**. Надёжнее Android: на iPhone голос по IMS для неизвестного оператора обычно не включается |
+| SIM | карта из партии: IMSI `90170000002960x`, номер `260x` (x — последняя цифра IMSI) |
+| Радио | USRP X310 с антеннами, подключён к серверу (`192.168.40.2`) |
+| Стенд | ветка `partner-ims-ai`, список SIM в `local/secrets/research-sims.csv` |
 
-## 2. Секреты
+Номера на стенде:
 
-Репозиторий публичный. Ki/OPc карт в Git не попадают никогда:
+| Номер | Что это |
+|---|---|
+| 2600–2609 | SIM-карты партии |
+| 1003 | переводчик: говорите по-русски — слышите себя по-английски |
+| 1004 | запись: после уведомления речь записывается и расшифровывается |
+| 1005 / 1006 | двусторонний перевод: русский звонит на 1005, английский — на 1006 |
 
-- список карт лежит только в `local/secrets/research-sims.csv` (каталог `local/`
-  игнорируется Git, права `600`);
-- скрипты не печатают ключи: `plan`, `status`, `check` выводят только IMSI, номера и
-  IMPI; ошибки MySQL не пересказываются, потому что в них может быть текст запроса;
-- журналы для разбора (`stand_check.py collect`) сохраняются без строк с материалом
-  аутентификации.
-
-Файл списка создаётся импортом таблицы поставщика:
+## Шаг 1. Включить стенд
 
 ```bash
-python3 scripts/research_sims.py import sim_imsi.xlsx   # или CSV; PIN/PUK не переносятся
-python3 scripts/research_sims.py plan                    # проверка без ключей
+scripts/stand.sh up
 ```
 
-Колонки CSV: `IMSI,ICCID,KI,OPC,AMF,MSISDN`. Номер карты по умолчанию — префикс
-`RESEARCH_SIM_MSISDN_PREFIX` и последние `RESEARCH_SIM_MSISDN_SUFFIX_DIGITS` цифр IMSI.
+Команда поднимает ядро 5G, IMS, AI и gNB на X310 и в конце проверяет стенд.
+Пароль `sudo` она спросит сама. Готово, если в выводе есть обе строки:
 
-## 3. Включить и выключить всё
+```
+gNB: NGSetupResponse получен, PLMN 901/70
+СТЕНД ГОТОВ К ТЕЛЕФОНУ
+```
+
+Если вместо этого `[FAIL]` — у каждой ошибки есть подсказка `->` с командой, которая
+её исправляет.
+
+## Шаг 2. Открыть журнал звонков
+
+Во втором терминале:
 
 ```bash
-scripts/stand.sh down     # gNB, rfsim, IMS + AI, ядро OAI
-scripts/stand.sh up       # ядро -> настройка ядра -> IMS + AI -> gNB -> проверка
-scripts/stand.sh status
+python3 scripts/stand_check.py watch
 ```
 
-`up` выполняет по порядку:
+Здесь в реальном времени видно, что делает телефон: регистрацию (`REGISTER`) и
+звонки (`INVITE`). Ключи SIM в журнал не попадают. Выход — Ctrl+C.
 
-1. `docker compose up -d` ядра OAI и ожидание, пока все NF станут healthy.
-2. `scripts/core-setup.sh apply` — PLMN, P-CSCF и DNS для телефона, NAT, абоненты UDR.
-   Повторный запуск безопасен: уже заведённые абоненты и их SQN не меняются.
-3. `scripts/setup.sh` — IMS и AI в режиме `AI_MODE` (на сервере `compact`), заведение
-   абонентов в PyHSS.
-4. `scripts/gnb.sh up` — gNB на X310 с PLMN из `lab.env`. Если gNB не поднялся,
-   проверка всё равно выполняется, а `up` завершается с ошибкой.
-5. `python3 scripts/stand_check.py` — готовность к телефону.
+## Шаг 3. Подготовить телефон
 
-`down` останавливает ядро (`stop`), а не удаляет его контейнеры: у базы MySQL ядра в
-учебной раскладке OAI нет тома, и новая база вернула бы SQN карт в ноль. Тома IMS и
-AI (PyHSS, модели, записи) тоже остаются.
+1. **Выключите телефон, вставьте SIM, включите.**
+2. **Режим сети — только 5G.**
+   Настройки → Сеть → SIM → Предпочтительный тип сети → **5G** (или «5G only», если
+   есть). Если пункта нет: наберите `*#*#4636#*#*` → «Информация о телефоне» →
+   «Установить предпочтительный тип сети» → **NR only**.
+3. **Роуминг данных — включить.** Сеть 901/70 тестовая, телефон считает её чужой.
+   Настройки → Сеть → SIM → Роуминг.
+4. **Выбор сети — вручную.** Настройки → Сеть → SIM → Выбирать сеть автоматически →
+   выключить → дождаться списка → выбрать **901 70** (может называться «90170» или
+   «Test PLMN»). Если сети нет в списке — раздел «Если не работает».
+5. **Точка доступа для IMS.** Настройки → Сеть → SIM → Точки доступа (APN) → Добавить:
 
-После перезагрузки сервера достаточно `scripts/stand.sh up`: контейнеры IMS и AI
-поднимаются сами, ядро и gNB — нет.
+   | Поле | Значение |
+   |---|---|
+   | Имя | `ims` |
+   | APN | `ims` |
+   | Тип APN | `ims` |
+   | Протокол | `IPv4` |
+   | MCC / MNC | `901` / `70` |
 
-Каталог ядра скрипты берут из `OAI_CORE_DIR`, иначе — из метки Compose у контейнера
-`oai-amf`, иначе `~/oai-cn5g`.
+   Сохранить. Основной APN для интернета не обязателен: звонкам он не нужен.
+6. **Включить VoNR (звонки по 5G).** Настройки → Сеть → SIM → «VoNR», «Вызовы по 5G»
+   или «VoLTE / Расширенные вызовы» — включить. Если переключателя нет (частый случай
+   для незнакомого оператора): `*#*#4636#*#*` → «Информация о телефоне» → включить
+   **VoLTE provisioned** / **IMS** (названия зависят от производителя).
 
-## 4. Что меняется в ядре OAI
+## Шаг 4. Убедиться, что телефон в сети
 
-`scripts/core-setup.sh apply` (вызывается из `stand.sh up`):
+1. **5G.** В строке состояния — значок **5G** и уровень сигнала. В `watch` в это время
+   появляются строки `oai-amf` с IMSI карты.
+2. **IMS.** Через 10–30 секунд после регистрации в 5G телефон регистрируется в IMS:
+   в `watch` — `REGISTER`, затем `Contact valid` с IMSI карты. На многих телефонах в
+   строке состояния появляется значок **VoNR** / **HD** / **VoLTE**.
+3. **Проверка со стенда:**
+
+   ```bash
+   python3 scripts/stand_check.py phones
+   ```
+
+   Карта должна быть в списке «в IMS, адрес 10.0.9.x».
+
+## Шаг 5. Позвонить
+
+Со штатной звонилки телефона:
+
+| Куда | Что должно произойти |
+|---|---|
+| **1003** | приветствие, затем ваша русская речь возвращается по-английски |
+| **1004** | уведомление о записи; после звонка — расшифровка в `local/private/recordings/` |
+| **1005** с одного телефона и **1006** с другого | каждый слышит перевод речи собеседника |
+| **2600–2609** | обычный звонок на другую карту партии |
+
+В `watch` у звонка в AI видно: `INVITE` → `183` → `PRACK` → `UPDATE` → `200` →
+`BYE`. Так штатная звонилка договаривается о качестве канала для голоса: стенд это
+поддерживает.
+
+## Шаг 6. Выключить стенд
+
+```bash
+scripts/stand.sh down
+```
+
+Останавливает gNB (радиоэфир), IMS, AI и ядро. Абоненты и их счётчики (SQN)
+сохраняются: следующий `scripts/stand.sh up` возвращает всё как было. После
+перезагрузки сервера тоже достаточно `scripts/stand.sh up`.
+
+## Если не работает
+
+| Что видно | Что сделать |
+|---|---|
+| телефон не видит сеть 901 70 | `scripts/gnb.sh status` — gNB работает, PLMN `mcc=901 mnc=70`; `tail -50 local/gnb/gnb.log`; телефон должен поддерживать n78 и 5G SA; антенны подключены |
+| сеть видна, но «Нет сервиса» / отказ | `docker logs oai-amf 2>&1 \| grep -i reject`; `python3 scripts/stand_check.py` — карта должна быть в «UDR ядра» |
+| значок 5G есть, `REGISTER` в `watch` нет | точка доступа `ims` (шаг 3.5); VoNR/IMS включён (шаг 3.6); `scripts/core-setup.sh check` — P-CSCF и DNS для телефона |
+| `REGISTER` идёт по кругу с `401` | ключи карты не совпадают со списком SIM: сверить строку карты в `local/secrets/research-sims.csv` |
+| звонок в AI сбрасывается сразу | `watch`: на чём остановился обмен (`183`/`PRACK`/`UPDATE`); `docker logs --tail 50 lab-sip-as` |
+| звонок есть, звука нет | `docker exec lab-rtpengine rtpengine --codecs` — должен быть кодек телефона (AMR-WB); `docker logs --tail 50 lab-rtpengine` |
+| `verify-all.sh`: `softmodem уже запущен` | работает gNB X310: `scripts/gnb.sh down`, после проверки — `scripts/gnb.sh up` |
+
+Для разбора — собрать журналы (без ключей) и прислать папку:
+
+```bash
+python3 scripts/stand_check.py collect   # -> local/evidence/stand-<время>/
+```
+
+---
+
+## Справка
+
+### Включить и выключить стенд
+
+| Команда | Что делает |
+|---|---|
+| `scripts/stand.sh up [--mode РЕЖИМ]` | ядро OAI → `core-setup.sh apply` → `setup.sh` (IMS + AI) → `gnb.sh up` → `stand_check.py` |
+| `scripts/stand.sh down` | `gnb.sh down`, `rfsim.sh down`, IMS + AI (`docker compose down`), ядро (`stop`) |
+| `scripts/stand.sh status` | что запущено |
+
+Ядро именно останавливается, а не удаляется: в базе ядра OAI нет тома, новая база
+вернула бы счётчики SQN карт в ноль, и карты отвергли бы сеть. Каталог ядра —
+`OAI_CORE_DIR`, иначе по метке Compose у `oai-amf`, иначе `~/oai-cn5g`.
+
+### Список SIM и секреты
+
+Репозиторий публичный: Ki/OPc карт в Git не попадают. Список карт — только в
+`local/secrets/research-sims.csv` (каталог `local/` игнорируется Git). Скрипты
+печатают IMSI, номера и IMPI, но не ключи.
+
+```bash
+python3 scripts/research_sims.py import sim_imsi.xlsx   # таблица поставщика -> local/secrets; PIN/PUK не переносятся
+python3 scripts/research_sims.py plan                    # проверка списка без ключей
+python3 scripts/research_sims.py status                  # какие карты есть в UDR ядра и в PyHSS
+```
+
+Колонки CSV: `IMSI,ICCID,KI,OPC,AMF,MSISDN`. Номер карты — `RESEARCH_SIM_MSISDN_PREFIX`
+и последние `RESEARCH_SIM_MSISDN_SUFFIX_DIGITS` цифр IMSI. Услуги и язык всех карт —
+`RESEARCH_SIM_SERVICES` и `RESEARCH_SIM_LANGUAGE` в `lab.env`.
+
+### Что меняется в ядре OAI (`scripts/core-setup.sh apply`)
 
 | Изменение | Зачем |
 |---|---|
-| `mcc`/`mnc` в `served_guami_list` и `plmn_support_list` = `MCC`/`MNC` | SIM видит и принимает только сеть своего PLMN |
-| при смене PLMN пересоздаются NRF, UDR, UDM, AUSF, AMF, SMF, UPF | PLMN читается при старте |
-| UE1/UE2 и SIM в `AuthenticationSubscription` и `SessionManagementSubscriptionData` | 5G AKA по тем же Ki/OPc, что в PyHSS |
-| срез и DNN копируются с абонента ядра, у которого есть DNN `ims` | настройки сессий партнёра не меняются; статический адрес не копируется |
+| PLMN AMF (`served_guami_list`, `plmn_support_list`) = `MCC`/`MNC` | карта видит и принимает только сеть своего PLMN; при смене пересоздаются все NF ядра |
+| UE1/UE2 и карты в UDR (`AuthenticationSubscription`, `SessionManagementSubscriptionData`) | 5G AKA по тем же Ki/OPc, что в PyHSS; уже заведённые записи и SQN не меняются |
+| срез и DNN копируются с абонента ядра с DNN `ims` | настройки сессий партнёра сохраняются |
+| SMF выдаёт телефону P-CSCF и DNS стенда, UPF не делает NAT для сети `ims` | телефон находит IMS сам |
 
-Расхождение ключей у уже заведённого IMSI — ошибка до записи. Исходные файлы ядра
-сохраняются как `*.bak-ims`; откат — `scripts/core-setup.sh revert`.
+Исходные файлы ядра сохранены как `*.bak-ims`; откат — `scripts/core-setup.sh revert`.
+PyHSS заполняет `scripts/provision.py` (из `setup.sh`); абоненты прежнего PLMN
+удаляются.
 
-PyHSS заполняет `scripts/provision.py` (из `setup.sh`): абоненты прежнего PLMN
-удаляются, SIM заводятся с услугами `RESEARCH_SIM_SERVICES` и языком
-`RESEARCH_SIM_LANGUAGE`.
+### gNB на USRP X310 (`scripts/gnb.sh up | down | status`)
 
-## 5. gNB на USRP X310
+- Исходная конфигурация — `GNB_CONF` = `band78_20mhz.conf` в `OAI_RAN_CONF_DIR`
+  (n78, 20 МГц, `sdr_addrs = "type=x300,addr=192.168.40.2"`); аргументы — `GNB_ARGS`.
+- Копия `local/gnb/gnb.conf` получает PLMN из `lab.env` и адрес хоста на мосту ядра
+  для NG и N3; исходный файл не меняется. Журнал — `local/gnb/gnb.log`.
+- Пустой `GNB_CONF` — берутся конфигурация и аргументы уже работающего `nr-softmodem`
+  (сохраняются в `local/gnb/source.txt`).
+- gNB X310 и эмулятор rfsim одновременно не работают.
 
-```bash
-scripts/gnb.sh up       # копия GNB_CONF с PLMN и адресом NG/N3 -> nr-softmodem
-scripts/gnb.sh status
-scripts/gnb.sh down
-```
+### Проверка готовности (`scripts/stand_check.py`)
 
-- Исходная конфигурация — `GNB_CONF` (`band78_20mhz.conf` в `OAI_RAN_CONF_DIR`), в ней
-  `sdr_addrs = "type=x300,addr=192.168.40.2"`. Аргументы — `GNB_ARGS`.
-- Копия в `local/gnb/gnb.conf` получает PLMN и адрес хоста на мосту ядра для NG и N3.
-  Исходный файл не меняется. Журнал — `local/gnb/gnb.log`.
-- Если `GNB_CONF` пуст, скрипт берёт конфигурацию и аргументы уже работающего
-  `nr-softmodem`, сохраняет их в `local/gnb/source.txt` и перезапускает его с копией.
-- gNB X310 и gNB rfsim одновременно не работают: перед `verify-all.sh` нужен
-  `scripts/gnb.sh down`, после — `scripts/gnb.sh up`.
+| Команда | Что делает |
+|---|---|
+| без аргументов | `lab.env`, контейнеры, PLMN ядра, версия SIP AS, карты в UDR и PyHSS, самотест звонка в AI без телефона |
+| `phones` | какие карты зарегистрированы в IMS |
+| `watch` | REGISTER/INVITE/PRACK/UPDATE в реальном времени |
+| `collect` | журналы в `local/evidence/` без строк с ключами |
 
-`rfsim.sh` подставляет в свои копии тот же PLMN, а в UE — IMSI и ключи `UE1_*`/`UE2_*`.
-UE, который OAI уронил при старте (`_Assert_Exit_` в `threadCreate`), запускается
-заново, до трёх попыток.
-
-## 6. Проверка готовности
-
-```bash
-python3 scripts/stand_check.py           # preflight
-python3 scripts/stand_check.py phones    # какие SIM зарегистрированы в IMS
-python3 scripts/stand_check.py watch     # REGISTER/INVITE/PRACK/UPDATE в реальном времени
-python3 scripts/stand_check.py collect   # журналы в local/evidence/ без ключей
-```
-
-Preflight проверяет `lab.env`, контейнеры IMS, AI и ядра, PLMN в конфигурации ядра,
-версию SIP AS, наличие всех SIM в UDR и PyHSS и делает самотест звонка в AI без
-телефона: INVITE с `Supported: 100rel, precondition` → надёжный 183 → PRACK → UPDATE →
-200 → ACK → BYE. Итог — «СТЕНД ГОТОВ К ТЕЛЕФОНУ» или список проблем с подсказками.
-
-Самотест — настоящий вызов внутри `lab-sip-as`; не запускайте его одновременно с
+Самотест — настоящий вызов внутри `lab-sip-as`: не запускать одновременно с
 `verify-all.sh`.
 
-## 7. Звонок с телефона
+### Звонок в AI со штатной звонилки
 
-1. `scripts/stand.sh up` — итог «СТЕНД ГОТОВ К ТЕЛЕФОНУ», gNB: `NGSetupResponse получен`.
-2. Вставить SIM из партии. В телефоне: сеть только 5G (SA), VoNR включён, точка
-   доступа `ims` с типом `ims`, если телефон не создал её сам.
-3. В соседнем терминале — `python3 scripts/stand_check.py watch`.
-4. Регистрация: в `watch` — `REGISTER` и `Contact valid` с IMSI карты;
-   `stand_check.py phones` показывает карту как зарегистрированную.
-5. Позвонить на 1003 (переводчик), 1004 (запись), 1005/1006 (переводчик ru/en) или на
-   номер другой карты (2600–2609).
-
-Как SIP AS отвечает штатной звонилке на номерах 1003–1006:
-
-| Телефон прислал | SIP AS |
+| Телефон прислал | Стенд |
 |---|---|
-| `Require`/`Supported: 100rel` | надёжный 183 с SDP и `RSeq`, повтор до PRACK (T1 = `SIP_AS_T1_SECONDS`, до 4 с; без PRACK за 64·T1 — 504) |
-| `precondition` и строки `a=curr`/`a=des` | ответ с состоянием QoS, ждёт UPDATE о готовности телефона, затем 200; без UPDATE — ответ через `SIP_AS_PRECONDITION_TIMEOUT_SECONDS` |
+| `100rel` | надёжный 183 с `RSeq`, повтор до PRACK (`SIP_AS_T1_SECONDS`, не реже раза в 4 с; без PRACK — 504) |
+| `precondition` и `a=curr`/`a=des` | ответ с состоянием QoS, ждёт UPDATE о готовности телефона, затем 200; без UPDATE — ответ через `SIP_AS_PRECONDITION_TIMEOUT_SECONDS` |
 | UPDATE или re-INVITE с новым адресом медиа | Voice Agent получает новый адрес |
-| CANCEL до ответа | 200 на CANCEL и 487 на INVITE |
+| CANCEL до ответа | 200 на CANCEL, 487 на INVITE |
 | неизвестный `Require` | 420 |
 
-P-CSCF ставит ответы AS на UPDATE через RTPengine и принимает номера вида
+P-CSCF ставит ответы сервера услуг на UPDATE через RTPengine и принимает номера вида
 `tel:1003;phone-context=…`.
-
-## 8. Если не работает
-
-| Симптом | Что смотреть |
-|---|---|
-| телефон не видит сеть | `scripts/gnb.sh status` (PLMN 901/70), `tail -50 local/gnb/gnb.log`; диапазон n78 в телефоне |
-| `Registration reject` в AMF | `stand_check.py`: SIM в UDR; `docker logs oai-amf | grep -i reject` |
-| 5G есть, IMS нет | точка доступа `ims`; `watch`: доходит ли REGISTER; P-CSCF из SMF — `core-setup.sh check` |
-| 401 по кругу в IMS | ключи SIM и PyHSS; SQN не сбрасывать |
-| звонок в AI сбрасывается | `watch`: 183/PRACK/UPDATE; `docker logs --tail 50 lab-sip-as` |
-| звонок без звука | `docker exec lab-rtpengine rtpengine --codecs`: AMR-WB → PCMU |
-| `verify-5g`: `softmodem уже запущен` | работает gNB X310: `scripts/gnb.sh down` |
-
-Журналы для разбора: `python3 scripts/stand_check.py collect` и
-`local/verify-all/*.log`.

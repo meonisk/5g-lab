@@ -130,7 +130,7 @@ docker compose --env-file app/config/lab.env --profile test down   # остан�
 scripts/stand.sh down && scripts/stand.sh up               # весь стенд: ядро, IMS, AI, gNB
 ```
 
-`stand.sh` — [документ 8](8-real-sims.md#3-включить-и-выключить-всё). `docker compose
+`stand.sh` — [документ 8](8-real-sims.md#включить-и-выключить-стенд). `docker compose
 down` не трогает сеть и контейнеры ядра. Данные (база абонентов, модели)
 остаются в томах Docker. `down -v` удаляет и их.
 
