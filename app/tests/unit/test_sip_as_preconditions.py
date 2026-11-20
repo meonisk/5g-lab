@@ -6,6 +6,7 @@ Runtime подменяется: настоящий модуль открывае
 import importlib
 import sys
 import threading
+import time
 import types
 import unittest
 from pathlib import Path
@@ -167,6 +168,68 @@ class SipAsPreconditions(unittest.TestCase):
         moved = PHONE_OFFER.format(ip="198.51.100.9", port=4000, local="sendrecv")
         self.send(request("UPDATE", 3, moved))
         self.voice.assert_called_once_with("call-1", RTP_IP, 30010, "translate")
+
+    def test_changed_answer_increments_sdp_version(self):
+        early = self.send(request("INVITE", 1, self.offer(), "Supported: 100rel, precondition"))[1]
+        self.assertIn("o=voice-agent 1 1 ", early)
+        self.send(request("PRACK", 2, extra="RAck: 1 1 INVITE"))
+        update = self.send(request("UPDATE", 3, self.offer("sendrecv")))[0]
+        self.assertIn("o=voice-agent 1 2 ", update)
+        again = self.send(request("UPDATE", 4, self.offer("sendrecv")))[0]
+        self.assertIn("o=voice-agent 1 2 ", again)
+
+    def test_preconditions_need_uac_support(self):
+        sent = self.send(request("INVITE", 1, self.offer(), "Supported: 100rel"))
+        self.assertTrue(sent[1].startswith("SIP/2.0 200 OK"))
+        self.assertNotIn("Require:", sent[1])
+        self.assertNotIn("a=curr:qos", sent[1])
+
+    def test_mismatched_rack_is_rejected(self):
+        self.send(request("INVITE", 1, self.offer(), "Supported: 100rel, precondition"))
+        sent = self.send(request("PRACK", 2, extra="RAck: 1 7 INVITE"))
+        self.assertTrue(sent[0].startswith("SIP/2.0 481"))
+
+    def test_bye_in_early_dialog_terminates_invite(self):
+        self.send(request("INVITE", 1, self.offer(), "Supported: 100rel, precondition"))
+        sent = self.send(request("BYE", 2))
+        self.assertTrue(sent[0].startswith("SIP/2.0 200 OK"))
+        self.assertTrue(sent[1].startswith("SIP/2.0 487"))
+        self.assertIn("CSeq: 1 INVITE", sent[1])
+
+    def test_cancel_while_voice_agent_starts_yields_487(self):
+        def cancel_during_start(*_):
+            self.routing.route_request(request("CANCEL", 1), ("192.0.2.40", 6060))
+
+        self.voice.side_effect = cancel_during_start
+        sent = self.send(request("INVITE", 1, self.offer("sendrecv")))
+        invite_finals = [m.split("\r\n")[0] for m in sent if "CSeq: 1 INVITE" in m]
+        self.assertEqual(invite_finals[1:], ["SIP/2.0 487 Request Terminated"])
+        self.assertIn("CSeq: 1 CANCEL", "".join(sent))
+        deadline = time.monotonic() + 1
+        while not self.dialog.stop_voice.called and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.dialog.stop_voice.assert_called_once_with("call-1")
+
+    def test_final_response_repeats_until_ack(self):
+        self.runtime.sip_t1 = 0.01
+        self.send(request("INVITE", 1, self.offer("sendrecv")))
+        time.sleep(0.15)
+        repeats = [m for m in self.runtime.sock.sent if m.startswith("SIP/2.0 200 OK")]
+        self.assertGreater(len(repeats), 1)
+        self.send(request("ACK", 1))
+        time.sleep(0.1)
+        self.runtime.sock.sent.clear()
+        time.sleep(0.1)
+        self.assertEqual(self.runtime.sock.sent, [])
+
+    def test_media_move_after_answer_reaches_voice_agent(self):
+        self.send(request("INVITE", 1, self.offer("sendrecv")))
+        self.send(request("ACK", 1))
+        self.send(request("INVITE", 2, self.offer("sendrecv", port=30020)))
+        deadline = time.monotonic() + 1
+        while self.voice.call_count < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.voice.assert_called_with("call-1", RTP_IP, 30020, "translate")
 
 
 if __name__ == "__main__":

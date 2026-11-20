@@ -9,6 +9,7 @@ from . import runtime
 from .agent_dialog import (
     accept_agent_invite,
     end_agent_call,
+    handle_ack,
     handle_prack,
     handle_update,
     send_local_response,
@@ -44,7 +45,7 @@ def terminate_for_agent(
     if method == "INVITE":
         accept_agent_invite(message, peer, call_id, service_mode, tag)
     elif method == "ACK":
-        print(f"AS received ACK for voice agent call_id={call_id}", flush=True)
+        handle_ack(call_id)
     elif method in {"BYE", "CANCEL"}:
         end_agent_call(message, peer, call_id, method, tag)
     elif method == "PRACK":
@@ -77,8 +78,6 @@ def request_target(request_line: str) -> str | None:
     if target_match is None:
         return None
     return re.sub(r"[-.() ]", "", target_match.group(1))
-
-    return None
 
 
 def transaction_branch(message: str) -> str:
