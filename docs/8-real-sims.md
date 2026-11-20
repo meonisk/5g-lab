@@ -132,6 +132,7 @@ scripts/stand.sh down
 | `REGISTER` идёт по кругу с `401` | ключи карты не совпадают со списком SIM: сверить строку карты в `local/secrets/research-sims.csv` |
 | звонок в AI сбрасывается сразу | `watch`: на чём остановился обмен (`183`/`PRACK`/`UPDATE`); `docker logs --tail 50 lab-sip-as` |
 | звонок есть, звука нет | `docker exec lab-rtpengine rtpengine --codecs` — должен быть кодек телефона (AMR-WB); `docker logs --tail 50 lab-rtpengine` |
+| `stand.sh up`: `Address already in use` или `адрес … ядра занят контейнером ИМЯ` | пока ядро стояло, контейнер ИМЯ получил адрес ядра: `docker stop ИМЯ`, `scripts/stand.sh up`, затем `docker start ИМЯ` |
 | `verify-all.sh`: `softmodem уже запущен` | работает gNB X310: `scripts/gnb.sh down`, после проверки — `scripts/gnb.sh up` |
 
 Для разбора — собрать журналы (без ключей) и прислать папку:

@@ -57,10 +57,35 @@ down() {
     status
 }
 
+# Пока ядро остановлено, его статические адреса свободны, и контейнер без
+# статического адреса в той же сети может получить один из них: тогда up падает с
+# «Address already in use». Здесь такой контейнер называется до запуска ядра.
+address_conflicts() {
+    local wanted
+    wanted=$("${core[@]}" config --format json 2>/dev/null) || return 0
+    docker network inspect "$CORE_NETWORK_NAME" 2>/dev/null | python3 -c '
+import json, sys
+wanted = {}
+for name, service in json.loads(sys.argv[1])["services"].items():
+    for network in (service.get("networks") or {}).values():
+        if network and network.get("ipv4_address"):
+            wanted[network["ipv4_address"]] = service.get("container_name", name)
+found = 0
+for network in json.load(sys.stdin):
+    for endpoint in network["Containers"].values():
+        address = endpoint["IPv4Address"].split("/")[0]
+        owner, holder = wanted.get(address), endpoint["Name"]
+        if owner and owner != holder:
+            print(f"адрес {address} ядра ({owner}) занят контейнером {holder}")
+            found = 1
+sys.exit(found)' "$wanted"
+}
+
 up() {
     [[ -f $OAI_CORE_DIR/docker-compose.yaml ]] || die "нет ядра в $OAI_CORE_DIR (OAI_CORE_DIR)"
     sudo -v
     step "ядро OAI ($OAI_CORE_DIR)"
+    address_conflicts || die "остановите этот контейнер (docker stop ИМЯ), повторите up, затем docker start ИМЯ — он получит свободный адрес"
     # Демо-IMS ядра выключен профилем (core-setup.sh), поэтому up его не поднимает.
     "${core[@]}" up -d
     local deadline=$((SECONDS + 180))
