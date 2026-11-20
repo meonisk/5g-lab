@@ -9,6 +9,20 @@ gnb_plmn() {
     sed -E "s/(^|[{ ;])mcc *= *[0-9]+;/\1mcc = $MCC;/; s/(^|[{ ;])mnc *= *[0-9]+;/\1mnc = $MNC;/; s/mnc_length *= *[0-9]+;/mnc_length = ${#MNC};/"
 }
 
+# Адрес хоста на мосту ядра — шлюз сети, к которой подключён P-CSCF («адрес/маска»).
+host_address() {
+    local address
+    address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.Gateway}}/{{.IPPrefixLen}}{{end}}' lab-pcscf)
+    [[ $address == */* && $address != /* ]] || return 1
+    echo "$address"
+}
+
+# gNB на хосте: адрес NG и N3 — ADDRESS (в исходных конфигурациях часто стоит адрес
+# контейнера gNB, которого на хосте нет).
+gnb_address() {
+    sed -E "s#(GNB_IPV4_ADDRESS_FOR_(NG_AMF|NGU)) *= *\"[^\"]*\"#\\1 = \"$1\"#"
+}
+
 # UE rfsim: uicc0 = { imsi = "..."; key = "..."; opc = "..."; dnn = "..."; }.
 # PREFIX — UE1 или UE2: IMSI и ключи те же, что заводятся в UDR ядра.
 ue_sim() {

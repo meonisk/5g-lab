@@ -53,20 +53,13 @@ wait_for() {
     return 1
 }
 
-# Адрес хоста на мосту ядра — шлюз сети, к которой подключён P-CSCF.
-host_address() {
-    docker inspect -f '{{range .NetworkSettings.Networks}}{{.Gateway}}/{{.IPPrefixLen}}{{end}}' lab-pcscf
-}
-
 prepare_configs() {
     mkdir -p "$work"
     # @include OAI ищет рядом с конфигурацией, поэтому модели канала копируются.
     cp "$confs"/channelmod_rfsimu*.conf "$work/"
     local address
-    address=$(host_address)
-    [[ $address == */* && $address != /* ]] || die "нет шлюза сети ядра у lab-pcscf; стенд запущен?"
-    sed -E "s#(GNB_IPV4_ADDRESS_FOR_(NG_AMF|NGU)) *= *\"[^\"]*\"#\\1 = \"$address\"#" \
-        "$confs/$gnb_source" | gnb_plmn >"$work/gnb.conf"
+    address=$(host_address) || die "нет шлюза сети ядра у lab-pcscf; стенд запущен?"
+    gnb_plmn <"$confs/$gnb_source" | gnb_address "$address" >"$work/gnb.conf"
     local n
     for n in 1 2; do
         ue_sim "UE$n" <"$confs/${ue_sources[n - 1]}" >"$work/ue$n.conf"

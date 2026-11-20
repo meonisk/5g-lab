@@ -24,7 +24,7 @@
 | `RESEARCH_SIM_FILE` | `local/secrets/research-sims.csv` | список SIM с Ki/OPc; только внутри игнорируемого `local/` |
 | `RESEARCH_SIM_MSISDN_PREFIX`, `RESEARCH_SIM_MSISDN_SUFFIX_DIGITS` | `2`, `3` | номер SIM: префикс и последние цифры IMSI (2600–2609) |
 | `RESEARCH_SIM_SERVICES`, `RESEARCH_SIM_LANGUAGE` | пусто, `ru` | услуги и язык всех SIM в PyHSS |
-| `GNB_CONF`, `GNB_ARGS` | пусто, `--continuous-tx` | gNB на SDR (`scripts/gnb.sh`); пусто — конфигурация и аргументы уже работающего gNB |
+| `GNB_CONF`, `GNB_ARGS` | `band78_20mhz.conf`, `--continuous-tx` | gNB на SDR (`scripts/gnb.sh`): n78 20 МГц на USRP X310; пусто — конфигурация и аргументы уже работающего gNB |
 | `SIP_AS_T1_SECONDS`, `SIP_AS_PRECONDITION_TIMEOUT_SECONDS` | `0.5`, `8` | повтор надёжного 183 (RFC 3262) и ожидание UPDATE о готовности QoS телефона |
 | `CORE_NETWORK_NAME` | `oai-cn5g-public-net` | Docker-сеть ядра (`docker network ls`) |
 | `LAB_NETWORK_CIDR` | `192.168.70.128/26` | её подсеть; все адреса стенда внутри неё |

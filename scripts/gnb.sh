@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Свой gNB на SDR (USRP): тот же nr-softmodem, но конфигурация — копия с PLMN
-# MCC/MNC из lab.env (SIM-карты видят только сеть своего PLMN). Адреса AMF/NG/N3,
-# частоты и параметры радио берутся из исходной конфигурации без изменений.
+# MCC/MNC из lab.env (SIM-карты видят только сеть своего PLMN) и адресом NG/N3 хоста
+# на мосту ядра. Частоты и параметры радио — из исходной конфигурации без изменений.
 #   scripts/gnb.sh up       # запустить; уже работающий чужой gNB перезапускается с копией
 #   scripts/gnb.sh down     # остановить gNB (и чужой, сохранив его команду)
 #   scripts/gnb.sh status
@@ -71,8 +71,12 @@ take_over() {
 up() {
     [[ -x $build/nr-softmodem ]] || die "нет $build/nr-softmodem"
     pgrep -f -- "$ours" >/dev/null && { echo "gNB уже запущен этим скриптом"; status; return 0; }
+    # Два gNB с одним gNB ID в одном AMF мешают друг другу: rfsim сначала останавливается.
+    pgrep -f -- "[n]r-softmodem -O $root/local/rfsim/" >/dev/null &&
+        die "работает gNB rfsim: scripts/rfsim.sh down, затем scripts/gnb.sh up"
     sudo -v
     take_over
+    mkdir -p "$work"
 
     local source='' args=()
     if [[ -n ${GNB_CONF:-} ]]; then
@@ -90,7 +94,9 @@ up() {
 
     # @include OAI ищет рядом с конфигурацией: соседние .conf копируются.
     cp "$(dirname "$source")"/*.conf "$work/" 2>/dev/null || true
-    gnb_plmn <"$source" >"$work/gnb.conf"
+    local address
+    address=$(host_address) || die "нет шлюза сети ядра у lab-pcscf; стенд запущен?"
+    gnb_plmn <"$source" | gnb_address "$address" >"$work/gnb.conf"
 
     # </dev/null: фоновый процесс не забирает терминал.
     nohup sudo "$build/nr-softmodem" -O "$work/gnb.conf" "${args[@]}" </dev/null >"$work/gnb.log" 2>&1 &
